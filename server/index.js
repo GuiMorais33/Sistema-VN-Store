@@ -179,11 +179,21 @@ async function pushProduct(productId) {
   try {
     const hasSizes = variants.some((v) => v.variant_name && v.variant_name !== 'Único');
     const payload = { name: { pt: p.name }, description: { pt: p.description || '' } };
+    // Monta cada variante no formato da Nuvemshop.
+    //  - price é o ÚNICO campo obrigatório da variante;
+    //  - stock_management:true garante controle de estoque (pra sincronizar);
+    //  - sku é OPCIONAL: só enviamos se estiver preenchido (você não usa SKU).
+    const mkVariant = (v, withValues) => {
+      const o = { price: String(v.price), stock: parseInt(v.stock, 10) || 0, stock_management: true };
+      if (v.sku && String(v.sku).trim()) o.sku = String(v.sku).trim();
+      if (withValues) o.values = [{ pt: v.variant_name }];
+      return o;
+    };
     if (hasSizes) {
-      payload.attributes = [{ pt: 'Tamanho' }];
-      payload.variants = variants.map((v) => ({ price: String(v.price), stock: parseInt(v.stock, 10) || 0, sku: v.sku || '', values: [{ pt: v.variant_name }] }));
+      payload.attributes = [{ pt: 'Tamanho' }]; // 1 eixo de variação (ex.: P/M/G)
+      payload.variants = variants.map((v) => mkVariant(v, true));
     } else {
-      payload.variants = variants.map((v) => ({ price: String(v.price), stock: parseInt(v.stock, 10) || 0, sku: v.sku || '' }));
+      payload.variants = variants.map((v) => mkVariant(v, false));
     }
     // Categoria: resolve por nome (cria se faltar).
     if (p.category) {
