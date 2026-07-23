@@ -16,8 +16,8 @@
   --body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
 }
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
-body{
+html{-webkit-text-size-adjust:100%;overflow-x:hidden}
+body{overflow-x:hidden;max-width:100vw;
   margin:0;color:var(--ink);font-family:var(--body);line-height:1.5;
   background:
     radial-gradient(900px 500px at 82% -8%, rgba(47,210,79,.10), transparent 60%),
@@ -71,7 +71,9 @@ a{color:inherit}
 
 /* ---------- Navegação lateral (sidebar) ---------- */
 body{display:flex}
-.app{flex:1 1 auto;min-width:0}
+/* .app é sempre filho flex do body; width:100% evita que margin:0 auto
+   (definido nas páginas) impeça o stretch e cause vazamento horizontal. */
+.app{flex:1 1 auto;min-width:0;width:100%}
 .sidebar{position:sticky;top:0;align-self:flex-start;height:100vh;flex:0 0 226px;width:226px;
   background:linear-gradient(180deg,#0b0e0b,#080a08);border-right:1px solid var(--line);
   padding:18px 14px;display:flex;flex-direction:column;gap:5px;overflow-y:auto;z-index:20}
@@ -90,6 +92,7 @@ body{display:flex}
 
 /* Cabeçalho de página */
 .pagehead{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;padding-bottom:16px;margin-bottom:20px;border-bottom:1px solid var(--line)}
+.pagehead>*{min-width:0}
 .pagehead h1{margin:0;font-family:var(--disp);font-weight:900;text-transform:uppercase;letter-spacing:.6px;font-size:clamp(22px,4vw,32px);transform:skewX(-6deg)}
 .pagehead .ph-sub{font-size:11.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--ink-dim);font-weight:700;margin-top:5px}
 .pagehead .ph-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}

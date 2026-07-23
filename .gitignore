@@ -8,6 +8,9 @@
 *.db-wal
 *.db-shm
 
+# Uploads de fotos (dados de runtime)
+public/uploads/
+
 # Dependências
 node_modules/
 

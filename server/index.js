@@ -4,15 +4,21 @@
 //  .env com as credenciais da Nuvemshop é preenchido.
 // ============================================================
 import express from 'express';
+import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import db, { seedDemoIfEmpty } from './db.js';
 import * as nuvem from './nuvemshop.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const PUBLIC = join(__dirname, '..', 'public');
+const UPLOADS = join(PUBLIC, 'uploads');
+fs.mkdirSync(UPLOADS, { recursive: true });
+
 const app = express();
-app.use(express.json({ limit: '8mb' }));
-app.use(express.static(join(__dirname, '..', 'public')));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.static(PUBLIC));
 
 const LIVE = nuvem.isConfigured();
 const now = () => new Date().toISOString();
@@ -200,8 +206,18 @@ async function pushProduct(productId) {
       const updIds = db.prepare('UPDATE variants SET nuvemshop_product_id=?, nuvemshop_variant_id=? WHERE id=?');
       variants.forEach((v, i) => { const rv = result.variants[i]; if (rv) updIds.run(String(result.id), String(rv.id), v.id); });
     }
-    // Imagem principal (por URL).
-    if (p.image_url) { try { await nuvem.addProductImage(result.id, { src: p.image_url }); } catch (e) { /* imagem é best-effort */ } }
+    // Imagem principal: se foi enviada pra cá, mandamos o arquivo (base64);
+    // se é uma URL externa, mandamos a URL. (best-effort)
+    if (p.image_url) {
+      try {
+        if (p.image_url.startsWith('/uploads/')) {
+          const b64 = fs.readFileSync(join(PUBLIC, p.image_url)).toString('base64');
+          await nuvem.addProductImage(result.id, { attachment: b64, filename: p.image_url.split('/').pop() });
+        } else {
+          await nuvem.addProductImage(result.id, { src: p.image_url });
+        }
+      } catch (e) { /* imagem é best-effort */ }
+    }
 
     return { mode: 'live', ok: true, nuvemshop_product_id: String(result.id) };
   } catch (err) {
@@ -387,6 +403,37 @@ app.get('/api/dashboard', (req, res) => {
     receivable_total: money(recv.total), receivable_count: recv.n,
     recent_sales: recent, low_stock_list: lowList, pending_list: pendingList,
   });
+});
+
+// ==================== SÉRIE DE VENDAS (gráfico) ====================
+app.get('/api/sales-series', (req, res) => {
+  const days = Math.min(60, Math.max(7, parseInt(req.query.days, 10) || 14));
+  const rows = db.prepare(`SELECT date(created_at) d, COALESCE(SUM(total),0) total, COUNT(*) n FROM sales GROUP BY date(created_at)`).all();
+  const map = new Map(rows.map((r) => [r.d, r]));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const series = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const r = map.get(key);
+    series.push({ date: key, total: r ? money(r.total) : 0, count: r ? r.n : 0 });
+  }
+  res.json({ days, series });
+});
+
+// ==================== UPLOAD DE FOTO ====================
+// Recebe a imagem já redimensionada (base64) do navegador/celular e salva.
+app.post('/api/upload', (req, res) => {
+  const { data } = req.body || {};
+  if (!data) return res.status(400).json({ error: 'Nenhuma imagem recebida.' });
+  const m = /^data:(image\/(png|jpe?g|webp));base64,(.+)$/i.exec(data);
+  if (!m) return res.status(400).json({ error: 'Formato de imagem inválido.' });
+  const ext = m[2].toLowerCase() === 'jpeg' ? 'jpg' : m[2].toLowerCase();
+  const buf = Buffer.from(m[3], 'base64');
+  if (buf.length > 6 * 1024 * 1024) return res.status(413).json({ error: 'Imagem muito grande.' });
+  const name = crypto.randomBytes(8).toString('hex') + '.' + ext;
+  fs.writeFileSync(join(UPLOADS, name), buf);
+  res.json({ ok: true, url: '/uploads/' + name });
 });
 
 // ==================== FINANCEIRO ====================

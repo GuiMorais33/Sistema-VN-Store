@@ -59,13 +59,18 @@
   .vrow .del:hover{color:var(--red)}
   .dlg-actions{display:flex;gap:8px;justify-content:space-between;align-items:center;position:sticky;bottom:0;background:var(--panel-2);padding-top:8px}
   .note{font-size:11.5px;color:var(--ink-faint)}
+  .photo{display:flex;gap:10px;align-items:center}
+  .photo-thumb{width:56px;height:56px;border-radius:10px;border:1px solid var(--line);background:var(--bg-2);display:grid;place-items:center;overflow:hidden;flex:0 0 auto;font-size:22px;color:var(--ink-faint)}
+  .photo-thumb img{width:100%;height:100%;object-fit:cover}
+  .photo-side{display:flex;flex-direction:column;gap:5px;align-items:flex-start}
+  .mini{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:6px 10px;border-radius:8px;border:1px solid rgba(47,210,79,.35);color:var(--green-hi);background:rgba(47,210,79,.06);cursor:pointer}
+  .mini.ghost{border-color:var(--line);color:var(--ink-dim);background:transparent}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="pagehead">
     <div><h1>Estoque</h1><div class="ph-sub">Produtos · custo · valor de estoque · publicar na loja</div></div>
-    <div class="ph-actions"><span id="statusPill" class="pill demo"><span class="dot"></span>…</span></div>
   </div>
 
   <div class="summary">
@@ -97,7 +102,18 @@
     </div>
     <div class="grid2">
       <div class="fld"><label>Categoria</label><input id="pCat" list="catList"></div>
-      <div class="fld"><label>Foto (URL)</label><input id="pImg" placeholder="https://…"></div>
+      <div class="fld"><label>Foto do produto</label>
+        <div class="photo">
+          <div class="photo-thumb" id="pThumb"><span>📷</span></div>
+          <div class="photo-side">
+            <button type="button" class="mini" id="pFileBtn">Enviar foto</button>
+            <button type="button" class="mini ghost" id="pClear" hidden>Remover</button>
+            <span class="note" id="pFileNote">Do celular ou galeria</span>
+          </div>
+          <input type="file" id="pFile" accept="image/*" hidden>
+          <input type="hidden" id="pImg">
+        </div>
+      </div>
     </div>
     <div class="fld"><label>Descrição</label><textarea id="pDesc" rows="2"></textarea></div>
 
@@ -158,13 +174,28 @@ function varRow(v={}){ const div=document.createElement('div'); div.className='v
   div.querySelector('.del').addEventListener('click',()=>div.remove()); return div; }
 document.getElementById('addVar').addEventListener('click',()=>document.getElementById('vars').appendChild(varRow()));
 
+// ---- foto: redimensiona no navegador e envia ----
+function resizeImage(file,maxDim,q){ return new Promise((res,rej)=>{ const img=new Image(),url=URL.createObjectURL(file);
+  img.onload=()=>{ URL.revokeObjectURL(url); let w=img.width,h=img.height;
+    if(w>h && w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; } else if(h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; }
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); res(cv.toDataURL('image/jpeg',q)); };
+  img.onerror=()=>rej(new Error('imagem inválida')); img.src=url; }); }
+function setPhoto(url){ document.getElementById('pImg').value=url||''; const t=document.getElementById('pThumb'), c=document.getElementById('pClear'), note=document.getElementById('pFileNote');
+  if(url){ t.innerHTML='<img src="'+url+'" alt="">'; c.hidden=false; note.textContent='Foto pronta ✔'; }
+  else{ t.innerHTML='<span>📷</span>'; c.hidden=true; note.textContent='Do celular ou galeria'; } }
+document.getElementById('pFileBtn').addEventListener('click',()=>document.getElementById('pFile').click());
+document.getElementById('pClear').addEventListener('click',()=>setPhoto(''));
+document.getElementById('pFile').addEventListener('change',async(e)=>{ const f=e.target.files[0]; if(!f) return; const note=document.getElementById('pFileNote'); note.textContent='Enviando…';
+  try{ const dataURL=await resizeImage(f,1280,0.82); const r=await api('/api/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:dataURL})}); setPhoto(r.url); }
+  catch(err){ note.textContent='Falhou: '+err.message; } finally{ e.target.value=''; } });
+
 function openNew(){ document.getElementById('dlgTitle').textContent='Novo produto'; document.getElementById('pId').value='';
-  ['pName','pBrand','pCat','pImg','pDesc'].forEach(id=>document.getElementById(id).value='');
+  ['pName','pBrand','pCat','pDesc'].forEach(id=>document.getElementById(id).value=''); setPhoto('');
   const vs=document.getElementById('vars'); vs.innerHTML=''; vs.appendChild(varRow({variant_name:'Único'})); dlg.showModal(); }
 async function openEdit(id){ const p=await api('/api/catalog/'+id);
   document.getElementById('dlgTitle').textContent='Editar produto'; document.getElementById('pId').value=p.id;
   document.getElementById('pName').value=p.name; document.getElementById('pBrand').value=p.brand||''; document.getElementById('pCat').value=p.category||'';
-  document.getElementById('pImg').value=p.image_url||''; document.getElementById('pDesc').value=p.description||'';
+  setPhoto(p.image_url||''); document.getElementById('pDesc').value=p.description||'';
   const vs=document.getElementById('vars'); vs.innerHTML=''; (p.variants.length?p.variants:[{variant_name:'Único'}]).forEach(v=>vs.appendChild(varRow(v))); dlg.showModal(); }
 document.getElementById('newBtn').addEventListener('click',openNew);
 

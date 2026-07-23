@@ -18,8 +18,23 @@
   .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--green);opacity:.85}
   .kpi.warn::before{background:var(--amber)}
   .kpi .lab{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-dim);font-weight:700}
-  .kpi .val{font-family:var(--mono);font-size:clamp(20px,2.8vw,26px);font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+  .kpi .val{font-family:var(--mono);font-size:clamp(17px,2vw,21px);font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums;letter-spacing:-.5px;white-space:nowrap}
   .kpi .sub2{font-size:12px;color:var(--ink-faint);margin-top:2px}
+  /* Gráfico de vendas */
+  .chart-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px}
+  .chart-head h3{margin:0;font-family:var(--disp);text-transform:uppercase;letter-spacing:.6px;font-size:16px;transform:skewX(-5deg)}
+  .chart-sub{font-family:var(--mono);font-size:12px;color:var(--ink-faint)}
+  .chart-wrap{position:relative;width:100%}
+  #chart{display:block;width:100%;height:auto;touch-action:none}
+  #chart .bar{fill:var(--green);transition:opacity .12s}
+  #chart .bar.today{fill:var(--green-hi)}
+  #chart .bar.empty{fill:var(--ink-faint);opacity:.3}
+  #chart .grid{stroke:var(--line)}
+  #chart .axis{fill:var(--ink-faint);font-size:11px;font-family:var(--mono)}
+  #chart .axis.today{fill:var(--green-hi)}
+  .chart-tip{position:absolute;pointer-events:none;background:var(--panel-2);border:1px solid var(--green);border-radius:9px;padding:7px 10px;box-shadow:0 6px 20px rgba(0,0,0,.6),0 0 14px var(--glow);transform:translate(-50%,-112%);white-space:nowrap;z-index:5}
+  .chart-tip .d{color:var(--ink-faint);font-size:10.5px}
+  .chart-tip .v{font-family:var(--mono);font-weight:700;color:var(--green-hi);font-size:14px}
   .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   @media (max-width:720px){.cols{grid-template-columns:1fr}}
   .panel{padding:16px}
@@ -57,6 +72,11 @@
     <div class="kpi warn"><div class="lab">A receber (fiado)</div><div class="val" id="kRecv">—</div><div class="sub2" id="kRecvN">—</div></div>
     <div class="kpi"><div class="lab">Estoque a custo</div><div class="val" id="kStock">—</div><div class="sub2">capital parado</div></div>
     <div class="kpi warn"><div class="lab">Ruptura de estoque</div><div class="val" id="kLow">—</div><div class="sub2">itens ≤ 4 un.</div></div>
+  </div>
+
+  <div class="panel card" style="margin-top:14px">
+    <div class="chart-head"><h3>Vendas por dia</h3><span class="chart-sub" id="chartSub">últimos 14 dias</span></div>
+    <div class="chart-wrap" id="chartWrap"><svg id="chart" role="img" aria-label="Gráfico de vendas por dia"></svg><div id="chartTip" class="chart-tip" hidden></div></div>
   </div>
 
   <div class="cols" style="margin-top:14px">
@@ -118,7 +138,31 @@ async function load(){
   if(d.low_stock>0) parts.push(`E <b>${d.low_stock}</b> item(ns) perto da ruptura.`);
   document.getElementById('maestroMsg').innerHTML='Fala, chefe. '+parts.join(' ');
 }
-load(); setInterval(load, 15000);
+// ---- Gráfico de vendas (série única, barras verdes) ----
+let lastSeries=null; const svgEl=document.getElementById('chart');
+function barPath(x,y,w,h,r){ r=Math.min(r,w/2,Math.max(0,h)); return `M${x},${y+h} L${x},${y+r} Q${x},${y} ${x+r},${y} L${x+w-r},${y} Q${x+w},${y} ${x+w},${y+r} L${x+w},${y+h} Z`; }
+function renderChart(){ if(!lastSeries) return; const wrap=document.getElementById('chartWrap'); const W=Math.max(280,Math.round(wrap.clientWidth)); const H=210;
+  const padL=12,padR=12,padT=20,padB=26; const plotH=H-padT-padB, base=padT+plotH, plotW=W-padL-padR;
+  const n=lastSeries.length, step=plotW/n, bw=Math.min(40,step*0.62), max=Math.max(...lastSeries.map(s=>s.total),1), every=W<440?3:2;
+  let g=`<line class="grid" x1="${padL}" y1="${padT}" x2="${W-padR}" y2="${padT}" stroke-dasharray="3 5"/><text class="axis" x="${padL}" y="${padT-6}">R$ ${max.toLocaleString('pt-BR')}</text><line class="grid" x1="${padL}" y1="${base}" x2="${W-padR}" y2="${base}"/>`;
+  let bars='',labels='';
+  lastSeries.forEach((s,i)=>{ const x=padL+i*step+(step-bw)/2; const h=s.total>0?Math.max(4,s.total/max*plotH):3; const y=base-h; const today=i===n-1;
+    bars+=`<path class="bar${today?' today':''}${s.total<=0?' empty':''}" d="${barPath(x,y,bw,h,4)}" data-i="${i}"/>`;
+    if(i%every===0||today){ labels+=`<text class="axis${today?' today':''}" x="${x+bw/2}" y="${H-8}" text-anchor="middle">${today?'hoje':s.date.slice(8,10)}</text>`; }
+  });
+  svgEl.setAttribute('viewBox',`0 0 ${W} ${H}`); svgEl.setAttribute('height',H); svgEl.innerHTML=g+bars+labels;
+}
+function showTip(el,s){ const tip=document.getElementById('chartTip'),wrap=document.getElementById('chartWrap'),r=el.getBoundingClientRect(),wr=wrap.getBoundingClientRect();
+  tip.hidden=false; tip.innerHTML=`<div class="d">${new Date(s.date+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}</div><div class="v">${BRL(s.total)}</div><div class="d">${s.count} venda(s)</div>`;
+  tip.style.left=(r.left-wr.left+r.width/2)+'px'; tip.style.top=(r.top-wr.top)+'px'; }
+function hideTip(){ document.getElementById('chartTip').hidden=true; }
+svgEl.addEventListener('pointermove',(e)=>{ const b=e.target.closest('.bar'); b?showTip(b,lastSeries[+b.dataset.i]):hideTip(); });
+svgEl.addEventListener('pointerdown',(e)=>{ const b=e.target.closest('.bar'); if(b) showTip(b,lastSeries[+b.dataset.i]); });
+svgEl.addEventListener('pointerleave',hideTip);
+let rz; window.addEventListener('resize',()=>{ clearTimeout(rz); rz=setTimeout(renderChart,150); });
+async function loadChart(){ try{ const d=await api('/api/sales-series?days=14'); lastSeries=d.series; document.getElementById('chartSub').textContent='últimos '+d.days+' dias'; renderChart(); }catch(e){} }
+
+load(); loadChart(); setInterval(()=>{ load(); loadChart(); }, 20000);
 </script>
 </body>
 </html>
