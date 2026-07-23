@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080a08">
+<title>VN Store — PDV</title>
+<link rel="icon" href="/logo.webp">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .app{max-width:1240px;margin:0 auto;padding:clamp(12px,2.4vw,24px)}
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-bottom:14px;margin-bottom:18px;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+  .brand .wordmark{font-size:22px}
+  .brand .wordmark .cmd{display:block;font-size:13px}
+  .top-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+  .layout{display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start}
+  @media (max-width:840px){.layout{grid-template-columns:1fr}}
+
+  /* Catálogo */
+  .search{width:100%;padding:13px 15px;border-radius:12px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:15px;font-family:var(--body)}
+  .search:focus{outline:2px solid var(--green);outline-offset:1px;border-color:var(--green)}
+  .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:14px}
+  .prod{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:13px;padding:12px;text-align:left;cursor:pointer;transition:.15s;display:flex;flex-direction:column;gap:6px;min-height:104px}
+  .prod:hover{transform:translateY(-2px);border-color:rgba(47,210,79,.4);box-shadow:0 8px 22px rgba(0,0,0,.45)}
+  .prod:disabled{opacity:.4;cursor:not-allowed;transform:none}
+  .prod .nm{font-weight:700;font-size:13.5px;line-height:1.25}
+  .prod .vr{font-size:11.5px;color:var(--ink-dim)}
+  .prod .pr{font-family:var(--mono);font-weight:700;margin-top:auto;font-size:14px}
+  .prod .st{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+  .st.ok{color:var(--green-hi)} .st.low{color:var(--amber)} .st.out{color:var(--red)}
+
+  /* Carrinho */
+  .cart{position:sticky;top:16px;padding:16px;display:flex;flex-direction:column;gap:12px}
+  .cart h2{font-family:var(--disp);text-transform:uppercase;letter-spacing:.6px;font-size:18px;margin:0;transform:skewX(-5deg)}
+  .empty{color:var(--ink-faint);font-size:13px;text-align:center;padding:26px 0}
+  .lines{display:flex;flex-direction:column;gap:8px;max-height:44vh;overflow-y:auto}
+  .line{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:9px 10px;background:var(--bg-2);border:1px solid var(--line-soft);border-radius:11px}
+  .line .nm{font-size:12.5px;font-weight:600}
+  .line .meta{font-size:11px;color:var(--ink-dim);font-family:var(--mono)}
+  .qty{display:flex;align-items:center;gap:6px}
+  .qty button{width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:16px;cursor:pointer;line-height:1}
+  .qty button:hover{border-color:var(--green);color:var(--green-hi)}
+  .qty span{min-width:20px;text-align:center;font-family:var(--mono);font-weight:700}
+  .line .lt{font-family:var(--mono);font-weight:700;font-size:13px;text-align:right}
+  .rm{background:none;border:none;color:var(--ink-faint);cursor:pointer;font-size:12px}
+  .rm:hover{color:var(--red)}
+
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-faint);font-weight:700}
+  .field input{padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:14px;font-family:var(--body)}
+  .field input:focus{outline:2px solid var(--green);outline-offset:1px;border-color:var(--green)}
+  .pays{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .pay{padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink-dim);font-size:11px;font-weight:700;text-transform:uppercase;cursor:pointer;transition:.12s}
+  .pay:hover{color:var(--ink)}
+  .pay.sel{border-color:var(--green);color:var(--green-hi);background:rgba(47,210,79,.1)}
+
+  .totals{border-top:1px dashed var(--line);padding-top:12px;display:flex;flex-direction:column;gap:6px;font-size:13px}
+  .totals .row{display:flex;justify-content:space-between;color:var(--ink-dim)}
+  .totals .row.big{color:var(--ink);font-size:20px;font-weight:800;align-items:baseline}
+  .totals .row .v{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .totals .big .v{color:var(--green-hi);text-shadow:0 0 12px var(--glow)}
+
+  /* Toast */
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(120%);z-index:50;
+    background:var(--panel-2);border:1px solid var(--green);border-radius:14px;padding:14px 18px;min-width:280px;max-width:92vw;
+    box-shadow:0 12px 40px rgba(0,0,0,.6),0 0 24px var(--glow);transition:transform .3s cubic-bezier(.2,.9,.3,1)}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  .toast.err{border-color:var(--red);box-shadow:0 12px 40px rgba(0,0,0,.6)}
+  .toast .t{font-family:var(--disp);text-transform:uppercase;letter-spacing:.5px;font-weight:900;font-size:16px}
+  .toast .d{font-size:12.5px;color:var(--ink-dim);margin-top:3px}
+  .toast .sync{font-size:11.5px;font-weight:700;margin-top:6px}
+  .toast .sync.ok{color:var(--green-hi)} .toast .sync.no{color:var(--amber)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="badge"><img src="/logo.webp" alt="VN Store"></div>
+      <div class="wordmark">VN Store<span class="cmd">PDV</span></div>
+    </div>
+    <div class="top-actions">
+      <span id="statusPill" class="pill demo"><span class="dot"></span>Carregando…</span>
+      <button id="syncBtn" class="btn ghost" type="button">↻ Sincronizar</button>
+      <a class="btn ghost" href="/">← Painel</a>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- Catálogo -->
+    <section>
+      <input id="search" class="search" type="search" placeholder="Buscar produto, variação ou SKU…" autocomplete="off">
+      <div id="prodGrid" class="prod-grid" aria-live="polite"></div>
+    </section>
+
+    <!-- Carrinho -->
+    <aside class="cart card">
+      <h2>Venda</h2>
+      <div id="lines" class="lines"><div class="empty">Toque num produto para começar.</div></div>
+
+      <div class="field">
+        <label for="customer">Cliente (opcional)</label>
+        <input id="customer" type="text" placeholder="Nome do cliente">
+      </div>
+      <div class="field">
+        <label>Pagamento</label>
+        <div class="pays" id="pays">
+          <button class="pay" data-pay="Pix" type="button">Pix</button>
+          <button class="pay" data-pay="Dinheiro" type="button">Dinheiro</button>
+          <button class="pay" data-pay="Crédito" type="button">Crédito</button>
+          <button class="pay" data-pay="Débito" type="button">Débito</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="discount">Desconto (R$)</label>
+        <input id="discount" type="number" min="0" step="0.01" placeholder="0,00" value="">
+      </div>
+
+      <div class="totals">
+        <div class="row"><span>Subtotal</span><span class="v" id="subtotal">R$ 0,00</span></div>
+        <div class="row"><span>Desconto</span><span class="v" id="discShow">R$ 0,00</span></div>
+        <div class="row big"><span>Total</span><span class="v" id="total">R$ 0,00</span></div>
+      </div>
+      <button id="finish" class="btn primary" type="button" disabled>Finalizar venda</button>
+    </aside>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+const BRL = (n) => 'R$ ' + (Number(n)||0).toFixed(2).replace('.', ',');
+const state = { cart: new Map(), pay: '', products: [] };
+
+async function api(path, opts){ const r = await fetch(path, opts); const d = await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||('Erro '+r.status)); return d; }
+
+async function health(){
+  try{ const h = await api('/api/health');
+    const p = document.getElementById('statusPill');
+    if(h.mode==='live'){ p.className='pill live'; p.innerHTML='<span class="dot"></span>Ao vivo · Nuvemshop'; }
+    else{ p.className='pill demo'; p.innerHTML='<span class="dot"></span>Modo demonstração'; }
+  }catch(e){}
+}
+
+async function loadProducts(q=''){
+  state.products = await api('/api/products?q='+encodeURIComponent(q));
+  renderProducts();
+}
+function stockClass(v){ if(!v.stock_management) return ['ok','—']; if(v.stock<=0) return ['out','Sem estoque']; if(v.stock<=4) return ['low', v.stock+' un.']; return ['ok', v.stock+' un.']; }
+function renderProducts(){
+  const g = document.getElementById('prodGrid');
+  if(!state.products.length){ g.innerHTML = '<div class="empty" style="grid-column:1/-1">Nenhum produto encontrado.</div>'; return; }
+  g.innerHTML = '';
+  for(const v of state.products){
+    const [cls,label] = stockClass(v);
+    const out = v.stock_management && v.stock<=0;
+    const b = document.createElement('button');
+    b.className='prod'; b.type='button'; b.disabled = out;
+    b.innerHTML = `<div class="nm">${v.product_name}</div><div class="vr">${v.variant_name||''}${v.sku?' · '+v.sku:''}</div><div class="pr">${BRL(v.price)}</div><div class="st ${cls}">${label}</div>`;
+    b.addEventListener('click', ()=>addToCart(v));
+    g.appendChild(b);
+  }
+}
+
+function addToCart(v){
+  const cur = state.cart.get(v.id) || { v, qty:0 };
+  if(v.stock_management && cur.qty >= v.stock){ return toast('Estoque no limite', `Só há ${v.stock} un. de ${v.product_name} ${v.variant_name}.`, true); }
+  cur.qty += 1; state.cart.set(v.id, cur); renderCart();
+}
+function changeQty(id, d){
+  const it = state.cart.get(id); if(!it) return;
+  it.qty += d;
+  if(it.qty<=0) state.cart.delete(id);
+  else if(it.v.stock_management && it.qty>it.v.stock){ it.qty=it.v.stock; toast('Estoque no limite', `Máximo ${it.v.stock} un.`, true); }
+  renderCart();
+}
+function renderCart(){
+  const box = document.getElementById('lines');
+  if(state.cart.size===0){ box.innerHTML='<div class="empty">Toque num produto para começar.</div>'; }
+  else{
+    box.innerHTML='';
+    for(const [id,it] of state.cart){
+      const el = document.createElement('div'); el.className='line';
+      el.innerHTML = `<div><div class="nm">${it.v.product_name} <span class="meta">${it.v.variant_name||''}</span></div>
+        <div class="meta">${BRL(it.v.price)} · un.</div>
+        <button class="rm" type="button">remover</button></div>
+        <div style="text-align:right"><div class="qty"><button type="button" aria-label="menos">−</button><span>${it.qty}</span><button type="button" aria-label="mais">+</button></div>
+        <div class="lt">${BRL(it.v.price*it.qty)}</div></div>`;
+      const [minus,plus] = el.querySelectorAll('.qty button');
+      minus.addEventListener('click',()=>changeQty(id,-1));
+      plus.addEventListener('click',()=>changeQty(id,1));
+      el.querySelector('.rm').addEventListener('click',()=>{ state.cart.delete(id); renderCart(); });
+      box.appendChild(el);
+    }
+  }
+  updateTotals();
+}
+function updateTotals(){
+  let sub=0; for(const [,it] of state.cart) sub += it.v.price*it.qty;
+  const disc = Math.max(0, parseFloat(document.getElementById('discount').value)||0);
+  const total = Math.max(0, sub-disc);
+  document.getElementById('subtotal').textContent = BRL(sub);
+  document.getElementById('discShow').textContent = BRL(disc);
+  document.getElementById('total').textContent = BRL(total);
+  document.getElementById('finish').disabled = state.cart.size===0;
+}
+
+let toastTimer;
+function toast(title, desc, isErr, sync){
+  const t = document.getElementById('toast');
+  t.className = 'toast' + (isErr?' err':'');
+  let html = `<div class="t">${title}</div><div class="d">${desc||''}</div>`;
+  if(sync) html += `<div class="sync ${sync.ok?'ok':'no'}">${sync.text}</div>`;
+  t.innerHTML = html;
+  requestAnimationFrame(()=>t.classList.add('show'));
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove('show'), 4200);
+}
+
+async function finish(){
+  if(state.cart.size===0) return;
+  const btn = document.getElementById('finish'); btn.disabled=true; btn.textContent='Lançando…';
+  const items = [...state.cart.values()].map(it=>({ variant_id: it.v.id, qty: it.qty }));
+  try{
+    const r = await api('/api/sales', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ items, customer_name: document.getElementById('customer').value.trim(),
+        payment_method: state.pay, discount: parseFloat(document.getElementById('discount').value)||0 }) });
+    const sync = r.stock_synced ? {ok:true, text:'✔ Estoque atualizado na Nuvemshop'} : {ok:false, text: r.mode==='demo' ? '● Demo — conecte a Nuvemshop para sincronizar' : '! Estoque não sincronizou (ver notas)'};
+    toast(`Venda ${r.code} · ${BRL(r.total)}`, `Margem ${BRL(r.margin)} · ${state.pay||'sem forma de pgto'}`, false, sync);
+    // limpa e recarrega estoque
+    state.cart.clear(); state.pay=''; document.querySelectorAll('.pay').forEach(p=>p.classList.remove('sel'));
+    document.getElementById('customer').value=''; document.getElementById('discount').value='';
+    renderCart(); await loadProducts(document.getElementById('search').value.trim());
+  }catch(e){ toast('Não deu pra lançar', e.message, true); }
+  finally{ btn.textContent='Finalizar venda'; btn.disabled = state.cart.size===0; }
+}
+
+// eventos
+let searchTimer;
+document.getElementById('search').addEventListener('input', (e)=>{ clearTimeout(searchTimer); searchTimer=setTimeout(()=>loadProducts(e.target.value.trim()), 200); });
+document.getElementById('discount').addEventListener('input', updateTotals);
+document.getElementById('pays').addEventListener('click', (e)=>{ const b=e.target.closest('.pay'); if(!b)return; document.querySelectorAll('.pay').forEach(p=>p.classList.remove('sel')); b.classList.add('sel'); state.pay=b.dataset.pay; });
+document.getElementById('finish').addEventListener('click', finish);
+document.getElementById('syncBtn').addEventListener('click', async ()=>{ try{ const r=await api('/api/sync',{method:'POST'}); toast('Sincronizado', r.mode==='live'?`${r.variants} variações da loja`:'Modo demonstração', false); await loadProducts(); await health(); }catch(e){ toast('Falha ao sincronizar', e.message, true); } });
+
+health(); loadProducts();
+</script>
+</body>
+</html>

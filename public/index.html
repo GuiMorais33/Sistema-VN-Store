@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080a08">
+<title>VN Store — Sala de Comando</title>
+<link rel="icon" href="/logo.webp">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .app{max-width:1220px;margin:0 auto;padding:clamp(14px,3vw,30px)}
+  header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-bottom:18px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:13px;margin-right:auto}
+  .brand .wordmark{font-size:clamp(24px,4.6vw,38px)}
+  .brand .wordmark .cmd{display:block;font-size:13px}
+  .sub{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-dim);font-weight:700;margin-top:4px}
+  .head-actions{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+  .head-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+  .clock{font-family:var(--mono);color:var(--ink-dim);font-size:13px;font-variant-numeric:tabular-nums}
+
+  .eyebrow{display:flex;align-items:center;gap:12px;margin:26px 2px 14px}
+  .eyebrow h2{font-family:var(--disp);font-weight:900;text-transform:uppercase;font-size:clamp(17px,2.6vw,22px);letter-spacing:1px;margin:0;transform:skewX(-6deg)}
+  .eyebrow .rule{height:1px;background:linear-gradient(90deg,var(--line),transparent);flex:1}
+  .eyebrow .count{font-family:var(--mono);font-size:12px;color:var(--ink-faint)}
+
+  .kpis{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}
+  .kpi{position:relative;overflow:hidden;padding:15px 16px}
+  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--green);opacity:.85}
+  .kpi.warn::before{background:var(--amber)}
+  .kpi .lab{font-size:11px;text-transform:uppercase;letter-spacing:1.1px;color:var(--ink-dim);font-weight:700}
+  .kpi .val{font-family:var(--mono);font-size:clamp(21px,3vw,27px);font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+  .kpi .sub2{font-size:12px;color:var(--ink-faint);margin-top:2px}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:720px){.cols{grid-template-columns:1fr}}
+  .panel{padding:16px}
+  .panel h3{margin:0 0 12px;font-family:var(--disp);text-transform:uppercase;letter-spacing:.6px;font-size:16px;transform:skewX(-5deg)}
+  .list{display:flex;flex-direction:column;gap:8px}
+  .item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 11px;background:var(--bg-2);border:1px solid var(--line-soft);border-radius:11px;font-size:13px}
+  .item .l{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .item .l .s{font-size:11px;color:var(--ink-dim);font-family:var(--mono)}
+  .item .r{font-family:var(--mono);font-weight:700;white-space:nowrap}
+  .item .r.warn{color:var(--amber)} .item .r.ok{color:var(--green-hi)}
+  .muted{color:var(--ink-faint);font-size:12.5px;text-align:center;padding:16px 0}
+
+  .maestro{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:start;padding:20px;position:relative;overflow:hidden;
+    background:radial-gradient(420px 200px at 100% 0%,rgba(47,210,79,.12),transparent 70%),linear-gradient(180deg,var(--panel-2),var(--panel))}
+  .m-ava{width:62px;height:62px;border-radius:18px;display:grid;place-items:center;font-size:32px;background:radial-gradient(circle at 35% 30%,#1e4a28,#0c1a10);border:1px solid rgba(47,210,79,.4);box-shadow:0 0 24px var(--glow)}
+  .m-body h3{margin:0;font-family:var(--disp);font-weight:900;text-transform:uppercase;letter-spacing:.6px;font-size:20px;transform:skewX(-6deg)}
+  .m-body .role{color:var(--green-hi);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-top:2px}
+  .m-body p{margin:12px 0 0;max-width:66ch}
+  .m-body p b{color:var(--green-hi)}
+  @media (max-width:560px){.maestro{grid-template-columns:1fr}}
+
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(268px,1fr))}
+  .agent{padding:16px;display:flex;flex-direction:column;gap:11px;transition:transform .18s,border-color .18s,box-shadow .18s}
+  .agent:hover{transform:translateY(-3px);border-color:rgba(47,210,79,.35);box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .a-head{display:flex;align-items:center;gap:11px}
+  .a-ava{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:21px;background:var(--bg-2);border:1px solid var(--line);flex:0 0 auto}
+  .a-id .nm{font-family:var(--disp);font-weight:900;text-transform:uppercase;letter-spacing:.4px;font-size:16px;line-height:1;transform:skewX(-5deg)}
+  .a-id .fn{font-size:11.5px;color:var(--ink-dim);margin-top:3px}
+  .a-status{margin-left:auto}
+  .a-find{background:var(--bg-2);border:1px solid var(--line-soft);border-radius:11px;padding:11px 12px}
+  .a-find .k{color:var(--ink-faint);font-size:10px;text-transform:uppercase;letter-spacing:.8px;font-weight:700;display:block;margin-bottom:5px}
+  .a-find p{margin:0;font-size:13px}
+  .a-find b{color:var(--green-hi)}
+  .a-foot{margin-top:auto;display:flex;gap:8px;align-items:center}
+  .a-foot .meta{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-faint)}
+  .mini{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:7px 11px;border-radius:9px;border:1px solid rgba(47,210,79,.35);color:var(--green-hi);background:rgba(47,210,79,.06);cursor:pointer}
+  .mini.ghost{border-color:var(--line);color:var(--ink-dim);background:transparent}
+
+  footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--line);display:flex;gap:14px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+  .tagline{font-family:var(--disp);text-transform:uppercase;font-weight:900;letter-spacing:.6px;color:var(--ink-dim);font-size:14px;transform:skewX(-5deg)}
+  .tagline b{color:var(--green-hi)}
+  .note{font-size:11.5px;color:var(--ink-faint);max-width:54ch}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="brand">
+      <div class="badge"><img src="/logo.webp" alt="VN Store"></div>
+      <div>
+        <div class="wordmark">VN Store<span class="cmd">Sala de Comando</span></div>
+        <div class="sub">Time de agentes · o sistema que toca a loja</div>
+      </div>
+    </div>
+    <div class="head-actions">
+      <div class="head-row">
+        <span id="statusPill" class="pill demo"><span class="dot"></span>Carregando…</span>
+        <a class="btn primary" href="/pdv">🛒 Abrir PDV</a>
+      </div>
+      <span class="clock" id="clock">--:--:--</span>
+    </div>
+  </header>
+
+  <!-- KPIs ao vivo -->
+  <div class="eyebrow"><h2>Pulso da loja</h2><span class="rule"></span><span class="count" id="kpiMeta">hoje</span></div>
+  <div class="kpis">
+    <div class="kpi"><div class="lab">Faturamento hoje</div><div class="val" id="kRev">—</div><div class="sub2">vendas do PDV</div></div>
+    <div class="kpi"><div class="lab">Pedidos hoje</div><div class="val" id="kOrders">—</div><div class="sub2">lançados no sistema</div></div>
+    <div class="kpi"><div class="lab">Ticket médio</div><div class="val" id="kTicket">—</div><div class="sub2">por venda</div></div>
+    <div class="kpi"><div class="lab">Margem</div><div class="val" id="kMargin">—</div><div class="sub2">do faturamento</div></div>
+    <div class="kpi warn"><div class="lab">Ruptura de estoque</div><div class="val" id="kLow">—</div><div class="sub2">itens ≤ 4 un.</div></div>
+  </div>
+
+  <!-- Vendas recentes + estoque baixo -->
+  <div class="cols" style="margin-top:14px">
+    <div class="panel card">
+      <h3>Últimas vendas</h3>
+      <div class="list" id="recent"><div class="muted">Sem vendas ainda hoje.</div></div>
+    </div>
+    <div class="panel card">
+      <h3>Estoque no vermelho</h3>
+      <div class="list" id="low"><div class="muted">Tudo abastecido.</div></div>
+    </div>
+  </div>
+
+  <!-- Maestro -->
+  <div class="eyebrow"><h2>O Maestro</h2><span class="rule"></span><span class="count">coordena o time</span></div>
+  <div class="maestro card">
+    <div class="m-ava">🐊</div>
+    <div class="m-body">
+      <h3>Maestro</h3>
+      <div class="role">Gerente-geral · coordena todos os agentes</div>
+      <p id="maestroMsg">Lendo os números da loja…</p>
+    </div>
+  </div>
+
+  <!-- Time -->
+  <div class="eyebrow"><h2>O Time</h2><span class="rule"></span><span class="count">Vendas e Financeiro já ativos</span></div>
+  <div class="grid">
+
+    <div class="agent card">
+      <div class="a-head"><div class="a-ava">🛒</div><div class="a-id"><div class="nm">Vendas</div><div class="fn">PDV &amp; pedidos</div></div>
+        <span class="a-status pill live"><span class="dot"></span>Ativo</span></div>
+      <div class="a-find"><span class="k">Agora</span><p id="agVendas">—</p></div>
+      <div class="a-foot"><a class="mini" href="/pdv">Abrir PDV</a><span class="meta">tempo real</span></div>
+    </div>
+
+    <div class="agent card">
+      <div class="a-head"><div class="a-ava">📦</div><div class="a-id"><div class="nm">Estoque</div><div class="fn">Inventário &amp; reposição</div></div>
+        <span class="a-status pill" id="agEstoquePill"><span class="dot"></span>—</span></div>
+      <div class="a-find"><span class="k">Última varredura</span><p id="agEstoque">—</p></div>
+      <div class="a-foot"><button class="mini ghost" id="syncBtn" type="button">↻ Sincronizar loja</button><span class="meta" id="syncMeta"></span></div>
+    </div>
+
+    <div class="agent card">
+      <div class="a-head"><div class="a-ava">💰</div><div class="a-id"><div class="nm">Financeiro</div><div class="fn">Caixa &amp; margem</div></div>
+        <span class="a-status pill live"><span class="dot"></span>Ativo</span></div>
+      <div class="a-find"><span class="k">Hoje</span><p id="agFin">—</p></div>
+      <div class="a-foot"><span class="meta">lançamento automático</span></div>
+    </div>
+
+    <div class="agent card">
+      <div class="a-head"><div class="a-ava">💬</div><div class="a-id"><div class="nm">Atendimento</div><div class="fn">SAC · WhatsApp</div></div>
+        <span class="a-status pill demo"><span class="dot"></span>Em breve</span></div>
+      <div class="a-find"><span class="k">Próxima fase</span><p>Responder clientes e gerir trocas. Você define o tom e a autonomia.</p></div>
+      <div class="a-foot"><span class="meta">roadmap</span></div>
+    </div>
+
+    <div class="agent card">
+      <div class="a-head"><div class="a-ava">📣</div><div class="a-id"><div class="nm">Marketing</div><div class="fn">Conteúdo &amp; campanhas</div></div>
+        <span class="a-status pill demo"><span class="dot"></span>Em breve</span></div>
+      <div class="a-find"><span class="k">Próxima fase</span><p>Calendário de posts e campanhas a partir do que mais vende.</p></div>
+      <div class="a-foot"><span class="meta">roadmap</span></div>
+    </div>
+
+    <div class="agent card">
+      <div class="a-head"><div class="a-ava">🚚</div><div class="a-id"><div class="nm">Logística</div><div class="fn">Envios &amp; rastreio</div></div>
+        <span class="a-status pill demo"><span class="dot"></span>Em breve</span></div>
+      <div class="a-find"><span class="k">Próxima fase</span><p>Rastrear encomendas e avisar clientes proativamente.</p></div>
+      <div class="a-foot"><span class="meta">roadmap</span></div>
+    </div>
+
+  </div>
+
+  <footer>
+    <div class="tagline">Vestindo as quebradas de todo o Brasil <b>desde 2018</b></div>
+    <span class="note" id="footNote">PDV e Financeiro já rodando de verdade. Demais agentes entram por fase, conforme você definir.</span>
+  </footer>
+
+</div>
+
+<script>
+const BRL = (n) => 'R$ ' + (Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+async function api(p,o){ const r=await fetch(p,o); const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||('Erro '+r.status)); return d; }
+
+(function(){ const el=document.getElementById('clock');
+  const pad=n=>String(n).padStart(2,'0');
+  function t(){const d=new Date();el.textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}
+  t(); setInterval(t,1000); })();
+
+async function health(){
+  try{ const h=await api('/api/health'); const p=document.getElementById('statusPill');
+    if(h.mode==='live'){ p.className='pill live'; p.innerHTML='<span class="dot"></span>Ao vivo · Nuvemshop'; }
+    else{ p.className='pill demo'; p.innerHTML='<span class="dot"></span>Modo demonstração'; }
+  }catch(e){}
+}
+
+async function load(){
+  const d = await api('/api/dashboard');
+  document.getElementById('kRev').textContent = BRL(d.revenue_today);
+  document.getElementById('kOrders').textContent = d.orders_today;
+  document.getElementById('kTicket').textContent = BRL(d.ticket);
+  document.getElementById('kMargin').textContent = d.margin_pct + '%';
+  document.getElementById('kLow').textContent = d.low_stock + ' itens';
+
+  // vendas recentes
+  const rec = document.getElementById('recent');
+  if(d.recent_sales.length){ rec.innerHTML=''; for(const s of d.recent_sales){
+    const el=document.createElement('div'); el.className='item';
+    const sync = s.synced_nuvemshop ? '<span class="ok">✔</span>' : '';
+    el.innerHTML=`<div class="l"><span>${s.code} ${sync}</span><span class="s">${s.customer_name||'—'} · ${s.payment_method||'—'}</span></div><div class="r ok">${BRL(s.total)}</div>`;
+    rec.appendChild(el);
+  } } else rec.innerHTML='<div class="muted">Sem vendas ainda hoje.</div>';
+
+  // estoque baixo
+  const low = document.getElementById('low');
+  if(d.low_stock_list.length){ low.innerHTML=''; for(const v of d.low_stock_list){
+    const el=document.createElement('div'); el.className='item';
+    el.innerHTML=`<div class="l"><span>${v.product_name}</span><span class="s">${v.variant_name||''}</span></div><div class="r warn">${v.stock} un.</div>`;
+    low.appendChild(el);
+  } } else low.innerHTML='<div class="muted">Tudo abastecido.</div>';
+
+  // agentes
+  document.getElementById('agVendas').innerHTML = d.orders_today>0
+    ? `<b>${d.orders_today}</b> venda(s) hoje · <b>${BRL(d.revenue_today)}</b> no caixa.`
+    : 'Pronto pra vender. Nenhuma venda lançada hoje ainda.';
+  document.getElementById('agFin').innerHTML = `Faturamento <b>${BRL(d.revenue_today)}</b> · margem <b>${d.margin_pct}%</b>. Cada venda entra sozinha no caixa.`;
+  const estP=document.getElementById('agEstoquePill');
+  if(d.low_stock>0){ estP.className='a-status pill demo'; estP.innerHTML='<span class="dot"></span>Atenção';
+    document.getElementById('agEstoque').innerHTML=`<b>${d.low_stock}</b> item(ns) no vermelho (≤ 4 un.). Sugere repor os campeões.`; }
+  else{ estP.className='a-status pill live'; estP.innerHTML='<span class="dot"></span>Ok';
+    document.getElementById('agEstoque').innerHTML='Estoque saudável em todas as variações.'; }
+
+  // maestro
+  const parts=[];
+  if(d.orders_today>0) parts.push(`Já são <b>${d.orders_today}</b> venda(s) hoje, <b>${BRL(d.revenue_today)}</b> no caixa com margem de <b>${d.margin_pct}%</b>.`);
+  else parts.push('Ainda sem vendas hoje — o PDV está pronto.');
+  if(d.low_stock>0) parts.push(`Fica de olho: <b>${d.low_stock}</b> item(ns) perto da ruptura.`);
+  else parts.push('Estoque tranquilo.');
+  document.getElementById('maestroMsg').innerHTML = 'Fala, chefe. ' + parts.join(' ');
+}
+
+document.getElementById('syncBtn').addEventListener('click', async (e)=>{
+  const b=e.target; b.disabled=true; const old=b.textContent; b.textContent='Sincronizando…';
+  try{ const r=await api('/api/sync',{method:'POST'});
+    document.getElementById('syncMeta').textContent = r.mode==='live'?`${r.variants} variações`:'modo demo';
+    await load(); await health();
+  }catch(err){ document.getElementById('syncMeta').textContent='falhou'; }
+  finally{ b.disabled=false; b.textContent=old; }
+});
+
+health(); load(); setInterval(load, 15000);
+</script>
+</body>
+</html>

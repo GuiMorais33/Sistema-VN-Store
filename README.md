@@ -1,19 +1,57 @@
-# VN Store — Sala de Comando 🐊
+# VN Store — Sistema 🐊
 
-Sistema "vivo" de **agentes autônomos** para administrar os processos da loja de roupa VN Store.
-Um time de funcionários digitais que observam os dados da loja, agem dentro do que for autorizado e reportam ao dono.
+Sistema "vivo" com um **time de agentes autônomos** para administrar a loja de roupa VN Store.
+Substitui a gestão feita hoje na Nuvemshop (com **PDV próprio sem taxa por lançamento**) e usa a
+**API da Nuvemshop** como fonte da loja — lendo produtos/pedidos e **escrevendo estoque de volta**.
 
 > _Vestindo as quebradas de todo o Brasil desde 2018._
 
-## Status atual
+## O que já funciona
 
-**Protótipo visual** (fase de aprovação). O `index.html` é a **Sala de Comando** — o painel central onde
-cada agente aparece como um cartão vivo: o que está fazendo agora, o que descobriu e o que recomenda.
-Os dados são **de exemplo**, para validar o visual e a ideia antes de ligar os processos reais.
+- 🛒 **PDV próprio** (`/pdv`) — lançamento de venda ilimitado, **sem taxa por lançamento**. Ao finalizar:
+  baixa o estoque, lança no financeiro e **atualiza o estoque na Nuvemshop** (quando conectado).
+- 💰 **Financeiro automático** — cada venda vira receita, com custo e margem calculados.
+- 📦 **Estoque** — controle unificado, alerta de ruptura (≤ 4 un.).
+- 📊 **Sala de Comando** (`/`) — painel ao vivo com KPIs do dia, últimas vendas, estoque no vermelho
+  e o time de agentes (Maestro, Vendas e Financeiro já ativos; demais no roadmap).
 
-## Identidade visual
+Roda em **modo demonstração** (com produtos de exemplo) sem nenhuma configuração, e fica **ao vivo**
+assim que você preenche o `.env` com as credenciais da Nuvemshop.
 
-Baseada na marca da loja (vnstoreonline.com.br):
+## Como rodar
+
+```bash
+npm install
+npm start
+# abre em http://localhost:3000  (PDV em /pdv)
+```
+
+### Conectar na sua loja (modo ao vivo)
+
+1. Copie o modelo: `cp .env.example .env`
+2. Preencha `NUVEMSHOP_STORE_ID` e `NUVEMSHOP_ACCESS_TOKEN` (o token é uma senha — o `.env` **nunca** vai pro Git).
+3. `npm start` e clique em **Sincronizar** para puxar os produtos da loja.
+
+## Arquitetura
+
+```
+server/
+  index.js      API (Express) + páginas + regra de negócio da venda
+  db.js         Banco SQLite — vendas, estoque, financeiro, movimentações
+  nuvemshop.js  Cliente da API da Nuvemshop (auth + estoque)
+public/
+  index.html    Sala de Comando (painel ao vivo)
+  pdv.html      PDV
+  theme.css     Identidade visual (street / neon / cromado)
+  logo.webp     Logo da loja
+```
+
+- **Nuvemshop** = a loja (vitrine + checkout). Conectada via API.
+- **Este sistema** = o cérebro: PDV, financeiro, estoque e o time de agentes. Fonte da verdade do
+  que a Nuvemshop não guarda (custo, margem, caixa).
+- **Referência de funções**: Bling (a fatia que cabe no tamanho da operação).
+
+## Paleta
 
 | Elemento | Cor |
 |----------|-----|
@@ -22,27 +60,8 @@ Baseada na marca da loja (vnstoreonline.com.br):
 | Prata / cromado (logo) | `#c3ccd3` |
 | Branco (texto) | `#eef3ee` |
 
-Estilo streetwear/quebrada: fundo escuro, verde neon com glow, detalhes cromados, tipografia condensada em caixa alta.
+## Roadmap (por fase)
 
-## Time de agentes (proposto)
-
-- 🐊 **Maestro** — gerente-geral, coordena o time e entrega o resumo do dia
-- 📦 **Estoque** — inventário e reposição
-- 🛒 **Vendas** — pedidos e conversão
-- 💬 **Atendimento** — SAC, WhatsApp e DM
-- 📣 **Marketing** — conteúdo e campanhas
-- 💰 **Financeiro** — caixa e margem
-- 🚚 **Logística** — envios e rastreio
-- 📊 **Análise / BI** — métricas e tendências
-
-O dono decide quais agentes entram, o que cada um faz e por quê.
-
-## Como ver
-
-Abra o `index.html` no navegador. É um único arquivo, sem dependências externas.
-
-## Próximos passos
-
-1. Aprovar o visual da Sala de Comando.
-2. Definir, agente por agente, os processos reais (o quê, por quê, e o nível de autonomia).
-3. Ligar cada agente às fontes de dados da loja e às rotinas automáticas.
+- **Fase 2** — agentes agindo: Atendimento (SAC/WhatsApp), Marketing, Logística, Compras.
+- **Fiscal** — emissão de NF-e via API pronta (Focus NFe / PlugNotas), só quando precisar.
+- **Automação viva** — agentes rodando em horário/gatilho (webhooks da Nuvemshop em tempo real).

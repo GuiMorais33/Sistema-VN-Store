@@ -1,0 +1,17 @@
+# Segredos — NUNCA subir
+.env
+.env.local
+
+# Banco de dados local
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Dependências
+node_modules/
+
+# Sistema
+.DS_Store
+npm-debug.log*
+*.log

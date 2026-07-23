@@ -1,0 +1,72 @@
+/* ============================================================
+   VN Store — tema compartilhado (street / neon / cromado).
+   Preto grafite, verde neon assinatura, detalhes cromados.
+   ============================================================ */
+:root{
+  --bg:#080a08; --bg-2:#0d100d; --panel:#121612; --panel-2:#171c17;
+  --line:#232a23; --line-soft:#1b211b;
+  --ink:#eef3ee; --ink-dim:#9aa69a; --ink-faint:#6a746a;
+  --green:#2fd24f; --green-hi:#4dff6e; --green-deep:#1c8f34;
+  --glow:rgba(47,210,79,.55);
+  --chrome-1:#f4f7fa; --chrome-2:#c3ccd3; --chrome-3:#828b92;
+  --amber:#f5b21f; --red:#ff5142;
+  --radius:16px;
+  --mono:"SF Mono",ui-monospace,"Roboto Mono",Menlo,Consolas,monospace;
+  --disp:"Arial Narrow","Helvetica Neue Condensed",Impact,"Franklin Gothic Bold",sans-serif;
+  --body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;color:var(--ink);font-family:var(--body);line-height:1.5;
+  background:
+    radial-gradient(900px 500px at 82% -8%, rgba(47,210,79,.10), transparent 60%),
+    radial-gradient(700px 480px at -5% 0%, rgba(47,210,79,.06), transparent 55%),
+    linear-gradient(180deg,var(--bg-2),var(--bg));
+  min-height:100vh;
+}
+a{color:inherit}
+
+/* Marca */
+.badge{
+  width:52px;height:52px;flex:0 0 auto;border-radius:50%;overflow:hidden;
+  background-image:linear-gradient(#fff,#fff),
+    conic-gradient(from 210deg,var(--chrome-1),var(--chrome-3),var(--chrome-1),var(--chrome-3),var(--chrome-1));
+  background-origin:border-box;background-clip:content-box,border-box;border:2px solid transparent;
+  box-shadow:0 0 0 1px #000,0 6px 20px rgba(0,0,0,.6),0 0 22px var(--glow);
+}
+.badge img{width:100%;height:100%;object-fit:cover;display:block}
+.wordmark{
+  font-family:var(--disp);font-weight:900;text-transform:uppercase;line-height:.9;letter-spacing:.5px;
+  background:linear-gradient(180deg,#fff 0%,#d6dde2 42%,#828b92 54%,#f2f5f8 66%,#aab2b9 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 1px 0 #000) drop-shadow(0 2px 3px rgba(0,0,0,.5));transform:skewX(-6deg);
+}
+.wordmark .cmd{-webkit-text-fill-color:var(--green);color:var(--green);background:none;filter:drop-shadow(0 0 10px var(--glow))}
+
+/* Pílulas de status */
+.pill{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;
+  font-size:11.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;border:1px solid var(--line)}
+.pill .dot{width:8px;height:8px;border-radius:50%}
+.pill.live{color:var(--green-hi);background:rgba(47,210,79,.08);border-color:rgba(47,210,79,.3)}
+.pill.live .dot{background:var(--green);box-shadow:0 0 0 0 var(--glow);animation:beat 1.6s infinite}
+.pill.demo{color:var(--amber);background:rgba(245,178,31,.08);border-color:rgba(245,178,31,.3)}
+.pill.demo .dot{background:var(--amber)}
+@keyframes beat{0%{box-shadow:0 0 0 0 var(--glow)}70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+/* Botões */
+.btn{font-family:var(--body);font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+  padding:11px 16px;border-radius:11px;border:1px solid rgba(47,210,79,.35);color:var(--green-hi);
+  background:rgba(47,210,79,.06);cursor:pointer;transition:.15s;text-align:center;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn:hover{background:rgba(47,210,79,.16);border-color:var(--green)}
+.btn:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.btn.primary{background:linear-gradient(180deg,var(--green),var(--green-deep));color:#04160a;border-color:var(--green);box-shadow:0 6px 20px var(--glow)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{border-color:var(--line);color:var(--ink-dim);background:transparent}
+.btn.ghost:hover{color:var(--ink);border-color:var(--ink-faint);background:var(--bg-2)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* Cartão base */
+.card{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:var(--radius)}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
