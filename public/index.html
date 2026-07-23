@@ -89,6 +89,8 @@
     <div class="head-actions">
       <div class="head-row">
         <span id="statusPill" class="pill demo"><span class="dot"></span>Carregando…</span>
+        <a class="btn ghost" href="/clientes">Clientes</a>
+        <a class="btn ghost" href="/produtos">Produtos</a>
         <a class="btn primary" href="/pdv">🛒 Abrir PDV</a>
       </div>
       <span class="clock" id="clock">--:--:--</span>
@@ -102,6 +104,8 @@
     <div class="kpi"><div class="lab">Pedidos hoje</div><div class="val" id="kOrders">—</div><div class="sub2">lançados no sistema</div></div>
     <div class="kpi"><div class="lab">Ticket médio</div><div class="val" id="kTicket">—</div><div class="sub2">por venda</div></div>
     <div class="kpi"><div class="lab">Margem</div><div class="val" id="kMargin">—</div><div class="sub2">do faturamento</div></div>
+    <div class="kpi warn"><div class="lab">A receber (fiado)</div><div class="val" id="kRecv">—</div><div class="sub2" id="kRecvN">—</div></div>
+    <div class="kpi"><div class="lab">Estoque a custo</div><div class="val" id="kStock">—</div><div class="sub2">capital parado</div></div>
     <div class="kpi warn"><div class="lab">Ruptura de estoque</div><div class="val" id="kLow">—</div><div class="sub2">itens ≤ 4 un.</div></div>
   </div>
 
@@ -115,6 +119,11 @@
       <h3>Estoque no vermelho</h3>
       <div class="list" id="low"><div class="muted">Tudo abastecido.</div></div>
     </div>
+  </div>
+
+  <div class="panel card" style="margin-top:14px">
+    <h3>Contas a receber · fiado</h3>
+    <div class="list" id="recv"><div class="muted">Nenhuma pendência. 🎯</div></div>
   </div>
 
   <!-- Maestro -->
@@ -151,6 +160,20 @@
         <span class="a-status pill live"><span class="dot"></span>Ativo</span></div>
       <div class="a-find"><span class="k">Hoje</span><p id="agFin">—</p></div>
       <div class="a-foot"><span class="meta">lançamento automático</span></div>
+    </div>
+
+    <div class="agent card">
+      <div class="a-head"><div class="a-ava">🧾</div><div class="a-id"><div class="nm">Cobrança</div><div class="fn">Contas a receber</div></div>
+        <span class="a-status pill" id="agCobrancaPill"><span class="dot"></span>—</span></div>
+      <div class="a-find"><span class="k">Fiado em aberto</span><p id="agCobranca">—</p></div>
+      <div class="a-foot"><a class="mini" href="/clientes">Ver clientes</a><span class="meta">baixa com 1 clique</span></div>
+    </div>
+
+    <div class="agent card">
+      <div class="a-head"><div class="a-ava">👥</div><div class="a-id"><div class="nm">Clientes</div><div class="fn">Cadastro &amp; ranking</div></div>
+        <span class="a-status pill live"><span class="dot"></span>Ativo</span></div>
+      <div class="a-find"><span class="k">Base</span><p id="agClientes">Ranking de quem mais gasta e histórico de cada cliente.</p></div>
+      <div class="a-foot"><a class="mini" href="/clientes">Abrir</a><span class="meta">tempo real</span></div>
     </div>
 
     <div class="agent card">
@@ -206,6 +229,26 @@ async function load(){
   document.getElementById('kTicket').textContent = BRL(d.ticket);
   document.getElementById('kMargin').textContent = d.margin_pct + '%';
   document.getElementById('kLow').textContent = d.low_stock + ' itens';
+  document.getElementById('kRecv').textContent = BRL(d.receivable_total);
+  document.getElementById('kRecvN').textContent = d.receivable_count + ' venda(s) fiado';
+  document.getElementById('kStock').textContent = BRL(d.stock_value_cost);
+
+  // contas a receber (com baixa)
+  const recv = document.getElementById('recv');
+  if(d.pending_list && d.pending_list.length){ recv.innerHTML='';
+    for(const s of d.pending_list){ const el=document.createElement('div'); el.className='item';
+      el.innerHTML=`<div class="l"><span>${s.code} · ${s.customer_name||'Sem cliente'}</span><span class="s">${new Date(s.created_at).toLocaleDateString('pt-BR')}</span></div>
+        <div style="display:flex;align-items:center;gap:10px"><span class="r warn">${BRL(s.total)}</span><button class="mini" data-settle="${s.id}" type="button">Receber</button></div>`;
+      recv.appendChild(el); }
+    recv.querySelectorAll('[data-settle]').forEach(b=>b.addEventListener('click',async()=>{ try{ await api('/api/sales/'+b.dataset.settle+'/settle',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); await load(); }catch(e){ alert(e.message);} }));
+  } else recv.innerHTML='<div class="muted">Nenhuma pendência. 🎯</div>';
+
+  // agente cobrança
+  const cbP=document.getElementById('agCobrancaPill');
+  if(d.receivable_count>0){ cbP.className='a-status pill demo'; cbP.innerHTML='<span class="dot"></span>Atenção';
+    document.getElementById('agCobranca').innerHTML=`<b>${BRL(d.receivable_total)}</b> em <b>${d.receivable_count}</b> venda(s) fiado esperando recebimento.`; }
+  else{ cbP.className='a-status pill live'; cbP.innerHTML='<span class="dot"></span>Em dia';
+    document.getElementById('agCobranca').textContent='Sem fiado em aberto. Tudo recebido.'; }
 
   // vendas recentes
   const rec = document.getElementById('recent');

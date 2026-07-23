@@ -75,4 +75,35 @@ export async function setVariantStock(productId, variantId, stock) {
   return data;
 }
 
+// -------- Produtos (criar / atualizar na Nuvemshop) --------
+export async function createProduct(payload) {
+  const { data } = await request('POST', '/products', payload);
+  return data; // inclui id e variants[] criados
+}
+export async function updateProduct(nuvemshopProductId, payload) {
+  const { data } = await request('PUT', `/products/${nuvemshopProductId}`, payload);
+  return data;
+}
+export async function addProductImage(nuvemshopProductId, image) {
+  // image: { src: 'https://...' }  ou  { base64: '...', filename: 'foto.jpg' }
+  const { data } = await request('POST', `/products/${nuvemshopProductId}/images`, image);
+  return data;
+}
+
+// -------- Categorias (resolver por nome; criar se faltar) --------
+export async function listCategories() {
+  const { data } = await request('GET', '/categories?per_page=200&fields=id,name');
+  return Array.isArray(data) ? data : [];
+}
+export async function createCategory(name) {
+  const { data } = await request('POST', '/categories', { name: { pt: name } });
+  return data;
+}
+
+// -------- Clientes --------
+export async function createCustomer(payload) {
+  const { data } = await request('POST', '/customers', payload);
+  return data;
+}
+
 export const nuvemshopConfig = { STORE_ID, APP_NAME, EMAIL, BASE };

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080a08">
+<title>VN Store — Produtos</title>
+<link rel="icon" href="/logo.webp">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .app{max-width:1240px;margin:0 auto;padding:clamp(12px,2.4vw,24px)}
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-bottom:14px;margin-bottom:18px;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+  .brand .wordmark{font-size:22px}.brand .wordmark .cmd{display:block;font-size:13px}
+  .top-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+  .summary{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:12px;margin-bottom:16px}
+  @media (max-width:760px){.summary{grid-template-columns:1fr}}
+  .box{padding:15px 16px}
+  .box .l{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-dim);font-weight:700}
+  .box .big{font-family:var(--mono);font-weight:700;font-size:26px;margin-top:6px;color:var(--green-hi);text-shadow:0 0 14px var(--glow)}
+  .box .sub{font-size:12px;color:var(--ink-faint);margin-top:3px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{font-size:11px;font-weight:700;padding:5px 9px;border-radius:999px;background:var(--bg-2);border:1px solid var(--line);color:var(--ink-dim)}
+  .chip b{color:var(--ink)}
+
+  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .search{flex:1;min-width:200px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:14px}
+  .search:focus{outline:2px solid var(--green);border-color:var(--green)}
+  select{padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:13px}
+
+  .table{display:flex;flex-direction:column;gap:8px}
+  .thead,.trow{display:grid;grid-template-columns:2.4fr 1fr 1fr .8fr 1fr 1fr auto;gap:10px;align-items:center}
+  .thead{padding:0 14px;font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-faint);font-weight:700}
+  .trow{padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,var(--panel-2),var(--panel));cursor:pointer;transition:.15s}
+  .trow:hover{border-color:rgba(47,210,79,.4)}
+  .trow .nm{font-weight:700;font-size:14px}
+  .trow .meta{font-size:11.5px;color:var(--ink-dim)}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .cost{color:var(--green-hi);font-weight:700}
+  .lowb{color:var(--amber);font-weight:700}
+  .sync{font-size:10px;font-weight:800;text-transform:uppercase;padding:4px 8px;border-radius:999px;white-space:nowrap}
+  .sync.on{color:var(--green-hi);background:rgba(47,210,79,.1)} .sync.off{color:var(--amber);background:rgba(245,178,31,.1)}
+  @media (max-width:760px){.thead{display:none}.trow{grid-template-columns:1fr auto;grid-auto-rows:auto}.trow>*:nth-child(n+3){grid-column:1/-1}}
+
+  dialog{border:1px solid var(--line);border-radius:16px;background:var(--panel-2);color:var(--ink);padding:0;max-width:640px;width:94vw;max-height:92vh}
+  dialog::backdrop{background:rgba(0,0,0,.65)}
+  .dlg{padding:18px;display:flex;flex-direction:column;gap:12px;overflow-y:auto}
+  .dlg h3{margin:0;font-family:var(--disp);text-transform:uppercase;letter-spacing:.5px;font-size:19px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .fld{display:flex;flex-direction:column;gap:5px}
+  .fld label{font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-faint);font-weight:700}
+  .fld input,.fld textarea{padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:14px;font-family:var(--body)}
+  .fld input:focus,.fld textarea:focus{outline:2px solid var(--green);border-color:var(--green)}
+  .vhead,.vrow{display:grid;grid-template-columns:1.1fr 1fr .9fr .9fr .8fr auto;gap:6px;align-items:center}
+  .vhead{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);font-weight:700;padding:0 2px}
+  .vrow input{padding:8px 9px;font-size:13px}
+  .vrow .del{background:none;border:none;color:var(--ink-faint);cursor:pointer;font-size:16px}
+  .vrow .del:hover{color:var(--red)}
+  .dlg-actions{display:flex;gap:8px;justify-content:space-between;align-items:center;position:sticky;bottom:0;background:var(--panel-2);padding-top:8px}
+  .note{font-size:11.5px;color:var(--ink-faint)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><div class="badge"><img src="/logo.webp" alt="VN Store"></div><div class="wordmark">VN Store<span class="cmd">Produtos</span></div></div>
+    <div class="top-actions">
+      <span id="statusPill" class="pill demo"><span class="dot"></span>…</span>
+      <a class="btn ghost" href="/pdv">🛒 PDV</a>
+      <a class="btn ghost" href="/clientes">Clientes</a>
+      <a class="btn ghost" href="/">← Painel</a>
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="box card"><div class="l">Valor de estoque (a custo)</div><div class="big" id="sVal">—</div><div class="sub" id="sUnits">— peças no total</div></div>
+    <div class="box card"><div class="l">Por categoria</div><div class="chips" id="sCats"></div></div>
+    <div class="box card"><div class="l">Por marca</div><div class="chips" id="sBrands"></div></div>
+  </div>
+
+  <div class="bar">
+    <input id="search" class="search" type="search" placeholder="Buscar produto ou marca…">
+    <select id="fCat"><option value="">Todas categorias</option></select>
+    <select id="fBrand"><option value="">Todas marcas</option></select>
+    <button class="btn primary" id="newBtn" type="button">＋ Novo produto</button>
+  </div>
+
+  <div class="table">
+    <div class="thead"><div>Produto</div><div>Marca</div><div>Categoria</div><div>Variações</div><div>Estoque</div><div>Valor custo</div><div>Site</div></div>
+    <div id="rows"><div class="note" style="padding:16px">Carregando…</div></div>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <form class="dlg" method="dialog">
+    <h3 id="dlgTitle">Novo produto</h3>
+    <input type="hidden" id="pId">
+    <div class="grid2">
+      <div class="fld"><label>Nome *</label><input id="pName" required></div>
+      <div class="fld"><label>Marca <span style="color:var(--green-hi)">(só nosso)</span></label><input id="pBrand"></div>
+    </div>
+    <div class="grid2">
+      <div class="fld"><label>Categoria</label><input id="pCat" list="catList"></div>
+      <div class="fld"><label>Foto (URL)</label><input id="pImg" placeholder="https://…"></div>
+    </div>
+    <div class="fld"><label>Descrição</label><textarea id="pDesc" rows="2"></textarea></div>
+
+    <div class="fld"><label>Variações · preço e <b style="color:var(--green-hi)">custo</b> por tamanho</label>
+      <div class="vhead"><div>Variação</div><div>SKU</div><div>Preço R$</div><div>Custo R$</div><div>Estoque</div><div></div></div>
+      <div id="vars"></div>
+      <button class="mini" id="addVar" type="button" style="width:fit-content;margin-top:6px;font-size:11px;font-weight:800;text-transform:uppercase;padding:6px 10px;border-radius:8px;border:1px solid var(--line);color:var(--ink-dim);background:transparent;cursor:pointer">＋ Adicionar variação</button>
+    </div>
+
+    <div class="note" id="dlgNote">Ao salvar: cadastra aqui e publica/atualiza na Nuvemshop (nome, descrição, categoria, preço, estoque, foto). Marca e custo ficam só aqui.</div>
+    <div class="dlg-actions">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn primary" id="saveBtn" value="ok" type="submit">Salvar &amp; publicar</button>
+    </div>
+  </form>
+</dialog>
+<datalist id="catList"></datalist>
+
+<script>
+const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
+let SUMMARY={by_category:[],by_brand:[]};
+
+async function health(){ try{ const h=await api('/api/health'); const p=document.getElementById('statusPill');
+  if(h.mode==='live'){p.className='pill live';p.innerHTML='<span class="dot"></span>Ao vivo';}else{p.className='pill demo';p.innerHTML='<span class="dot"></span>Demo';} }catch(e){} }
+
+async function loadSummary(){ const s=await api('/api/catalog/summary'); SUMMARY=s;
+  document.getElementById('sVal').textContent=BRL(s.totals.value_cost);
+  document.getElementById('sUnits').textContent=`${s.totals.units} peças · ${BRL(s.totals.value_price)} a preço de venda`;
+  document.getElementById('sCats').innerHTML=s.by_category.map(c=>`<span class="chip">${c.label} <b>${c.units}</b></span>`).join('')||'<span class="note">—</span>';
+  document.getElementById('sBrands').innerHTML=s.by_brand.map(b=>`<span class="chip">${b.label} <b>${b.units}</b></span>`).join('')||'<span class="note">—</span>';
+  // filtros
+  const fc=document.getElementById('fCat'), fb=document.getElementById('fBrand'), dl=document.getElementById('catList');
+  fc.innerHTML='<option value="">Todas categorias</option>'+s.by_category.filter(c=>c.label!=='(sem categoria)').map(c=>`<option>${c.label}</option>`).join('');
+  fb.innerHTML='<option value="">Todas marcas</option>'+s.by_brand.filter(b=>b.label!=='(sem marca)').map(b=>`<option>${b.label}</option>`).join('');
+  dl.innerHTML=s.by_category.filter(c=>c.label!=='(sem categoria)').map(c=>`<option value="${c.label}">`).join('');
+}
+
+async function loadRows(){ const q=document.getElementById('search').value.trim(); const cat=document.getElementById('fCat').value; const brand=document.getElementById('fBrand').value;
+  const rows=await api(`/api/catalog?q=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&brand=${encodeURIComponent(brand)}`);
+  const box=document.getElementById('rows');
+  if(!rows.length){ box.innerHTML='<div class="note" style="padding:16px">Nenhum produto. Clique em “Novo produto”.</div>'; return; }
+  box.innerHTML='';
+  for(const p of rows){ const low=p.total_stock<=4; const el=document.createElement('div'); el.className='trow';
+    el.innerHTML=`<div><div class="nm">${p.name}</div><div class="meta">${p.min_price===p.max_price?BRL(p.min_price):BRL(p.min_price)+'–'+BRL(p.max_price)}</div></div>
+      <div class="meta">${p.brand||'—'}</div><div class="meta">${p.category||'—'}</div>
+      <div class="num">${p.variant_count}</div>
+      <div class="num ${low?'lowb':''}">${p.total_stock} un.</div>
+      <div class="num cost">${BRL(p.stock_value_cost)}</div>
+      <div><span class="sync ${p.synced_nuvemshop?'on':'off'}">${p.synced_nuvemshop?'✔ no ar':'pendente'}</span></div>`;
+    el.addEventListener('click',()=>openEdit(p.id)); box.appendChild(el); }
+}
+
+// ---- form ----
+const dlg=document.getElementById('dlg');
+function varRow(v={}){ const div=document.createElement('div'); div.className='vrow';
+  div.innerHTML=`<input class="vn" placeholder="P / M / Único" value="${v.variant_name||''}"><input class="vsku" placeholder="SKU" value="${v.sku||''}"><input class="vprice" type="number" step="0.01" placeholder="0,00" value="${v.price??''}"><input class="vcost" type="number" step="0.01" placeholder="0,00" value="${v.cost??''}"><input class="vstock" type="number" placeholder="0" value="${v.stock??''}"><button class="del" type="button" aria-label="remover">✕</button>`;
+  div.querySelector('.del').addEventListener('click',()=>div.remove()); return div; }
+document.getElementById('addVar').addEventListener('click',()=>document.getElementById('vars').appendChild(varRow()));
+
+function openNew(){ document.getElementById('dlgTitle').textContent='Novo produto'; document.getElementById('pId').value='';
+  ['pName','pBrand','pCat','pImg','pDesc'].forEach(id=>document.getElementById(id).value='');
+  const vs=document.getElementById('vars'); vs.innerHTML=''; vs.appendChild(varRow({variant_name:'Único'})); dlg.showModal(); }
+async function openEdit(id){ const p=await api('/api/catalog/'+id);
+  document.getElementById('dlgTitle').textContent='Editar produto'; document.getElementById('pId').value=p.id;
+  document.getElementById('pName').value=p.name; document.getElementById('pBrand').value=p.brand||''; document.getElementById('pCat').value=p.category||'';
+  document.getElementById('pImg').value=p.image_url||''; document.getElementById('pDesc').value=p.description||'';
+  const vs=document.getElementById('vars'); vs.innerHTML=''; (p.variants.length?p.variants:[{variant_name:'Único'}]).forEach(v=>vs.appendChild(varRow(v))); dlg.showModal(); }
+document.getElementById('newBtn').addEventListener('click',openNew);
+
+document.getElementById('saveBtn').addEventListener('click',async(e)=>{
+  const name=document.getElementById('pName').value.trim(); if(!name) return;
+  e.preventDefault();
+  const variants=[...document.querySelectorAll('#vars .vrow')].map(r=>({
+    id: r.dataset.id || undefined,
+    variant_name:r.querySelector('.vn').value.trim()||'Único', sku:r.querySelector('.vsku').value.trim(),
+    price:parseFloat(r.querySelector('.vprice').value)||0, cost:parseFloat(r.querySelector('.vcost').value)||0, stock:parseInt(r.querySelector('.vstock').value)||0 }));
+  const body={ name, brand:document.getElementById('pBrand').value.trim(), category:document.getElementById('pCat').value.trim(),
+    description:document.getElementById('pDesc').value.trim(), image_url:document.getElementById('pImg').value.trim(), variants };
+  const id=document.getElementById('pId').value;
+  const btn=document.getElementById('saveBtn'); btn.textContent='Salvando…';
+  try{ const r=await api(id?('/api/catalog/'+id):'/api/catalog',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    dlg.close(); await loadSummary(); await loadRows();
+    const s=r.sync; if(s && s.mode==='live' && !s.ok) alert('Salvo aqui, mas a publicação na Nuvemshop falhou: '+(s.note||''));
+  }catch(err){ alert(err.message); } finally{ btn.textContent='Salvar & publicar'; }
+});
+
+let t; document.getElementById('search').addEventListener('input',()=>{clearTimeout(t);t=setTimeout(loadRows,200);});
+document.getElementById('fCat').addEventListener('change',loadRows);
+document.getElementById('fBrand').addEventListener('change',loadRows);
+health(); loadSummary(); loadRows();
+</script>
+</body>
+</html>
