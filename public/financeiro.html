@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080a08">
+<title>VN Store — Financeiro</title>
+<link rel="icon" href="/logo.webp">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .app{max-width:1180px;margin:0 auto;padding:clamp(14px,2.6vw,28px)}
+  .seg{display:inline-flex;gap:4px;background:var(--bg-2);border:1px solid var(--line);border-radius:11px;padding:4px}
+  .seg button{padding:7px 14px;border-radius:8px;border:none;background:none;color:var(--ink-dim);font-size:12.5px;font-weight:700;cursor:pointer}
+  .seg button.sel{background:rgba(47,210,79,.12);color:var(--green-hi)}
+  .kpis{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:16px}
+  .kpi{padding:16px;position:relative;overflow:hidden}
+  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px}
+  .kpi.rec::before{background:var(--green)} .kpi.desp::before{background:var(--red)} .kpi.sal::before{background:var(--chrome-2)} .kpi.arec::before{background:var(--amber)}
+  .kpi .lab{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-dim);font-weight:700}
+  .kpi .val{font-family:var(--mono);font-size:clamp(21px,3vw,28px);font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums}
+  .kpi .val.green{color:var(--green-hi)} .kpi .val.red{color:#ff8377} .kpi .val.amber{color:var(--amber)}
+  .cols{display:grid;grid-template-columns:1fr 1.4fr;gap:14px}
+  @media (max-width:760px){.cols{grid-template-columns:1fr}}
+  .panel{padding:16px}
+  .panel h3{margin:0 0 12px;font-family:var(--disp);text-transform:uppercase;letter-spacing:.6px;font-size:16px;transform:skewX(-5deg)}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 12px;background:var(--bg-2);border:1px solid var(--line-soft);border-radius:11px;margin-bottom:8px;font-size:13px}
+  .row .l{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .row .l .s{font-size:11px;color:var(--ink-faint);font-family:var(--mono)}
+  .row .r{font-family:var(--mono);font-weight:700;white-space:nowrap}
+  .tag{font-size:9.5px;font-weight:800;text-transform:uppercase;padding:3px 7px;border-radius:999px;margin-right:6px}
+  .tag.rec{color:var(--green-hi);background:rgba(47,210,79,.1)} .tag.desp{color:#ff8377;background:rgba(255,81,66,.1)}
+  .bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+  .bar-lab{font-size:12.5px;min-width:80px;font-weight:600}
+  .bar-track{flex:1;height:9px;border-radius:6px;background:var(--bg);overflow:hidden;display:block}
+  .bar-fill{display:block;height:100%;min-width:4px;background:linear-gradient(90deg,var(--green-deep),var(--green-hi));border-radius:6px;box-shadow:0 0 8px var(--glow)}
+  .bar-val{font-family:var(--mono);font-size:12px;font-weight:700;min-width:76px;text-align:right}
+  .muted{color:var(--ink-faint);font-size:13px;text-align:center;padding:20px 0}
+  dialog{border:1px solid var(--line);border-radius:16px;background:var(--panel-2);color:var(--ink);padding:0;max-width:400px;width:92vw}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  .dlg{padding:18px;display:flex;flex-direction:column;gap:12px}
+  .dlg h3{margin:0;font-family:var(--disp);text-transform:uppercase;font-size:18px}
+  .fld{display:flex;flex-direction:column;gap:5px}
+  .fld label{font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-faint);font-weight:700}
+  .fld input{padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:14px}
+  .fld input:focus{outline:2px solid var(--green);border-color:var(--green)}
+  .dlg-actions{display:flex;gap:8px;justify-content:flex-end}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="pagehead">
+    <div><h1>Financeiro</h1><div class="ph-sub">Caixa · receitas · despesas · a receber</div></div>
+    <div class="ph-actions">
+      <div class="seg" id="period"><button data-p="today">Hoje</button><button data-p="month" class="sel">Mês</button><button data-p="all">Tudo</button></div>
+      <button class="btn primary" id="expBtn" type="button">＋ Despesa</button>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi card rec"><div class="lab">Entrou (receita)</div><div class="val green" id="kRec">—</div></div>
+    <div class="kpi card desp"><div class="lab">Saiu (despesa)</div><div class="val red" id="kDesp">—</div></div>
+    <div class="kpi card sal"><div class="lab">Saldo do período</div><div class="val" id="kSal">—</div></div>
+    <div class="kpi card arec"><div class="lab">A receber (fiado)</div><div class="val amber" id="kArec">—</div></div>
+  </div>
+
+  <div class="cols">
+    <div class="panel card">
+      <h3>Por forma de pagamento</h3>
+      <div id="byMethod"><div class="muted">Sem recebimentos no período.</div></div>
+    </div>
+    <div class="panel card">
+      <h3>Movimentações</h3>
+      <div id="entries"><div class="muted">Sem lançamentos.</div></div>
+    </div>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <form class="dlg" method="dialog">
+    <h3>Nova despesa</h3>
+    <div class="fld"><label>Descrição</label><input id="eDesc" placeholder="Ex: fornecedor, aluguel, frete…"></div>
+    <div class="fld"><label>Categoria</label><input id="eCat" placeholder="Ex: compras, operação"></div>
+    <div class="fld"><label>Valor (R$) *</label><input id="eVal" type="number" step="0.01" min="0" required></div>
+    <div class="dlg-actions"><button class="btn ghost" value="cancel" type="submit">Cancelar</button><button class="btn primary" id="saveExp" value="ok" type="submit">Lançar</button></div>
+  </form>
+</dialog>
+
+<script src="/nav.js"></script>
+<script>
+const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtDate=(s)=>s?new Date(s).toLocaleDateString('pt-BR'):'—';
+async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
+let period='month';
+
+async function load(){ const d=await api('/api/financial?period='+period);
+  document.getElementById('kRec').textContent=BRL(d.receita);
+  document.getElementById('kDesp').textContent=BRL(d.despesa);
+  const sal=document.getElementById('kSal'); sal.textContent=BRL(d.saldo); sal.className='val '+(d.saldo>=0?'green':'red');
+  document.getElementById('kArec').textContent=BRL(d.a_receber);
+
+  const bm=document.getElementById('byMethod');
+  if(d.by_method.length){ const max=Math.max(...d.by_method.map(m=>m.total),1); bm.innerHTML='';
+    for(const m of d.by_method){ const el=document.createElement('div'); el.className='bar-row';
+      el.innerHTML=`<span class="bar-lab">${m.label}</span><span class="bar-track"><span class="bar-fill" style="width:${Math.round(m.total/max*100)}%"></span></span><span class="bar-val">${BRL(m.total)}</span>`; bm.appendChild(el);} }
+  else bm.innerHTML='<div class="muted">Sem recebimentos no período.</div>';
+
+  const en=document.getElementById('entries');
+  if(d.entries.length){ en.innerHTML='';
+    for(const e of d.entries){ const el=document.createElement('div'); el.className='row';
+      el.innerHTML=`<div class="l"><span><span class="tag ${e.type==='receita'?'rec':'desp'}">${e.type}</span>${e.description||e.category}</span><span class="s">${fmtDate(e.created_at)} · ${e.category}</span></div><div class="r" style="color:${e.type==='receita'?'var(--green-hi)':'#ff8377'}">${e.type==='receita'?'+':'−'} ${BRL(e.amount)}</div>`;
+      en.appendChild(el);} }
+  else en.innerHTML='<div class="muted">Sem lançamentos no período.</div>';
+}
+
+document.getElementById('period').addEventListener('click',(e)=>{ const b=e.target.closest('button'); if(!b)return;
+  document.querySelectorAll('#period button').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); period=b.dataset.p; load(); });
+
+const dlg=document.getElementById('dlg');
+document.getElementById('expBtn').addEventListener('click',()=>{ ['eDesc','eCat','eVal'].forEach(id=>document.getElementById(id).value=''); dlg.showModal(); });
+document.getElementById('saveExp').addEventListener('click',async(e)=>{ const val=parseFloat(document.getElementById('eVal').value); if(!val||val<=0){ e.preventDefault(); return; }
+  e.preventDefault();
+  try{ await api('/api/financial/expense',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({description:document.getElementById('eDesc').value.trim(),category:document.getElementById('eCat').value.trim(),amount:val})}); dlg.close(); load(); }catch(err){ alert(err.message);} });
+
+load();
+</script>
+</body>
+</html>

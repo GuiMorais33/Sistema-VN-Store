@@ -389,11 +389,42 @@ app.get('/api/dashboard', (req, res) => {
   });
 });
 
+// ==================== FINANCEIRO ====================
+app.get('/api/financial', (req, res) => {
+  const period = req.query.period || 'month';
+  let since = null;
+  const d = new Date();
+  if (period === 'today') { d.setHours(0, 0, 0, 0); since = d.toISOString(); }
+  else if (period === 'month') { since = new Date(d.getFullYear(), d.getMonth(), 1).toISOString(); }
+  const cond = since ? 'AND created_at >= ?' : '';
+  const a = since ? [since] : [];
+  const receita = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries WHERE type='receita' ${cond}`).get(...a).n;
+  const despesa = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries WHERE type='despesa' ${cond}`).get(...a).n;
+  const aReceber = db.prepare("SELECT COALESCE(SUM(total),0) n FROM sales WHERE payment_status='pendente'").get().n;
+  const byMethod = db.prepare(`SELECT COALESCE(NULLIF(payment_method,''),'—') label, COUNT(*) n, COALESCE(SUM(total),0) total
+    FROM sales WHERE payment_status='pago' ${cond} GROUP BY payment_method ORDER BY total DESC`).all(...a);
+  const entries = db.prepare(`SELECT type, category, description, amount, ref, created_at FROM financial_entries
+    ${since ? 'WHERE created_at >= ?' : ''} ORDER BY id DESC LIMIT 80`).all(...a);
+  res.json({ period, receita: money(receita), despesa: money(despesa), saldo: money(receita - despesa), a_receber: money(aReceber), by_method: byMethod, entries });
+});
+
+app.post('/api/financial/expense', (req, res) => {
+  const b = req.body || {};
+  const amount = money(b.amount);
+  if (!amount || amount <= 0) return res.status(400).json({ error: 'Informe um valor maior que zero.' });
+  db.prepare("INSERT INTO financial_entries (type, category, description, amount, created_at) VALUES ('despesa', ?, ?, ?, ?)")
+    .run(b.category || 'geral', b.description || 'Despesa', amount, now());
+  res.json({ ok: true });
+});
+
 // Páginas
 const page = (f) => (req, res) => res.sendFile(join(__dirname, '..', 'public', f));
 app.get('/pdv', page('pdv.html'));
 app.get('/clientes', page('clientes.html'));
 app.get('/produtos', page('produtos.html'));
+app.get('/estoque', page('produtos.html'));
+app.get('/financeiro', page('financeiro.html'));
+app.get('/agentes', page('agentes.html'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

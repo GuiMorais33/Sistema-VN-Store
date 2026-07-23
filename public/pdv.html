@@ -55,6 +55,7 @@
   .cust-results button:hover{background:var(--bg-2)}
   .cust-results .new{color:var(--green-hi);font-weight:700;border-top:1px solid var(--line)}
   .cust-chip{display:inline-flex;align-items:center;gap:8px;padding:7px 10px;border-radius:999px;background:rgba(47,210,79,.08);border:1px solid rgba(47,210,79,.3);color:var(--green-hi);font-size:13px;font-weight:700;width:fit-content}
+  .cust-chip[hidden]{display:none}
   .cust-chip button{background:none;border:none;color:var(--ink-faint);cursor:pointer;font-size:14px}
 
   .seg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
@@ -82,18 +83,10 @@
 </head>
 <body>
 <div class="app">
-  <header>
-    <div class="brand">
-      <div class="badge"><img src="/logo.webp" alt="VN Store"></div>
-      <div class="wordmark">VN Store<span class="cmd">PDV</span></div>
-    </div>
-    <div class="top-actions">
-      <span id="statusPill" class="pill demo"><span class="dot"></span>Carregando…</span>
-      <a class="btn ghost" href="/clientes">Clientes</a>
-      <a class="btn ghost" href="/produtos">Produtos</a>
-      <a class="btn ghost" href="/">← Painel</a>
-    </div>
-  </header>
+  <div class="pagehead">
+    <div><h1>PDV</h1><div class="ph-sub">Lançamento de vendas · ilimitado, sem taxa</div></div>
+    <div class="ph-actions"><span id="statusPill" class="pill demo"><span class="dot"></span>…</span></div>
+  </div>
 
   <div class="layout">
     <section>
@@ -146,6 +139,7 @@
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+<script src="/nav.js"></script>
 <script>
 const BRL = (n) => 'R$ ' + (Number(n)||0).toFixed(2).replace('.', ',');
 const state = { cart:new Map(), pay:'', status:'pago', customer:null, products:[] };

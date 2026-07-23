@@ -61,14 +61,9 @@
 </head>
 <body>
 <div class="app">
-  <header>
-    <div class="brand"><div class="badge"><img src="/logo.webp" alt="VN Store"></div><div class="wordmark">VN Store<span class="cmd">Clientes</span></div></div>
-    <div class="top-actions">
-      <a class="btn ghost" href="/pdv">🛒 PDV</a>
-      <a class="btn ghost" href="/produtos">Produtos</a>
-      <a class="btn ghost" href="/">← Painel</a>
-    </div>
-  </header>
+  <div class="pagehead">
+    <div><h1>Clientes</h1><div class="ph-sub">Cadastro · ranking · histórico de compras</div></div>
+  </div>
 
   <div class="bar">
     <input id="search" class="search" type="search" placeholder="Buscar cliente por nome, telefone ou e-mail…">
@@ -135,5 +130,6 @@ document.getElementById('saveCust').addEventListener('click',async(e)=>{ const n
 let t; document.getElementById('search').addEventListener('input',(e)=>{ clearTimeout(t); t=setTimeout(()=>loadRank(e.target.value.trim()),200); });
 loadRank();
 </script>
+<script src="/nav.js"></script>
 </body>
 </html>

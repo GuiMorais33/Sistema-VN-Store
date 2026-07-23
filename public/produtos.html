@@ -63,15 +63,10 @@
 </head>
 <body>
 <div class="app">
-  <header>
-    <div class="brand"><div class="badge"><img src="/logo.webp" alt="VN Store"></div><div class="wordmark">VN Store<span class="cmd">Produtos</span></div></div>
-    <div class="top-actions">
-      <span id="statusPill" class="pill demo"><span class="dot"></span>…</span>
-      <a class="btn ghost" href="/pdv">🛒 PDV</a>
-      <a class="btn ghost" href="/clientes">Clientes</a>
-      <a class="btn ghost" href="/">← Painel</a>
-    </div>
-  </header>
+  <div class="pagehead">
+    <div><h1>Estoque</h1><div class="ph-sub">Produtos · custo · valor de estoque · publicar na loja</div></div>
+    <div class="ph-actions"><span id="statusPill" class="pill demo"><span class="dot"></span>…</span></div>
+  </div>
 
   <div class="summary">
     <div class="box card"><div class="l">Valor de estoque (a custo)</div><div class="big" id="sVal">—</div><div class="sub" id="sUnits">— peças no total</div></div>
@@ -195,5 +190,6 @@ document.getElementById('fCat').addEventListener('change',loadRows);
 document.getElementById('fBrand').addEventListener('change',loadRows);
 health(); loadSummary(); loadRows();
 </script>
+<script src="/nav.js"></script>
 </body>
 </html>
