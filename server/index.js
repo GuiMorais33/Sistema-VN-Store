@@ -18,6 +18,39 @@ fs.mkdirSync(UPLOADS, { recursive: true });
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
+
+// ---- Login por senha única (protege o sistema quando publicado) ----
+// Se APP_PASSWORD estiver vazio (ex.: rodando local), não exige login.
+const APP_PASSWORD = process.env.APP_PASSWORD || '';
+const SESSION_SECRET = process.env.SESSION_SECRET || 'troque-este-segredo-no-.env';
+const AUTH_TOKEN = crypto.createHmac('sha256', SESSION_SECRET).update('vnstore-auth-v1').digest('hex');
+function readCookies(req) {
+  return Object.fromEntries((req.headers.cookie || '').split(';').map((c) => {
+    const i = c.indexOf('='); return i < 0 ? [c.trim(), ''] : [c.slice(0, i).trim(), decodeURIComponent(c.slice(i + 1).trim())];
+  }).filter((a) => a[0]));
+}
+const authed = (req) => !APP_PASSWORD || readCookies(req).vn_auth === AUTH_TOKEN;
+
+app.post('/api/login', (req, res) => {
+  if (APP_PASSWORD && (req.body && req.body.password) === APP_PASSWORD) {
+    res.setHeader('Set-Cookie', `vn_auth=${AUTH_TOKEN}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${60 * 60 * 24 * 30}`);
+    return res.json({ ok: true });
+  }
+  res.status(401).json({ error: 'Senha incorreta.' });
+});
+app.post('/api/logout', (req, res) => {
+  res.setHeader('Set-Cookie', 'vn_auth=; HttpOnly; Path=/; Max-Age=0');
+  res.json({ ok: true });
+});
+// Barreira: libera login, health e assets; bloqueia o resto sem sessão.
+app.use((req, res, next) => {
+  if (authed(req)) return next();
+  const p = req.path;
+  if (p === '/login' || p === '/api/login' || p === '/api/health' || /\.(css|js|webp|png|jpe?g|svg|ico|woff2?)$/i.test(p)) return next();
+  if (p.startsWith('/api/')) return res.status(401).json({ error: 'não autenticado' });
+  return res.redirect('/login');
+});
+
 app.use(express.static(PUBLIC));
 
 const LIVE = nuvem.isConfigured();
@@ -476,6 +509,7 @@ app.post('/api/financial/expense', (req, res) => {
 
 // Páginas
 const page = (f) => (req, res) => res.sendFile(join(__dirname, '..', 'public', f));
+app.get('/login', page('login.html'));
 app.get('/pdv', page('pdv.html'));
 app.get('/clientes', page('clientes.html'));
 app.get('/produtos', page('produtos.html'));
@@ -484,7 +518,8 @@ app.get('/financeiro', page('financeiro.html'));
 app.get('/agentes', page('agentes.html'));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`\n  🐊 VN Store — Sistema no ar em http://localhost:${PORT}`);
-  console.log(`     Modo: ${LIVE ? 'AO VIVO (Nuvemshop conectada)' : 'DEMONSTRAÇÃO (sem token)'}\n`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n  🐊 VN Store — Sistema no ar na porta ${PORT}`);
+  console.log(`     Modo: ${LIVE ? 'AO VIVO (Nuvemshop conectada)' : 'DEMONSTRAÇÃO (sem token)'}`);
+  console.log(`     Login: ${APP_PASSWORD ? 'com senha (APP_PASSWORD)' : 'aberto (sem senha)'}\n`);
 });

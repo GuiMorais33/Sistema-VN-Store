@@ -16,7 +16,7 @@
     `<nav class="nav-list">` +
     items.map((it) => `<a class="nav-item${it.match(path) ? ' active' : ''}" href="${it.href}"><span class="ico">${it.ico}</span><span class="lbl">${it.label}</span></a>`).join('') +
     `</nav>` +
-    `<div class="nav-foot"><span id="navStatus" class="pill demo"><span class="dot"></span>…</span><span id="navClock" class="nav-clock">--:--</span></div>`;
+    `<div class="nav-foot"><span id="navStatus" class="pill demo"><span class="dot"></span>…</span><span id="navClock" class="nav-clock">--:--</span><a href="#" id="navLogout" class="nav-clock" style="text-decoration:none;color:var(--ink-faint)">Sair</a></div>`;
   document.body.insertAdjacentElement('afterbegin', side);
 
   // Relógio
@@ -24,6 +24,10 @@
   const pad = (n) => String(n).padStart(2, '0');
   const tick = () => { const d = new Date(); clk.textContent = pad(d.getHours()) + ':' + pad(d.getMinutes()); };
   tick(); setInterval(tick, 1000);
+
+  // Sair
+  const lo = side.querySelector('#navLogout');
+  if (lo) lo.addEventListener('click', async (e) => { e.preventDefault(); try { await fetch('/api/logout', { method: 'POST' }); } catch (_) {} location.href = '/login'; });
 
   // Status ao vivo / demo
   fetch('/api/health').then((r) => r.json()).then((h) => {
