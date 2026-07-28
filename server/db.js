@@ -104,12 +104,27 @@ CREATE TABLE IF NOT EXISTS financial_entries (
   created_at  TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+  key    TEXT PRIMARY KEY,
+  value  TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at);
 CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales(customer_id);
 CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(payment_status);
 CREATE INDEX IF NOT EXISTS idx_variants_stock ON variants(stock);
 CREATE INDEX IF NOT EXISTS idx_variants_product ON variants(product_id);
 `);
+
+// ---- Configurações (credenciais da Nuvemshop etc.) ----
+export function getSetting(key) {
+  const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  return r ? r.value : null;
+}
+export function setSetting(key, value) {
+  db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(key, value == null ? null : String(value));
+}
 
 // ---- Migração defensiva (caso um banco antigo já exista) ----
 function ensureColumn(table, column, ddl) {

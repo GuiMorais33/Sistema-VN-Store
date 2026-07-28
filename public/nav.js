@@ -7,6 +7,7 @@
     { href: '/clientes',  ico: '👥', label: 'Clientes',   match: (p) => p.startsWith('/clientes') },
     { href: '/financeiro',ico: '💰', label: 'Financeiro', match: (p) => p.startsWith('/financeiro') },
     { href: '/agentes',   ico: '🐊', label: 'Agentes',    match: (p) => p.startsWith('/agentes') },
+    { href: '/conectar',  ico: '🔌', label: 'Conectar',   match: (p) => p.startsWith('/conectar') },
   ];
   const path = location.pathname;
   const side = document.createElement('aside');

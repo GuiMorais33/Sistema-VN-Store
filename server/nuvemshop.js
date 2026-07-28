@@ -7,29 +7,60 @@
 //  Docs: https://tiendanube.github.io/api-documentation/
 // ============================================================
 
-const STORE_ID = process.env.NUVEMSHOP_STORE_ID;
-const TOKEN = process.env.NUVEMSHOP_ACCESS_TOKEN;
-const APP_NAME = process.env.NUVEMSHOP_APP_NAME || 'VN Store Sistema';
-const EMAIL = process.env.NUVEMSHOP_CONTACT_EMAIL || 'contato@vnstore';
-const BASE = `https://api.tiendanube.com/v1/${STORE_ID}`;
+import { getSetting } from './db.js';
+
+// Credenciais lidas dinamicamente: primeiro do banco (tela Conectar),
+// depois do .env como fallback. Assim conectar não exige reiniciar.
+function cfg() {
+  return {
+    storeId: getSetting('nuvemshop_store_id') || process.env.NUVEMSHOP_STORE_ID || '',
+    token: getSetting('nuvemshop_access_token') || process.env.NUVEMSHOP_ACCESS_TOKEN || '',
+    clientId: getSetting('nuvemshop_client_id') || process.env.NUVEMSHOP_CLIENT_ID || '',
+    clientSecret: getSetting('nuvemshop_client_secret') || process.env.NUVEMSHOP_CLIENT_SECRET || '',
+    appName: process.env.NUVEMSHOP_APP_NAME || 'VN Store Sistema',
+    email: process.env.NUVEMSHOP_CONTACT_EMAIL || 'contato@vnstore',
+  };
+}
 
 export function isConfigured() {
-  return Boolean(STORE_ID && TOKEN && STORE_ID !== '000000');
+  const c = cfg();
+  return Boolean(c.storeId && c.token && c.storeId !== '000000');
+}
+
+export function connectionInfo() {
+  const c = cfg();
+  return { connected: isConfigured(), store_id: c.storeId || null, has_app: Boolean(c.clientId && c.clientSecret) };
+}
+
+// Troca o "code" (recebido no callback) pelo access_token da loja.
+export async function exchangeCodeForToken(code) {
+  const c = cfg();
+  if (!c.clientId || !c.clientSecret) throw new Error('Configure o App ID e o Secret antes de conectar.');
+  const res = await fetch('https://www.tiendanube.com/apps/authorize/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'User-Agent': `${c.appName} (${c.email})` },
+    body: JSON.stringify({ client_id: c.clientId, client_secret: c.clientSecret, grant_type: 'authorization_code', code }),
+  });
+  const text = await res.text();
+  let data; try { data = JSON.parse(text); } catch { data = text; }
+  if (!res.ok) throw new Error(`Falha ao obter o token (${res.status}): ${typeof data === 'string' ? data : (data.error_description || JSON.stringify(data))}`);
+  return data; // { access_token, token_type, scope, user_id }
 }
 
 function headers() {
+  const c = cfg();
   return {
-    'Authentication': `bearer ${TOKEN}`,
-    'User-Agent': `${APP_NAME} (${EMAIL})`,
+    'Authentication': `bearer ${c.token}`,
+    'User-Agent': `${c.appName} (${c.email})`,
     'Content-Type': 'application/json',
   };
 }
 
 async function request(method, path, body) {
   if (!isConfigured()) {
-    throw new Error('Nuvemshop não configurada (defina NUVEMSHOP_STORE_ID e NUVEMSHOP_ACCESS_TOKEN no .env).');
+    throw new Error('Nuvemshop não conectada. Abra a tela "Conectar loja".');
   }
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`https://api.tiendanube.com/v1/${cfg().storeId}${path}`, {
     method,
     headers: headers(),
     body: body ? JSON.stringify(body) : undefined,
@@ -106,4 +137,3 @@ export async function createCustomer(payload) {
   return data;
 }
 
-export const nuvemshopConfig = { STORE_ID, APP_NAME, EMAIL, BASE };

@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import db, { seedDemoIfEmpty } from './db.js';
+import db, { seedDemoIfEmpty, getSetting, setSetting } from './db.js';
 import * as nuvem from './nuvemshop.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -17,6 +17,7 @@ const UPLOADS = join(PUBLIC, 'uploads');
 fs.mkdirSync(UPLOADS, { recursive: true });
 
 const app = express();
+app.set('trust proxy', true); // atrás do Caddy (HTTPS): usa X-Forwarded-Proto/Host
 app.use(express.json({ limit: '10mb' }));
 
 // ---- Login por senha única (protege o sistema quando publicado) ----
@@ -46,14 +47,14 @@ app.post('/api/logout', (req, res) => {
 app.use((req, res, next) => {
   if (authed(req)) return next();
   const p = req.path;
-  if (p === '/login' || p === '/api/login' || p === '/api/health' || /\.(css|js|webp|png|jpe?g|svg|ico|woff2?)$/i.test(p)) return next();
+  if (p === '/login' || p === '/api/login' || p === '/api/health' || p === '/oauth/callback' || /\.(css|js|webp|png|jpe?g|svg|ico|woff2?)$/i.test(p)) return next();
   if (p.startsWith('/api/')) return res.status(401).json({ error: 'não autenticado' });
   return res.redirect('/login');
 });
 
 app.use(express.static(PUBLIC));
 
-const LIVE = nuvem.isConfigured();
+const isLive = () => nuvem.isConfigured();
 const now = () => new Date().toISOString();
 const money = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const nameOf = (obj) => {
@@ -62,14 +63,14 @@ const nameOf = (obj) => {
   return obj.pt || obj.es || obj.en || Object.values(obj)[0] || '';
 };
 
-if (!LIVE && seedDemoIfEmpty()) console.log('› Modo demonstração: catálogo e clientes de exemplo criados.');
+if (!isLive() && seedDemoIfEmpty()) console.log('› Modo demonstração: catálogo e clientes de exemplo criados.');
 
 // ---------------------- Saúde ----------------------
 app.get('/api/health', (req, res) => {
   res.json({
     ok: true,
-    mode: LIVE ? 'live' : 'demo',
-    store_id: LIVE ? nuvem.nuvemshopConfig.STORE_ID : null,
+    mode: isLive() ? 'live' : 'demo',
+    store_id: nuvem.connectionInfo().store_id,
     products: db.prepare('SELECT COUNT(*) AS n FROM products').get().n,
     variants: db.prepare('SELECT COUNT(*) AS n FROM variants').get().n,
   });
@@ -205,7 +206,7 @@ app.post('/api/catalog/:id/push', async (req, res) => {
 async function pushProduct(productId) {
   const p = db.prepare('SELECT * FROM products WHERE id = ?').get(productId);
   const variants = db.prepare('SELECT * FROM variants WHERE product_id = ?').all(productId);
-  if (!LIVE) {
+  if (!isLive()) {
     db.prepare('UPDATE products SET synced_nuvemshop=0, sync_note=? WHERE id=?').run('Modo demonstração — não enviado à Nuvemshop.', productId);
     return { mode: 'demo', ok: false, note: 'Modo demonstração — conecte a Nuvemshop para publicar.' };
   }
@@ -271,7 +272,7 @@ async function pushProduct(productId) {
 
 // ==================== SINCRONIZAR (puxar da Nuvemshop) ====================
 app.post('/api/sync', async (req, res) => {
-  if (!LIVE) { const seeded = seedDemoIfEmpty(); return res.json({ mode: 'demo', seeded, message: 'Modo demonstração — sem loja conectada.' }); }
+  if (!isLive()) { const seeded = seedDemoIfEmpty(); return res.json({ mode: 'demo', seeded, message: 'Modo demonstração — sem loja conectada.' }); }
   try {
     const products = await nuvem.listAllProducts();
     const upP = db.prepare(`INSERT INTO products (nuvemshop_product_id, name, category, description, image_url, published, synced_nuvemshop, created_at, updated_at)
@@ -392,16 +393,17 @@ app.post('/api/sales', async (req, res) => {
 
   // Empurra o novo estoque para a Nuvemshop.
   let syncedAll = true; const syncNotes = [];
-  if (LIVE) {
+  if (isLive()) {
     for (const l of lines) {
       if (!l.v.stock_management || !l.v.nuvemshop_product_id || !l.v.nuvemshop_variant_id) continue;
       try { await nuvem.setVariantStock(l.v.nuvemshop_product_id, l.v.nuvemshop_variant_id, Math.max(0, l.v.stock - l.qty)); }
       catch (err) { syncedAll = false; syncNotes.push(`${l.v.product_name} ${l.v.variant_name}: ${err.message}`); }
     }
   } else { syncedAll = false; syncNotes.push('Modo demonstração — estoque não enviado à Nuvemshop.'); }
-  db.prepare('UPDATE sales SET synced_nuvemshop=?, sync_note=? WHERE id=?').run(syncedAll && LIVE ? 1 : 0, syncNotes.join(' | ') || null, saleId);
+  const live = isLive();
+  db.prepare('UPDATE sales SET synced_nuvemshop=?, sync_note=? WHERE id=?').run(syncedAll && live ? 1 : 0, syncNotes.join(' | ') || null, saleId);
 
-  res.json({ ok: true, code, total, margin, payment_status: status, customer_name: custName, mode: LIVE ? 'live' : 'demo', stock_synced: syncedAll && LIVE, notes: syncNotes });
+  res.json({ ok: true, code, total, margin, payment_status: status, customer_name: custName, mode: live ? 'live' : 'demo', stock_synced: syncedAll && live, notes: syncNotes });
 });
 
 // ==================== CONTAS A RECEBER (fiado) ====================
@@ -440,7 +442,7 @@ app.get('/api/dashboard', (req, res) => {
   const lowList = db.prepare('SELECT product_name, variant_name, stock FROM variants WHERE stock_management = 1 AND stock <= 4 ORDER BY stock ASC LIMIT 8').all();
   const pendingList = db.prepare(`SELECT id, code, customer_name, total, created_at FROM sales WHERE payment_status='pendente' ORDER BY created_at ASC LIMIT 8`).all();
   res.json({
-    mode: LIVE ? 'live' : 'demo',
+    mode: isLive() ? 'live' : 'demo',
     revenue_today: money(today.revenue), orders_today: today.orders, ticket, margin_pct: marginPct,
     low_stock: lowStock, stock_value_cost: money(stockVal),
     receivable_total: money(recv.total), receivable_count: recv.n,
@@ -507,9 +509,47 @@ app.post('/api/financial/expense', (req, res) => {
   res.json({ ok: true });
 });
 
+// ==================== CONEXÃO NUVEMSHOP ====================
+app.get('/api/connection', (req, res) => res.json(nuvem.connectionInfo()));
+
+// Salva App ID + Secret (informados na tela Conectar). NÃO conecta ainda.
+app.post('/api/connect/app', (req, res) => {
+  const b = req.body || {};
+  const id = String(b.client_id || '').trim();
+  const secret = String(b.client_secret || '').trim();
+  if (!id || !secret) return res.status(400).json({ error: 'Informe o App ID e o Secret.' });
+  setSetting('nuvemshop_client_id', id);
+  setSetting('nuvemshop_client_secret', secret);
+  const base = `${req.protocol}://${req.get('host')}`;
+  res.json({ ok: true, callback_url: `${base}/oauth/callback`, authorize_url: `https://www.nuvemshop.com.br/apps/${id}/authorize` });
+});
+
+// Callback do OAuth: recebe o "code", troca pelo token e salva. Só LEITURA.
+app.get('/oauth/callback', async (req, res) => {
+  const code = req.query.code;
+  if (!code) return res.redirect('/conectar?erro=' + encodeURIComponent('Autorização não retornou o código.'));
+  try {
+    const data = await nuvem.exchangeCodeForToken(code);
+    if (!data || !data.access_token || !data.user_id) throw new Error('A Nuvemshop não retornou o token esperado.');
+    setSetting('nuvemshop_access_token', data.access_token);
+    setSetting('nuvemshop_store_id', String(data.user_id));
+    res.redirect('/conectar?ok=1');
+  } catch (err) {
+    res.redirect('/conectar?erro=' + encodeURIComponent(err.message));
+  }
+});
+
+// Desconectar: limpa as credenciais localmente. NÃO altera nada na Nuvemshop.
+app.post('/api/disconnect', (req, res) => {
+  setSetting('nuvemshop_access_token', '');
+  setSetting('nuvemshop_store_id', '');
+  res.json({ ok: true });
+});
+
 // Páginas
 const page = (f) => (req, res) => res.sendFile(join(__dirname, '..', 'public', f));
 app.get('/login', page('login.html'));
+app.get('/conectar', page('conectar.html'));
 app.get('/pdv', page('pdv.html'));
 app.get('/clientes', page('clientes.html'));
 app.get('/produtos', page('produtos.html'));
@@ -520,6 +560,6 @@ app.get('/agentes', page('agentes.html'));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n  🐊 VN Store — Sistema no ar na porta ${PORT}`);
-  console.log(`     Modo: ${LIVE ? 'AO VIVO (Nuvemshop conectada)' : 'DEMONSTRAÇÃO (sem token)'}`);
+  console.log(`     Modo: ${isLive() ? 'AO VIVO (Nuvemshop conectada)' : 'DEMONSTRAÇÃO (sem token)'}`);
   console.log(`     Login: ${APP_PASSWORD ? 'com senha (APP_PASSWORD)' : 'aberto (sem senha)'}\n`);
 });
