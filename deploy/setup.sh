@@ -12,14 +12,22 @@ BRANCH="${BRANCH:-claude/vn-store-autonomous-agents-v8a2eo}"
 APP_DIR="${APP_DIR:-$HOME/Sistema-VN-Store}"
 PORT="${PORT:-3000}"
 
+# Evita as telas interativas do apt (kernel/serviços a reiniciar).
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+export NEEDRESTART_SUSPEND=1
+
+echo "==> Preparando o gerenciador de pacotes..."
+sudo dpkg --configure -a 2>/dev/null || true   # recupera instalação interrompida
+
 echo "==> Atualizando o sistema e instalando dependências base..."
-sudo apt-get update -y
-sudo apt-get install -y git build-essential python3 ca-certificates curl
+sudo -E apt-get update -y
+sudo -E apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" git build-essential python3 ca-certificates curl
 
 echo "==> Instalando Node.js 22..."
 if ! command -v node >/dev/null 2>&1 || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-  sudo apt-get install -y nodejs
+  sudo -E apt-get install -y nodejs
 fi
 node -v
 
@@ -50,7 +58,7 @@ fi
 
 echo "==> Liberando a porta $PORT no firewall do sistema..."
 sudo iptables -I INPUT -p tcp --dport "$PORT" -j ACCEPT || true
-sudo netfilter-persistent save 2>/dev/null || (sudo apt-get install -y iptables-persistent && sudo netfilter-persistent save) || true
+sudo netfilter-persistent save 2>/dev/null || (sudo -E apt-get install -y iptables-persistent && sudo netfilter-persistent save) || true
 
 echo "==> Criando o serviço (inicia sozinho e reinicia se cair)..."
 sudo tee /etc/systemd/system/vnstore.service >/dev/null <<UNIT
