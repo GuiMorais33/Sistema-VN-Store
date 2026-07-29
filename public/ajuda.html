@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070907">
+<title>VN Store — Como usar</title>
+<link rel="icon" href="/logo.webp">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .wrap{display:grid;grid-template-columns:212px 1fr;gap:var(--s6);align-items:start}
+  @media (max-width:900px){.wrap{grid-template-columns:1fr}}
+
+  .indice{position:sticky;top:var(--s4);display:flex;flex-direction:column;gap:2px}
+  .indice a{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:9px;color:var(--ink-3);
+    text-decoration:none;font-size:13px;font-weight:600;transition:var(--t-fast)}
+  .indice a:hover{background:var(--surface-2);color:var(--ink)}
+  .indice a.on{color:var(--brand-hi);background:rgba(47,210,79,.09)}
+  @media (max-width:900px){.indice{position:static;flex-direction:row;flex-wrap:wrap;
+    border-bottom:1px solid var(--line);padding-bottom:var(--s3);margin-bottom:var(--s3)}}
+
+  .conteudo{display:flex;flex-direction:column;gap:var(--s5);min-width:0}
+  section{scroll-margin-top:var(--s5)}
+  section>h2{display:flex;align-items:center;gap:11px;margin:0 0 var(--s3);
+    font-family:var(--font-disp);font-weight:900;text-transform:uppercase;letter-spacing:.5px;
+    font-size:21px;transform:skewX(-6deg)}
+  section>h2 .ico-box{transform:skewX(6deg)}
+  h3{margin:var(--s4) 0 var(--s2);font-size:15px;font-weight:700;color:var(--ink)}
+  h3:first-of-type{margin-top:0}
+  p{margin:0 0 var(--s2);color:var(--ink-2);line-height:1.65;max-width:68ch}
+  p b,li b{color:var(--ink);font-weight:700}
+  .hl{color:var(--brand-hi);font-weight:700}
+  ol,ul{margin:0 0 var(--s2);padding-left:20px;color:var(--ink-2);line-height:1.75;max-width:68ch}
+  li{margin-bottom:5px}
+  .card{padding:var(--s5)}
+
+  .passos{counter-reset:p;list-style:none;padding:0;display:flex;flex-direction:column;gap:var(--s3)}
+  .passos li{counter-increment:p;display:grid;grid-template-columns:26px 1fr;gap:12px;margin:0}
+  .passos li::before{content:counter(p);width:26px;height:26px;border-radius:8px;display:grid;place-items:center;
+    background:rgba(47,210,79,.12);border:1px solid rgba(47,210,79,.3);color:var(--brand-hi);
+    font-family:var(--font-mono);font-weight:700;font-size:12.5px}
+  .passos li>div{padding-top:3px}
+
+  .aviso{display:flex;gap:11px;padding:13px 15px;border-radius:var(--r);margin:var(--s3) 0;
+    background:var(--bg-elev);border:1px solid var(--line);font-size:13.5px;line-height:1.6;color:var(--ink-2)}
+  .aviso.dica{border-color:rgba(47,210,79,.3);background:rgba(47,210,79,.05)}
+  .aviso.atencao{border-color:rgba(232,163,23,.32);background:rgba(232,163,23,.05)}
+  .aviso .ico{margin-top:2px;flex:0 0 auto}
+  .aviso.dica .ico{color:var(--brand-hi)} .aviso.atencao .ico{color:var(--warn)}
+  .aviso b{color:var(--ink)}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:var(--s2) 0}
+  th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-3);
+    font-weight:700;padding:0 10px 8px;border-bottom:1px solid var(--line)}
+  td{padding:10px;border-bottom:1px solid var(--line-soft);color:var(--ink-2);vertical-align:top}
+  td:first-child{color:var(--ink);font-weight:600;white-space:nowrap}
+  .tw{overflow-x:auto}
+
+  kbd{font-family:var(--font-mono);font-size:12px;background:var(--surface-3);border:1px solid var(--line-str);
+    border-radius:6px;padding:2px 7px;color:var(--ink)}
+  .rota{font-family:var(--font-mono);font-size:12.5px;color:var(--brand-hi)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="pagehead">
+    <div><h1>Como usar</h1><div class="ph-sub">Guia do sistema · do básico ao dia a dia</div></div>
+  </div>
+
+  <div class="wrap">
+    <nav class="indice" id="indice">
+      <a href="#comecar" class="on">Por onde começar</a>
+      <a href="#inicio">Início</a>
+      <a href="#pdv">Vender no PDV</a>
+      <a href="#estoque">Estoque</a>
+      <a href="#clientes">Clientes e fiado</a>
+      <a href="#lembretes">Lembretes</a>
+      <a href="#financeiro">Financeiro</a>
+      <a href="#automatico">O que roda sozinho</a>
+      <a href="#agentes">Os agentes</a>
+      <a href="#duvidas">Dúvidas comuns</a>
+    </nav>
+
+    <div class="conteudo">
+
+      <!-- COMEÇAR -->
+      <section id="comecar" class="card">
+        <h2><span class="ico-box brand" id="i1"></span>Por onde começar</h2>
+        <p>O sistema é um site: funciona no computador da loja, no celular e no tablet.
+          Basta abrir o endereço e entrar com a senha — <b>não precisa instalar nada</b>.</p>
+
+        <h3>Primeira vez</h3>
+        <ol class="passos">
+          <li><div><b>Entre com a senha.</b> Se pedir login, digite a senha do sistema.
+            Ela fica salva por 30 dias naquele aparelho.</div></li>
+          <li><div><b>Conecte a loja.</b> Em <span class="rota">Conectar</span>, ligue o sistema à sua
+            Nuvemshop. É o que permite ler produtos e vendas do site.</div></li>
+          <li><div><b>Traga os produtos.</b> Ainda em <span class="rota">Conectar</span>, clique em
+            <b>Ler produtos da loja</b>. Vêm só os produtos <b>publicados</b> e <b>com estoque</b>.</div></li>
+          <li><div><b>Preencha os custos.</b> Em <span class="rota">Estoque</span>, abra cada produto e
+            informe quanto você pagou por ele. Sem isso, a margem e o valor de estoque ficam zerados.</div></li>
+        </ol>
+
+        <div class="aviso dica"><span class="ico" id="d1"></span>
+          <div><b>Faça aos poucos.</b> Comece pelos produtos que mais vendem — a margem já passa a fazer
+          sentido nos itens que importam, e você completa o resto com calma.</div></div>
+      </section>
+
+      <!-- INÍCIO -->
+      <section id="inicio" class="card">
+        <h2><span class="ico-box brand" id="i2"></span>Início — a visão geral</h2>
+        <p>É a primeira tela. Serve para responder, em segundos: <b>como está a loja hoje e o que
+          precisa da minha atenção agora?</b></p>
+
+        <h3>O Maestro</h3>
+        <p>No topo, ele resume o dia em uma frase e mostra <b>pastilhas do que precisa de ação</b>
+          (lembrete atrasado, dinheiro a receber, estoque acabando). <b>Clique na pastilha</b> para ir
+          direto ao lugar.</p>
+
+        <h3>As filas de trabalho</h3>
+        <p>Os quatro cartões logo abaixo são o seu roteiro do dia. <b>Clique em qualquer um</b> para ver
+          a lista de pedidos daquela fila.</p>
+        <div class="tw"><table>
+          <tr><th>Fila</th><th>O que significa</th></tr>
+          <tr><td>Por cobrar</td><td>Aguardando pagamento — junta o <b>fiado do balcão</b> com os
+            <b>pedidos do site</b> ainda não pagos.</td></tr>
+          <tr><td>Por embalar</td><td>Pedidos do site já pagos, esperando você separar.</td></tr>
+          <tr><td>Por enviar</td><td>Já embalados, esperando o despacho.</td></tr>
+          <tr><td>Por retirar</td><td>O cliente vai buscar na loja.</td></tr>
+        </table></div>
+
+        <h3>Números do período</h3>
+        <p>As abas <b>Hoje</b>, <b>Ontem</b> e <b>Esta semana</b> mudam todos os números abaixo:
+          faturamento, quantidade de vendas (mostrando quantas foram no <b>balcão</b> e quantas no
+          <b>site</b>), ticket médio e margem. Mais abaixo ficam o gráfico de vendas por dia, as últimas
+          vendas, o estoque no vermelho, as contas a receber e os lembretes.</p>
+      </section>
+
+      <!-- PDV -->
+      <section id="pdv" class="card">
+        <h2><span class="ico-box brand" id="i3"></span>Vender no PDV</h2>
+        <p>É onde você registra a venda do balcão. Pode lançar <b>quantas quiser, sem pagar taxa por
+          lançamento</b>.</p>
+
+        <h3>Passo a passo de uma venda</h3>
+        <ol class="passos">
+          <li><div><b>Ache o produto.</b> Use a busca (nome, variação ou marca) ou toque direto no
+            cartão. A <b>foto</b> ajuda quando vários produtos têm nome parecido.</div></li>
+          <li><div><b>Toque para adicionar.</b> Cada toque soma 1. No carrinho dá para ajustar a
+            quantidade no <kbd>−</kbd> e <kbd>+</kbd>, ou remover o item.</div></li>
+          <li><div><b>Escolha o cliente</b> (opcional). Digite o nome: se já existe, aparece na lista;
+            se não, clique em <b>Criar</b> e ele nasce ali mesmo.</div></li>
+          <li><div><b>Diga como foi o pagamento.</b> <b>Pago</b> (e a forma: Pix, espécie, crédito ou
+            débito) ou <b>Fiado</b>, quando o cliente vai pagar depois.</div></li>
+          <li><div><b>Desconto</b>, se houver, e <b>Finalizar venda</b>.</div></li>
+        </ol>
+
+        <h3>O que acontece quando você finaliza</h3>
+        <ul>
+          <li>O <b>estoque baixa</b> aqui e também <b>na sua loja da Nuvemshop</b>.</li>
+          <li>A venda entra no <b>caixa</b> com o lucro já calculado (se o custo estiver preenchido).</li>
+          <li>Se foi <b>fiado</b>, o valor <b>não entra no caixa</b> — vai para <b>Contas a receber</b>
+            e só entra quando você registrar o recebimento.</li>
+        </ul>
+
+        <div class="aviso atencao"><span class="ico" id="a1"></span>
+          <div>O sistema <b>não deixa vender mais do que tem</b> em estoque. Se aparecer "estoque no
+          limite", confira a quantidade real — pode ser que falte acertar o estoque no Estoque.</div></div>
+      </section>
+
+      <!-- ESTOQUE -->
+      <section id="estoque" class="card">
+        <h2><span class="ico-box brand" id="i4"></span>Estoque</h2>
+        <p>Aqui fica o controle que a Nuvemshop não dá: <b>custo, marca e o valor do seu estoque</b>.</p>
+
+        <h3>O que você vê no topo</h3>
+        <ul>
+          <li><b>Valor de estoque a custo</b> — quanto dinheiro está parado em mercadoria.</li>
+          <li><b>Por categoria</b> e <b>por marca</b> — quantas peças você tem de cada.
+            <b>Clique num chip</b> para filtrar a lista (clique de novo para tirar o filtro).</li>
+        </ul>
+
+        <h3>Cadastrar ou editar um produto</h3>
+        <ol class="passos">
+          <li><div>Clique em <b>Novo produto</b> (ou em qualquer linha, para editar).</div></li>
+          <li><div>Preencha <b>nome</b>, <b>marca</b> e <b>categoria</b>.</div></li>
+          <li><div><b>Foto:</b> clique em <b>Enviar foto</b>. No celular, ele abre a câmera ou a galeria.</div></li>
+          <li><div><b>Variações:</b> uma linha por tamanho (P, M, G…), com <b>preço</b>, <b>custo</b> e
+            <b>estoque</b>. Se o produto não tem tamanho, deixe uma linha só, como "Único".</div></li>
+          <li><div><b>Salvar e publicar</b> — grava aqui e cria/atualiza o produto na sua loja.</div></li>
+        </ol>
+
+        <div class="aviso dica"><span class="ico" id="d2"></span>
+          <div><b>Marca e custo são só seus.</b> A Nuvemshop não tem esses campos, então eles ficam
+          guardados aqui — e <b>nunca são apagados</b> quando o sistema lê a loja de novo.</div></div>
+
+        <p>Na coluna <b>Loja</b>, "no ar" significa que o produto está publicado na Nuvemshop;
+          "pendente" significa que ainda não subiu.</p>
+      </section>
+
+      <!-- CLIENTES -->
+      <section id="clientes" class="card">
+        <h2><span class="ico-box brand" id="i5"></span>Clientes e fiado</h2>
+        <p>A lista é um <b>ranking</b>: quem mais gastou aparece em primeiro. Clique em alguém para ver
+          o <b>histórico completo</b> de compras, o total gasto, o ticket médio e o que está devendo.</p>
+
+        <h3>Receber um fiado</h3>
+        <p>Existem dois caminhos, os dois com um clique:</p>
+        <ul>
+          <li>No <b>Início</b>, no quadro <b>Contas a receber</b>, clique em <b>Receber</b>.</li>
+          <li>Em <b>Clientes</b>, abra a pessoa e clique em <b>Receber</b> na compra pendente.</li>
+        </ul>
+        <p>Nesse momento o valor <b>entra no caixa</b> e a dívida some da lista.</p>
+
+        <div class="aviso dica"><span class="ico" id="d3"></span>
+          <div>Cliente também pode ser criado <b>durante a venda</b>, direto no PDV — não precisa vir
+          aqui antes.</div></div>
+      </section>
+
+      <!-- LEMBRETES -->
+      <section id="lembretes" class="card">
+        <h2><span class="ico-box brand" id="i6"></span>Lembretes</h2>
+        <p>O lugar para anotar o que não pode escapar: <i>"João paga a segunda parcela dia 10"</i>,
+          <i>"encomenda da Camila, conjunto tamanho M"</i>, <i>"repor camiseta preta P"</i>.</p>
+
+        <h3>Como criar</h3>
+        <ol class="passos">
+          <li><div>Clique em <b>Novo lembrete</b> e escreva o que precisa lembrar.</div></li>
+          <li><div>Escolha o <b>tipo</b>: pagamento, encomenda, reposição ou geral.</div></li>
+          <li><div>Coloque a <b>data</b> (e o <b>valor</b> ou o <b>cliente</b>, se fizer sentido).</div></li>
+          <li><div>Quando resolver, clique no <b>quadradinho</b> à esquerda para marcar como feito.</div></li>
+        </ol>
+
+        <p>Lembrete <b class="hl">vencido fica vermelho</b>, o de <b>hoje fica amarelo</b>. O resumo no
+          topo mostra atrasados, os de hoje e o total em aberto — e o <b>Maestro cobra você</b> na tela
+          de Início.</p>
+      </section>
+
+      <!-- FINANCEIRO -->
+      <section id="financeiro" class="card">
+        <h2><span class="ico-box brand" id="i7"></span>Financeiro</h2>
+        <p>Mostra <b>quanto entrou, quanto saiu e o que sobrou</b> no período (Hoje, Mês ou Tudo).</p>
+
+        <h3>De onde vem a receita</h3>
+        <p>São <b>duas frentes</b>, separadas para você comparar: o <b>balcão</b> (o que você lança no
+          PDV) e o <b>site</b> (as vendas da Nuvemshop, que entram sozinhas).</p>
+
+        <h3>Categorias (plano de contas)</h3>
+        <p>Toda entrada e saída tem uma categoria — é isso que permite enxergar para onde o dinheiro
+          está indo. O sistema já vem com as principais:</p>
+        <div class="tw"><table>
+          <tr><th>Entradas</th><th>Saídas</th></tr>
+          <tr><td>Venda PDV<br>Venda Site<br>Outras receitas</td>
+              <td>Compra de mercadoria · Frete e envio · Taxas e maquininha · Marketing e anúncios ·
+                  Embalagens · Aluguel · Salários e retiradas · Impostos · Ferramentas e assinaturas ·
+                  Outras despesas</td></tr>
+        </table></div>
+        <p>Para criar as suas, clique em <b>Categorias</b>. As que você criar podem ser removidas; as
+          padrão ficam protegidas.</p>
+
+        <h3>Lançar uma despesa (ou receita avulsa)</h3>
+        <ol class="passos">
+          <li><div>Clique em <b>Lançar</b>.</div></li>
+          <li><div>Escolha <b>Saiu</b> (despesa) ou <b>Entrou</b> (receita).</div></li>
+          <li><div>Selecione a <b>categoria</b> — ou clique em <b>Nova</b> para criar na hora.</div></li>
+          <li><div>Informe <b>valor</b>, <b>data</b> e uma <b>descrição</b> curta. Pronto.</div></li>
+        </ol>
+
+        <div class="aviso atencao"><span class="ico" id="a2"></span>
+          <div>As vendas lançadas pelo PDV e pelo site <b>entram sozinhas</b> — você não precisa
+          lançá-las aqui. Use o "Lançar" apenas para <b>despesas</b> e receitas que não são venda.</div></div>
+      </section>
+
+      <!-- AUTOMÁTICO -->
+      <section id="automatico" class="card">
+        <h2><span class="ico-box brand" id="i8"></span>O que o sistema faz sozinho</h2>
+        <p>Estas coisas acontecem sem ninguém clicar em nada:</p>
+        <div class="tw"><table>
+          <tr><th>O quê</th><th>Quando</th></tr>
+          <tr><td>Lê as vendas do site</td><td>A cada 10 minutos. Pedido novo aparece aqui; quando o
+            cliente paga, a receita <b>entra no caixa</b> — sem duplicar, mesmo relendo.</td></tr>
+          <tr><td>Atualiza o status dos pedidos</td><td>Junto com a leitura: pagou, embalou, enviou —
+            as filas do Início se ajustam sozinhas.</td></tr>
+          <tr><td>Baixa o estoque</td><td>Na hora que você finaliza a venda no PDV — aqui e na
+            Nuvemshop.</td></tr>
+          <tr><td>Calcula margem e caixa</td><td>A cada venda, usando o custo que você cadastrou.</td></tr>
+          <tr><td>Avisa sobre ruptura</td><td>Sempre que um item fica com 4 unidades ou menos.</td></tr>
+        </table></div>
+
+        <div class="aviso dica"><span class="ico" id="d4"></span>
+          <div><b>Venda do site não mexe no seu estoque daqui</b> — e isso é proposital: a Nuvemshop já
+          baixa o estoque dela na hora. O número certo chega quando o sistema lê os produtos de novo.
+          Assim nada é descontado duas vezes.</div></div>
+      </section>
+
+      <!-- AGENTES -->
+      <section id="agentes" class="card">
+        <h2><span class="ico-box brand" id="i9"></span>Os agentes</h2>
+        <p>Cada agente cuida de uma parte da loja e avisa quando algo precisa de você. Hoje trabalham:</p>
+        <div class="tw"><table>
+          <tr><th>Agente</th><th>Cuida de</th></tr>
+          <tr><td>Maestro</td><td>Junta tudo e resume o dia na tela de Início.</td></tr>
+          <tr><td>Vendas</td><td>PDV e pedidos do dia.</td></tr>
+          <tr><td>Estoque</td><td>Avisa o que está acabando e o valor parado em mercadoria.</td></tr>
+          <tr><td>Financeiro</td><td>Caixa e margem, lançando cada venda sozinho.</td></tr>
+          <tr><td>Cobrança</td><td>O fiado em aberto e quem precisa pagar.</td></tr>
+          <tr><td>Clientes</td><td>Ranking e histórico de cada pessoa.</td></tr>
+          <tr><td>Lembretes</td><td>Cobra o que está atrasado ou vence hoje.</td></tr>
+        </table></div>
+        <p>Na página <span class="rota">Agentes</span> você também vê os que ainda vão entrar
+          (Atendimento, Marketing, Logística e Compras).</p>
+      </section>
+
+      <!-- DÚVIDAS -->
+      <section id="duvidas" class="card">
+        <h2><span class="ico-box brand" id="i10"></span>Dúvidas comuns</h2>
+
+        <h3>A margem está zerada ou estranha</h3>
+        <p>Falta o <b>custo</b> do produto. Vá em <span class="rota">Estoque</span>, abra o produto e
+          preencha o custo de cada variação.</p>
+
+        <h3>Uma venda do site não apareceu</h3>
+        <p>A leitura acontece a cada 10 minutos — espere um pouco e atualize a página. Se o pedido
+          ainda <b>não foi pago</b>, ele aparece em <b>Por cobrar</b>, mas ainda não entra no caixa
+          (é assim mesmo).</p>
+
+        <h3>O estoque daqui está diferente da loja</h3>
+        <p>Vá em <span class="rota">Conectar</span> e clique em <b>Ler produtos da loja</b>. O estoque
+          da Nuvemshop é a referência e sobrescreve o daqui — seu custo e sua marca não se perdem.</p>
+
+        <h3>Vendi errado / preciso cancelar</h3>
+        <p>Hoje a venda registrada não é apagada pela tela. Um jeito simples de corrigir: lance uma
+          <b>despesa</b> no Financeiro com o valor devolvido (categoria "Outras despesas") e acerte o
+          estoque em <span class="rota">Estoque</span>.</p>
+
+        <h3>Quero começar do zero</h3>
+        <p>Em <span class="rota">Conectar</span> existe o botão <b>Limpar dados do sistema</b>. Ele
+          apaga tudo <b>que está aqui</b> (catálogo, vendas, clientes e financeiro) e
+          <b>não altera nada na Nuvemshop</b>. Depois, leia os produtos de novo.</p>
+
+        <h3>Posso usar no celular?</h3>
+        <p>Sim — todas as telas funcionam no celular, com o menu no topo. É o mesmo endereço.</p>
+
+        <h3>Quem pode entrar?</h3>
+        <p>Só quem tem a senha. Se precisar trocá-la, é preciso alterar no servidor (peça ajuda de quem
+          instalou). Para sair, use <b>Sair</b> no rodapé do menu.</p>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script src="/icons.js"></script>
+<script src="/nav.js"></script>
+<script>
+const icones={i1:'conectar',i2:'inicio',i3:'pdv',i4:'estoque',i5:'clientes',i6:'sino',
+  i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa'};
+Object.entries(icones).forEach(([id,n])=>{const e=document.getElementById(id);if(e)e.innerHTML=ICO(n,17);});
+['d1','d2','d3','d4'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['a1','a2'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
+
+// Marca a seção visível no índice
+const links=[...document.querySelectorAll('.indice a')];
+const secs=links.map(a=>document.querySelector(a.getAttribute('href')));
+const obs=new IntersectionObserver(es=>{
+  es.forEach(e=>{ if(e.isIntersecting){
+    links.forEach(l=>l.classList.remove('on'));
+    const i=secs.indexOf(e.target); if(i>=0) links[i].classList.add('on');
+  }});
+},{rootMargin:'-10% 0px -75% 0px'});
+secs.forEach(s=>s&&obs.observe(s));
+</script>
+</body>
+</html>

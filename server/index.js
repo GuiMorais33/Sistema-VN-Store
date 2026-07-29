@@ -995,6 +995,8 @@ app.get('/estoque', page('produtos.html'));
 app.get('/financeiro', page('financeiro.html'));
 app.get('/agentes', page('agentes.html'));
 app.get('/lembretes', page('lembretes.html'));
+app.get('/ajuda', page('ajuda.html'));
+app.get('/como-usar', page('ajuda.html'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
