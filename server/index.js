@@ -278,6 +278,17 @@ app.post('/api/sync', async (req, res) => {
   const onlyAvailable = b.only_available !== false;   // padrão: só o que tem unidade
   const publishedOnly = b.published_only !== false;   // padrão: só o que está no ar
   try {
+    // A loja organiza a MARCA como subcategoria de "MARCAS" (o campo
+    // brand da API não é usado). Montamos o índice a partir das
+    // categorias reais para espelhar exatamente o site.
+    const allCats = await nuvem.listAllCategories();
+    const catById = new Map(allCats.map((c) => [c.id, c]));
+    const rootMarcas = allCats.filter((c) => /^marcas?$/i.test(nameOf(c.name).trim()));
+    const rootMarcasIds = new Set(rootMarcas.map((c) => c.id));
+    const brandIds = new Set(allCats.filter((c) => rootMarcasIds.has(c.parent)).map((c) => c.id));
+    const isBrandCat = (id) => brandIds.has(id);
+    const isMarcasRoot = (id) => rootMarcasIds.has(id);
+
     const raw = await nuvem.listAllProducts({ publishedOnly });
 
     // Estoque total do produto (variação sem controle de estoque conta como disponível).
@@ -312,11 +323,21 @@ app.post('/api/sync', async (req, res) => {
       for (const p of products) {
         const name = nameOf(p.name);
         const image = (p.images && p.images[0] && p.images[0].src) || '';
-        // Marca: campo próprio do produto na Nuvemshop.
-        const brand = (typeof p.brand === 'string' ? p.brand : nameOf(p.brand)) || '';
-        // Categorias: o produto pode estar em várias (como no site).
-        const catNames = (p.categories || []).map((c) => nameOf(c.name)).filter(Boolean);
-        const category = catNames[0] || '';
+        const prodCats = (p.categories || []);
+
+        // MARCA = a categoria do produto que é filha de "MARCAS".
+        // (Ex.: "Jaqueta Zara" → MARCAS > Zara → marca "Zara".)
+        const brandCat = prodCats.find((c) => isBrandCat(c.id));
+        const brand = brandCat ? nameOf(brandCat.name).trim() : (typeof p.brand === 'string' ? p.brand.trim() : '');
+
+        // CATEGORIAS = as demais (tirando "MARCAS" e as marcas).
+        const realCats = prodCats.filter((c) => !isBrandCat(c.id) && !isMarcasRoot(c.id));
+        const catNames = realCats.map((c) => nameOf(c.name).trim()).filter(Boolean);
+        // A principal é a mais específica (subcategoria vence a raiz):
+        // ex.: "Coleção Inverno > Jaquetas" → "Jaquetas".
+        const specific = realCats.find((c) => c.parent && catById.has(c.parent));
+        const category = (specific ? nameOf(specific.name).trim() : catNames[0]) || '';
+
         if (brand) brands.add(brand);
         catNames.forEach((c) => cats.add(c));
 
