@@ -60,7 +60,8 @@ async function request(method, path, body) {
   if (!isConfigured()) {
     throw new Error('Nuvemshop não conectada. Abra a tela "Conectar loja".');
   }
-  const res = await fetch(`https://api.tiendanube.com/v1/${cfg().storeId}${path}`, {
+  const apiBase = process.env.NUVEMSHOP_API_BASE || 'https://api.tiendanube.com/v1';
+  const res = await fetch(`${apiBase}/${cfg().storeId}${path}`, {
     method,
     headers: headers(),
     body: body ? JSON.stringify(body) : undefined,
@@ -79,18 +80,38 @@ async function request(method, path, body) {
 }
 
 // Busca TODOS os produtos, paginando (per_page máx. 200).
-export async function listAllProducts() {
+// IMPORTANTE: não usar "fields" restritivo — precisamos de brand,
+// categories, images e published, senão vêm vazios.
+// opts.publishedOnly: traz só os produtos visíveis na loja.
+export async function listAllProducts(opts = {}) {
   const all = [];
   let page = 1;
   const perPage = 200;
+  const pub = opts.publishedOnly ? '&published=true' : '';
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const { data } = await request('GET', `/products?per_page=${perPage}&page=${page}&fields=id,name,variants`);
+    const { data } = await request('GET', `/products?per_page=${perPage}&page=${page}${pub}`);
     if (!Array.isArray(data) || data.length === 0) break;
     all.push(...data);
     if (data.length < perPage) break;
     page += 1;
-    if (page > 50) break; // trava de segurança
+    if (page > 200) break; // trava de segurança
+  }
+  return all;
+}
+
+// Categorias da loja (id + nome), para espelhar a organização do site.
+export async function listAllCategories() {
+  const all = [];
+  let page = 1;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data } = await request('GET', `/categories?per_page=200&page=${page}`);
+    if (!Array.isArray(data) || data.length === 0) break;
+    all.push(...data);
+    if (data.length < 200) break;
+    page += 1;
+    if (page > 20) break;
   }
   return all;
 }

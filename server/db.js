@@ -131,6 +131,7 @@ function ensureColumn(table, column, ddl) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
   if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
 }
+ensureColumn('products', 'categories_all', 'categories_all TEXT');
 ensureColumn('sales', 'customer_id', 'customer_id INTEGER');
 ensureColumn('sales', 'payment_status', "payment_status TEXT NOT NULL DEFAULT 'pago'");
 ensureColumn('sales', 'paid_at', 'paid_at TEXT');

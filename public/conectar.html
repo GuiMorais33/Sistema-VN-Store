@@ -30,6 +30,14 @@
   .ro{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--green-hi);background:rgba(47,210,79,.08);border:1px solid rgba(47,210,79,.3);padding:5px 10px;border-radius:999px}
   .hidden{display:none}
   .msg{font-size:13px;margin-top:10px}
+  .opts{display:flex;flex-direction:column;gap:8px;margin-top:14px;padding:12px;background:var(--bg-2);border:1px solid var(--line-soft);border-radius:11px}
+  .opt{display:flex;align-items:center;gap:9px;font-size:13.5px;cursor:pointer}
+  .opt input{width:17px;height:17px;accent-color:var(--green);cursor:pointer}
+  .opt b{color:var(--green-hi)}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-top:12px}
+  .stat{background:var(--bg-2);border:1px solid var(--line-soft);border-radius:10px;padding:10px}
+  .stat .l{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);font-weight:700}
+  .stat .v{font-family:var(--mono);font-weight:700;font-size:17px;margin-top:3px;color:var(--green-hi)}
 </style>
 </head>
 <body>
@@ -44,12 +52,26 @@
   <!-- Conectado -->
   <div class="card" id="connectedCard" style="display:none">
     <div class="status"><span style="font-size:30px">✅</span><div><div class="big">Conectada</div><div class="note" id="storeInfo"></div></div></div>
+
+    <div class="opts">
+      <label class="opt"><input type="checkbox" id="optAvail" checked> <span>Só produtos <b>com unidades em estoque</b></span></label>
+      <label class="opt"><input type="checkbox" id="optPub" checked> <span>Só produtos <b>publicados na loja</b></span></label>
+    </div>
+
     <div class="row" style="margin-top:14px">
       <button class="btn primary" id="syncBtn" type="button">↓ Ler produtos da loja</button>
       <button class="btn ghost" id="disconnectBtn" type="button">Desconectar</button>
     </div>
     <div class="msg" id="syncMsg"></div>
     <div class="note">A leitura só <b>traz</b> os dados da sua loja pra cá. Nada é criado ou alterado na Nuvemshop.</div>
+  </div>
+
+  <div class="card" id="cleanCard" style="display:none">
+    <h3>Começar limpo</h3>
+    <p class="note" style="margin-top:0">Apaga <b>tudo que está aqui no sistema</b> — catálogo, vendas, clientes e financeiro —
+      pra você recomeçar só com os dados reais. <b>Não altera nada na sua Nuvemshop.</b></p>
+    <button class="btn ghost" id="resetBtn" type="button" style="border-color:rgba(255,81,66,.4);color:#ff8377">🧹 Limpar dados do sistema</button>
+    <div class="msg" id="resetMsg"></div>
   </div>
 
   <!-- Não conectado: passo a passo -->
@@ -106,10 +128,12 @@ async function load(){
   const c = await api('/api/connection');
   if(c.connected){
     document.getElementById('connectedCard').style.display='block';
+    document.getElementById('cleanCard').style.display='block';
     document.getElementById('setup').style.display='none';
     document.getElementById('storeInfo').textContent = 'Loja Nuvemshop #' + (c.store_id||'—');
   } else {
     document.getElementById('connectedCard').style.display='none';
+    document.getElementById('cleanCard').style.display='none';
     document.getElementById('setup').style.display='block';
   }
 }
@@ -129,12 +153,31 @@ document.getElementById('saveBtn').addEventListener('click', async ()=>{
 
 document.getElementById('syncBtn').addEventListener('click', async (e)=>{
   const msg=document.getElementById('syncMsg'); e.target.disabled=true; e.target.textContent='Lendo…';
-  try{ const r=await api('/api/sync',{method:'POST'});
-    msg.innerHTML = r.mode==='live'
-      ? '<span style="color:var(--green-hi)">✔ Li '+r.products+' produto(s) e '+r.variants+' variação(ões) da sua loja.</span>'
-      : '<span>Modo demonstração.</span>';
+  msg.innerHTML='<span class="note">Lendo sua loja… com muitos produtos isso pode levar um tempinho.</span>';
+  try{
+    const r=await api('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      only_available: document.getElementById('optAvail').checked,
+      published_only: document.getElementById('optPub').checked })});
+    if(r.mode!=='live'){ msg.innerHTML='<span>Modo demonstração.</span>'; return; }
+    msg.innerHTML='<span style="color:var(--green-hi)">✔ Importado com sucesso!</span>'
+      +'<div class="stats">'
+      +'<div class="stat"><div class="l">Produtos</div><div class="v">'+r.products+'</div></div>'
+      +'<div class="stat"><div class="l">Variações</div><div class="v">'+r.variants+'</div></div>'
+      +'<div class="stat"><div class="l">Marcas</div><div class="v">'+r.brands+'</div></div>'
+      +'<div class="stat"><div class="l">Categorias</div><div class="v">'+r.categories+'</div></div>'
+      +'</div>'
+      +'<div class="note">Analisei '+r.scanned+' produto(s) da loja e deixei de fora '+r.skipped_no_stock+' sem unidades em estoque.</div>';
   }catch(err){ msg.innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
   finally{ e.target.disabled=false; e.target.textContent='↓ Ler produtos da loja'; }
+});
+
+document.getElementById('resetBtn').addEventListener('click', async (e)=>{
+  if(!confirm('Isso apaga TODOS os dados do sistema (catálogo, vendas, clientes e financeiro).\n\nSua loja na Nuvemshop NÃO é alterada.\n\nConfirma?')) return;
+  const msg=document.getElementById('resetMsg'); e.target.disabled=true; e.target.textContent='Limpando…';
+  try{ await api('/api/reset',{method:'POST'});
+    msg.innerHTML='<span style="color:var(--green-hi)">✔ Sistema limpo. Agora clique em “Ler produtos da loja” pra trazer só os disponíveis.</span>';
+  }catch(err){ msg.innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
+  finally{ e.target.disabled=false; e.target.textContent='🧹 Limpar dados do sistema'; }
 });
 
 document.getElementById('disconnectBtn').addEventListener('click', async ()=>{

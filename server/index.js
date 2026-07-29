@@ -99,7 +99,8 @@ app.get('/api/catalog', (req, res) => {
   const where = [];
   const args = [];
   if (q) { where.push('(p.name LIKE ? OR p.brand LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
-  if (cat) { where.push('p.category = ?'); args.push(cat); }
+  // Categoria: o produto pode estar em várias (como no site) — busca em todas.
+  if (cat) { where.push('(p.category = ? OR p.categories_all LIKE ?)'); args.push(cat, `%${cat}%`); }
   if (brand) { where.push('p.brand = ?'); args.push(brand); }
   const rows = db.prepare(`
     SELECT p.*,
@@ -124,20 +125,20 @@ app.get('/api/catalog/summary', (req, res) => {
     FROM variants v WHERE v.stock_management = 1
   `).get();
   const byCategory = db.prepare(`
-    SELECT COALESCE(p.category,'(sem categoria)') AS label,
+    SELECT COALESCE(NULLIF(p.category,''),'(sem categoria)') AS label,
            COUNT(DISTINCT p.id) AS products,
            COALESCE(SUM(v.stock),0) AS units,
            COALESCE(SUM(v.stock * v.cost),0) AS value_cost
     FROM products p LEFT JOIN variants v ON v.product_id = p.id
-    GROUP BY p.category ORDER BY value_cost DESC
+    GROUP BY label ORDER BY units DESC
   `).all();
   const byBrand = db.prepare(`
-    SELECT COALESCE(p.brand,'(sem marca)') AS label,
+    SELECT COALESCE(NULLIF(p.brand,''),'(sem marca)') AS label,
            COUNT(DISTINCT p.id) AS products,
            COALESCE(SUM(v.stock),0) AS units,
            COALESCE(SUM(v.stock * v.cost),0) AS value_cost
     FROM products p LEFT JOIN variants v ON v.product_id = p.id
-    GROUP BY p.brand ORDER BY value_cost DESC
+    GROUP BY label ORDER BY units DESC
   `).all();
   res.json({ totals, by_category: byCategory, by_brand: byBrand });
 });
@@ -273,35 +274,97 @@ async function pushProduct(productId) {
 // ==================== SINCRONIZAR (puxar da Nuvemshop) ====================
 app.post('/api/sync', async (req, res) => {
   if (!isLive()) { const seeded = seedDemoIfEmpty(); return res.json({ mode: 'demo', seeded, message: 'Modo demonstração — sem loja conectada.' }); }
+  const b = req.body || {};
+  const onlyAvailable = b.only_available !== false;   // padrão: só o que tem unidade
+  const publishedOnly = b.published_only !== false;   // padrão: só o que está no ar
   try {
-    const products = await nuvem.listAllProducts();
-    const upP = db.prepare(`INSERT INTO products (nuvemshop_product_id, name, category, description, image_url, published, synced_nuvemshop, created_at, updated_at)
-      VALUES (@pid,@name,@category,@description,@image,1,1,@now,@now)
-      ON CONFLICT(nuvemshop_product_id) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at`);
+    const raw = await nuvem.listAllProducts({ publishedOnly });
+
+    // Estoque total do produto (variação sem controle de estoque conta como disponível).
+    const unitsOf = (p) => (p.variants || []).reduce((s, v) => {
+      if (v.stock_management === false) return s + 1;
+      return s + (parseInt(v.stock, 10) || 0);
+    }, 0);
+
+    const products = onlyAvailable ? raw.filter((p) => unitsOf(p) > 0) : raw;
+    const skipped = raw.length - products.length;
+
+    const upP = db.prepare(`INSERT INTO products (nuvemshop_product_id, name, brand, category, categories_all, description, image_url, published, synced_nuvemshop, created_at, updated_at)
+      VALUES (@pid,@name,@brand,@category,@cats,@description,@image,@published,1,@now,@now)
+      ON CONFLICT(nuvemshop_product_id) DO UPDATE SET
+        name=excluded.name, brand=excluded.brand, category=excluded.category,
+        categories_all=excluded.categories_all, description=excluded.description,
+        image_url=excluded.image_url, published=excluded.published,
+        synced_nuvemshop=1, updated_at=excluded.updated_at`);
     const getP = db.prepare('SELECT id FROM products WHERE nuvemshop_product_id = ?');
+    // O custo é NOSSO: nunca sobrescrever no sync.
     const upV = db.prepare(`INSERT INTO variants (product_id, nuvemshop_product_id, nuvemshop_variant_id, product_name, variant_name, sku, price, cost, stock, stock_management, updated_at)
-      VALUES (@product_id,@pid,@vid,@pname,@vname,@sku,@price,@cost,@stock,@sm,@now)
-      ON CONFLICT(nuvemshop_variant_id) DO UPDATE SET product_name=excluded.product_name, variant_name=excluded.variant_name, sku=excluded.sku, price=excluded.price, stock=excluded.stock, stock_management=excluded.stock_management, updated_at=excluded.updated_at`);
+      VALUES (@product_id,@pid,@vid,@pname,@vname,@sku,@price,0,@stock,@sm,@now)
+      ON CONFLICT(nuvemshop_variant_id) DO UPDATE SET
+        product_id=excluded.product_id, product_name=excluded.product_name,
+        variant_name=excluded.variant_name, sku=excluded.sku, price=excluded.price,
+        stock=excluded.stock, stock_management=excluded.stock_management, updated_at=excluded.updated_at`);
+
     let variantCount = 0;
+    const brands = new Set(), cats = new Set();
+
     db.transaction(() => {
       for (const p of products) {
         const name = nameOf(p.name);
         const image = (p.images && p.images[0] && p.images[0].src) || '';
-        const category = (p.categories && p.categories[0] && nameOf(p.categories[0].name)) || '';
-        upP.run({ pid: String(p.id), name, category, description: nameOf(p.description), image, now: now() });
+        // Marca: campo próprio do produto na Nuvemshop.
+        const brand = (typeof p.brand === 'string' ? p.brand : nameOf(p.brand)) || '';
+        // Categorias: o produto pode estar em várias (como no site).
+        const catNames = (p.categories || []).map((c) => nameOf(c.name)).filter(Boolean);
+        const category = catNames[0] || '';
+        if (brand) brands.add(brand);
+        catNames.forEach((c) => cats.add(c));
+
+        upP.run({
+          pid: String(p.id), name, brand, category,
+          cats: catNames.join(' | '),
+          description: nameOf(p.description), image,
+          published: p.published === false ? 0 : 1, now: now(),
+        });
         const productId = getP.get(String(p.id)).id;
+
         for (const v of (p.variants || [])) {
-          const vname = (v.values || []).map((x) => nameOf(x)).join(' / ') || 'Único';
-          upV.run({ product_id: productId, pid: String(p.id), vid: String(v.id), pname: name, vname, sku: v.sku || '', price: parseFloat(v.price) || 0, cost: 0, stock: v.stock == null ? 0 : parseInt(v.stock, 10), sm: v.stock_management === false ? 0 : 1, now: now() });
+          // Nome da variação: junta os valores dos atributos (ex.: "P / Verde").
+          const vname = (v.values || []).map((x) => nameOf(x)).filter(Boolean).join(' / ') || 'Único';
+          upV.run({
+            product_id: productId, pid: String(p.id), vid: String(v.id), pname: name, vname,
+            sku: v.sku || '', price: parseFloat(v.price) || 0,
+            stock: v.stock == null ? 0 : parseInt(v.stock, 10),
+            sm: v.stock_management === false ? 0 : 1, now: now(),
+          });
           variantCount += 1;
         }
       }
     })();
-    res.json({ mode: 'live', products: products.length, variants: variantCount });
+
+    res.json({
+      mode: 'live', products: products.length, variants: variantCount,
+      skipped_no_stock: skipped, scanned: raw.length,
+      brands: brands.size, categories: cats.size,
+      only_available: onlyAvailable, published_only: publishedOnly,
+    });
   } catch (err) {
     console.error('Sync falhou:', err.message);
     res.status(502).json({ error: err.message });
   }
+});
+
+// Limpa os dados LOCAIS (catálogo, vendas, clientes, financeiro).
+// Não toca em nada na Nuvemshop — serve para começar do zero, limpo.
+app.post('/api/reset', (req, res) => {
+  const keepConnection = db.prepare('SELECT key, value FROM settings').all();
+  db.transaction(() => {
+    db.exec(`DELETE FROM sale_items; DELETE FROM sales; DELETE FROM stock_movements;
+             DELETE FROM financial_entries; DELETE FROM customers;
+             DELETE FROM variants; DELETE FROM products;`);
+  })();
+  // (settings preservado: a conexão com a loja continua ativa)
+  res.json({ ok: true, kept_settings: keepConnection.length });
 });
 
 // ==================== CLIENTES ====================
