@@ -109,6 +109,32 @@ CREATE TABLE IF NOT EXISTS settings (
   value  TEXT
 );
 
+-- Plano de contas: categorias de receita e despesa
+CREATE TABLE IF NOT EXISTS fin_categories (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  name      TEXT NOT NULL,
+  kind      TEXT NOT NULL,              -- receita | despesa
+  is_system INTEGER NOT NULL DEFAULT 0, -- padrão do sistema (não apaga)
+  archived  INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT,
+  UNIQUE(name, kind)
+);
+
+-- Lembretes: o que não pode ser esquecido
+CREATE TABLE IF NOT EXISTS reminders (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT NOT NULL,
+  notes       TEXT,
+  due_date    TEXT,                       -- AAAA-MM-DD
+  kind        TEXT NOT NULL DEFAULT 'geral', -- geral | pagamento | encomenda | reposicao
+  customer_id INTEGER REFERENCES customers(id),
+  amount      REAL,
+  done        INTEGER NOT NULL DEFAULT 0,
+  done_at     TEXT,
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rem_due ON reminders(due_date, done);
+
 CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at);
 CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales(customer_id);
 CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(payment_status);
@@ -132,6 +158,57 @@ function ensureColumn(table, column, ddl) {
   if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
 }
 ensureColumn('products', 'categories_all', 'categories_all TEXT');
+ensureColumn('financial_entries', 'category_id', 'category_id INTEGER');
+ensureColumn('sales', 'nuvemshop_order_id', 'nuvemshop_order_id TEXT');
+try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_order ON sales(nuvemshop_order_id) WHERE nuvemshop_order_id IS NOT NULL'); } catch (_) {}
+
+// ---- Plano de contas padrão (criado uma vez) ----
+export function seedCategories() {
+  const n = db.prepare('SELECT COUNT(*) AS n FROM fin_categories').get().n;
+  if (n > 0) return false;
+  const ins = db.prepare('INSERT OR IGNORE INTO fin_categories (name, kind, is_system, created_at) VALUES (?,?,1,?)');
+  const now = new Date().toISOString();
+  const receitas = ['Venda PDV', 'Venda Site', 'Outras receitas'];
+  const despesas = ['Compra de mercadoria', 'Frete e envio', 'Taxas e maquininha', 'Marketing e anúncios',
+    'Embalagens', 'Aluguel', 'Salários e retiradas', 'Impostos', 'Ferramentas e assinaturas', 'Outras despesas'];
+  db.transaction(() => {
+    receitas.forEach((r) => ins.run(r, 'receita', now));
+    despesas.forEach((d) => ins.run(d, 'despesa', now));
+  })();
+  return true;
+}
+// Lançamentos antigos usavam rótulos técnicos ("venda_pdv", "compras").
+// Traduz uma vez para os nomes do plano de contas.
+export function migrateOldCategories() {
+  const de_para = {
+    venda_pdv: ['Venda PDV', 'receita'], venda_site: ['Venda Site', 'receita'],
+    compras: ['Compra de mercadoria', 'despesa'], operação: ['Frete e envio', 'despesa'],
+    operacao: ['Frete e envio', 'despesa'], marketing: ['Marketing e anúncios', 'despesa'],
+    geral: ['Outras despesas', 'despesa'],
+  };
+  const alvo = db.prepare('SELECT DISTINCT category FROM financial_entries WHERE category_id IS NULL').all();
+  if (!alvo.length) return 0;
+  const upd = db.prepare('UPDATE financial_entries SET category = ?, category_id = ? WHERE category = ? AND category_id IS NULL');
+  let n = 0;
+  db.transaction(() => {
+    for (const { category } of alvo) {
+      if (!category) continue;
+      const par = de_para[category];
+      const kind = par ? par[1] : (db.prepare('SELECT type FROM financial_entries WHERE category = ? LIMIT 1').get(category) || {}).type || 'despesa';
+      const nome = par ? par[0] : category;
+      upd.run(nome, categoryId(nome, kind), category);
+      n += 1;
+    }
+  })();
+  return n;
+}
+
+export function categoryId(name, kind) {
+  const r = db.prepare('SELECT id FROM fin_categories WHERE name = ? AND kind = ?').get(name, kind);
+  if (r) return r.id;
+  return db.prepare('INSERT INTO fin_categories (name, kind, is_system, created_at) VALUES (?,?,0,?)')
+    .run(name, kind, new Date().toISOString()).lastInsertRowid;
+}
 ensureColumn('sales', 'customer_id', 'customer_id INTEGER');
 ensureColumn('sales', 'payment_status', "payment_status TEXT NOT NULL DEFAULT 'pago'");
 ensureColumn('sales', 'paid_at', 'paid_at TEXT');

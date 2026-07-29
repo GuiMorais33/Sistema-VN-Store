@@ -48,6 +48,16 @@
   .m-body p{margin:var(--s3) 0 0;max-width:62ch;color:var(--ink-2);line-height:1.6}
   .m-body p b{color:var(--ink);font-weight:700}
   .m-body p .hl{color:var(--brand-hi)}
+  .m-top{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s3);flex-wrap:wrap}
+  .m-link{font-family:var(--font-mono);font-size:11.5px;color:var(--brand-hi);text-decoration:none}
+  .m-link:hover{text-decoration:underline}
+  .m-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:var(--s3)}
+  .m-tag{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;padding:5px 11px;
+    border-radius:999px;border:1px solid var(--line);background:var(--bg-elev);color:var(--ink-2);text-decoration:none}
+  .m-tag:hover{border-color:var(--line-str)}
+  .m-tag.crit{color:var(--crit);border-color:rgba(242,86,74,.35);background:rgba(242,86,74,.08)}
+  .m-tag.warn{color:var(--warn);border-color:rgba(232,163,23,.35);background:rgba(232,163,23,.08)}
+  .m-tag.ok{color:var(--ok);border-color:rgba(53,192,138,.3);background:rgba(53,192,138,.08)}
   @media (max-width:560px){.maestro{grid-template-columns:1fr}}
 
   .settle{display:flex;align-items:center;gap:var(--s3)}
@@ -62,6 +72,16 @@
       <div class="ph-sub">Visão geral da loja</div>
     </div>
     <div class="ph-actions"><a class="btn primary" href="/pdv" id="pdvLink">Abrir PDV</a></div>
+  </div>
+
+  <div class="card maestro" style="margin-bottom:var(--s4)">
+    <div class="m-ava"><img src="/logo.webp" alt=""></div>
+    <div class="m-body">
+      <div class="m-top"><h3>Maestro</h3><a href="/agentes" class="m-link">ver o time →</a></div>
+      <div class="m-role">Gerente-geral · coordena os agentes</div>
+      <p id="maestroMsg"><span class="sk">Lendo os números da loja…</span></p>
+      <div class="m-tags" id="maestroTags"></div>
+    </div>
   </div>
 
   <div class="kpis" id="kpis"></div>
@@ -88,19 +108,15 @@
     </div>
   </div>
 
-  <div class="card panel" style="margin-top:var(--s3)">
-    <h3>Contas a receber</h3>
-    <div class="rows" id="recv"></div>
-  </div>
 
-  <div class="sec"><h2>O Maestro</h2><span class="rule"></span>
-    <a href="/agentes" class="meta" style="color:var(--brand-hi);text-decoration:none">ver o time →</a></div>
-  <div class="card maestro">
-    <div class="m-ava"><img src="/logo.webp" alt=""></div>
-    <div class="m-body">
-      <h3>Maestro</h3>
-      <div class="m-role">Gerente-geral · coordena os agentes</div>
-      <p id="maestroMsg"><span class="sk">Lendo os números da loja…</span></p>
+  <div class="cols" style="margin-top:var(--s3)">
+    <div class="card panel">
+      <h3>Contas a receber</h3>
+      <div class="rows" id="recv"></div>
+    </div>
+    <div class="card panel">
+      <h3>Lembretes</h3>
+      <div class="rows" id="rem"></div>
     </div>
   </div>
 
@@ -221,12 +237,42 @@ async function load(){
     }));
   } else recv.innerHTML=vazio('ok','Nada a receber','Todo mundo em dia por aqui.');
 
+  // Lembretes
+  const rem=document.getElementById('rem');
+  const R=d.reminders||{};
+  if(d.reminders_list&&d.reminders_list.length){
+    rem.innerHTML=d.reminders_list.map(r=>{
+      const hoje=new Date().toISOString().slice(0,10);
+      const late=r.due_date&&r.due_date<hoje, now_=r.due_date===hoje;
+      const q=!r.due_date?'sem data':(late?'atrasado':(now_?'hoje':new Date(r.due_date+'T12:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})));
+      return `<div class="row-item"><div class="l"><span>${r.title}</span>
+        <span class="s">${q}${r.customer_name?' · '+r.customer_name:''}</span></div>
+        <span class="r" style="color:${late?'var(--crit)':(now_?'var(--warn)':'var(--ink-2)')}">${r.amount?BRL(r.amount):''}</span></div>`;
+    }).join('')+`<a class="btn sm ghost" href="/lembretes" style="margin-top:6px">Ver todos</a>`;
+  } else rem.innerHTML=vazio('sino','Nada pendente','Anote em Lembretes o que não pode escapar.');
+
+  // Maestro
   const p=[];
-  if(d.orders_today>0) p.push(`Já são <b>${d.orders_today}</b> venda(s) hoje, <b class="hl">${BRL(d.revenue_today)}</b> no caixa com margem de <b>${d.margin_pct}%</b>.`);
-  else p.push('Ainda sem vendas hoje — o PDV está pronto.');
+  const site=(d.por_origem_hoje||[]).find(o=>o.o==='site'), pdv=(d.por_origem_hoje||[]).find(o=>o.o==='pdv');
+  if(d.orders_today>0){
+    const det=[];
+    if(pdv) det.push(`<b>${pdv.n}</b> no balcão`);
+    if(site) det.push(`<b>${site.n}</b> pelo site`);
+    p.push(`Já são <b>${d.orders_today}</b> venda(s) hoje${det.length?' ('+det.join(' e ')+')':''}, <b class="hl">${BRL(d.revenue_today)}</b> no caixa com margem de <b>${d.margin_pct}%</b>.`);
+  } else p.push('Ainda sem vendas hoje — o PDV está pronto.');
   if(d.receivable_count>0) p.push(`Tem <b class="hl">${BRL(d.receivable_total)}</b> em fiado pra receber.`);
-  if(d.low_stock>0) p.push(`E <b>${d.low_stock}</b> item(ns) perto da ruptura.`);
+  if(R.atrasados>0) p.push(`E <b>${R.atrasados}</b> lembrete(s) já passaram da data.`);
+  else if(R.hoje>0) p.push(`Tem <b>${R.hoje}</b> lembrete(s) pra hoje.`);
+  if(d.low_stock>0) p.push(`Fica de olho: <b>${d.low_stock}</b> item(ns) perto da ruptura.`);
   document.getElementById('maestroMsg').innerHTML='Fala, chefe. '+p.join(' ');
+
+  const tags=[];
+  if(R.atrasados>0) tags.push(`<a class="m-tag crit" href="/lembretes">${ICO('alerta',13)}${R.atrasados} lembrete(s) atrasado(s)</a>`);
+  if(R.hoje>0) tags.push(`<a class="m-tag warn" href="/lembretes">${ICO('calendario',13)}${R.hoje} pra hoje</a>`);
+  if(d.receivable_count>0) tags.push(`<a class="m-tag warn" href="/clientes">${ICO('recibo',13)}${BRL(d.receivable_total)} a receber</a>`);
+  if(d.low_stock>0) tags.push(`<a class="m-tag warn" href="/produtos">${ICO('estoque',13)}${d.low_stock} perto da ruptura</a>`);
+  if(!tags.length) tags.push(`<span class="m-tag ok">${ICO('ok',13)}Tudo em dia</span>`);
+  document.getElementById('maestroTags').innerHTML=tags.join('');
 }
 async function loadChart(){
   try{const d=await api('/api/sales-series?days=14');serie=d.series;

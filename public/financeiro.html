@@ -14,50 +14,84 @@
   .seg button:hover{color:var(--ink)}
   .seg button.sel{background:rgba(47,210,79,.13);color:var(--brand-hi)}
 
-  .cols{display:grid;grid-template-columns:1fr 1.35fr;gap:var(--s3);margin-top:var(--s3)}
-  @media (max-width:860px){.cols{grid-template-columns:1fr}}
+  .origem{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3);margin-top:var(--s3)}
+  @media (max-width:620px){.origem{grid-template-columns:1fr}}
+  .org{display:flex;align-items:center;gap:var(--s3);padding:var(--s4)}
+  .org .txt{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .org .v{display:block;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:21px}
+  .org .n{display:block;font-size:11.5px;color:var(--ink-3)}
 
-  .bar-row{display:grid;grid-template-columns:74px 1fr 92px;gap:10px;align-items:center;margin-bottom:9px}
-  .bar-lab{font-size:12.5px;font-weight:600;color:var(--ink-2)}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3);margin-top:var(--s3)}
+  @media (max-width:900px){.cols{grid-template-columns:1fr}}
+
+  .bar-row{display:grid;grid-template-columns:minmax(88px,1.1fr) 1fr 96px;gap:10px;align-items:center;margin-bottom:9px}
+  .bar-lab{font-size:12.5px;font-weight:600;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .bar-track{height:9px;border-radius:6px;background:var(--bg-elev);overflow:hidden;display:block;border:1px solid var(--line-soft)}
-  .bar-fill{display:block;height:100%;min-width:4px;border-radius:6px;
-    background:linear-gradient(90deg,var(--brand-deep),var(--brand));box-shadow:0 0 10px var(--glow)}
+  .bar-fill{display:block;height:100%;min-width:4px;border-radius:6px}
+  .bar-fill.in{background:linear-gradient(90deg,var(--brand-deep),var(--brand));box-shadow:0 0 10px var(--glow)}
+  .bar-fill.out{background:linear-gradient(90deg,#8E2A22,var(--crit))}
   .bar-val{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:700;text-align:right}
 
-  .mov{display:flex;flex-direction:column;gap:5px;max-height:56vh;overflow-y:auto}
+  .mov{display:flex;flex-direction:column;gap:5px;max-height:60vh;overflow-y:auto}
   .m{display:flex;justify-content:space-between;align-items:center;gap:var(--s3);padding:10px 12px;
     background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:var(--r);font-size:13px}
   .m .l{display:flex;align-items:center;gap:10px;min-width:0}
   .m .txt{min-width:0;display:flex;flex-direction:column;gap:2px}
-  .m .txt .d{font-weight:600;display:block}
+  .m .txt .d{font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .m .txt .s{font-size:10.5px;color:var(--ink-3);font-family:var(--font-mono);display:block}
+  .m .rt{display:flex;align-items:center;gap:8px}
   .m .r{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
   .m .r.in{color:var(--ok)} .m .r.out{color:var(--crit)}
-  .dlg{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);min-width:min(360px,90vw)}
+  .ib{background:none;border:1px solid transparent;border-radius:7px;color:var(--ink-3);cursor:pointer;padding:4px;display:grid;place-items:center}
+  .ib:hover{color:var(--crit);border-color:rgba(242,86,74,.3)}
+
+  .dlg{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);min-width:min(430px,92vw)}
   .dlg h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;font-size:18px;transform:skewX(-5deg)}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+  @media (max-width:520px){.g2{grid-template-columns:1fr}}
+  .kinds{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+  .kb{padding:10px;border-radius:9px;border:1px solid var(--line);background:var(--bg-elev);color:var(--ink-3);
+    font-size:12.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+  .kb.sel-in{border-color:var(--ok);color:var(--ok);background:rgba(53,192,138,.1)}
+  .kb.sel-out{border-color:var(--crit);color:var(--crit);background:rgba(242,86,74,.1)}
+  .catrow{display:flex;gap:6px;align-items:center}
+  .catrow select{flex:1}
   .dlg-foot{display:flex;gap:var(--s2);justify-content:flex-end}
+  .cats-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:var(--s2)}
+  .cat-chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:5px 10px;
+    border-radius:999px;background:var(--bg-elev);border:1px solid var(--line);color:var(--ink-2)}
+  .cat-chip .x{cursor:pointer;color:var(--ink-3);display:grid;place-items:center}
+  .cat-chip .x:hover{color:var(--crit)}
+  .cat-chip.sys{opacity:.85}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="pagehead">
-    <div><h1>Financeiro</h1><div class="ph-sub">Caixa · receitas · despesas</div></div>
+    <div><h1>Financeiro</h1><div class="ph-sub">Caixa · categorias · as duas frentes de venda</div></div>
     <div class="ph-actions">
       <div class="seg" id="per">
         <button data-p="today" type="button">Hoje</button>
         <button data-p="month" class="sel" type="button">Mês</button>
         <button data-p="all" type="button">Tudo</button>
       </div>
-      <button class="btn primary" id="desp" type="button">Lançar despesa</button>
+      <button class="btn ghost" id="cats" type="button">Categorias</button>
+      <button class="btn primary" id="novo" type="button">Lançar</button>
     </div>
   </div>
 
   <div class="kpis" id="kpis"></div>
 
+  <div class="sec"><h2>De onde vem a receita</h2><span class="rule"></span>
+    <span class="meta" id="imp"></span></div>
+  <div class="origem" id="origem"></div>
+
   <div class="cols">
     <div class="card panel">
-      <h3>Por forma de pagamento</h3>
-      <div id="bm"></div>
+      <h3>Entradas por categoria</h3>
+      <div id="catIn"></div>
+      <h3 style="margin-top:var(--s5)">Saídas por categoria</h3>
+      <div id="catOut"></div>
     </div>
     <div class="card panel">
       <h3>Movimentações</h3>
@@ -66,16 +100,50 @@
   </div>
 </div>
 
+<!-- Lançamento -->
 <dialog id="dlg">
   <form class="dlg" method="dialog">
-    <h3>Nova despesa</h3>
-    <div class="field"><label>Descrição</label><input id="eD" placeholder="Fornecedor, aluguel, frete…"></div>
-    <div class="field"><label>Categoria</label><input id="eC" placeholder="compras, operação, marketing"></div>
-    <div class="field"><label>Valor (R$) *</label><input id="eV" type="number" step="0.01" min="0" required></div>
+    <h3 id="dlgT">Novo lançamento</h3>
+    <div class="field"><label>Tipo</label>
+      <div class="kinds">
+        <button type="button" class="kb sel-out" id="kOut">Saiu (despesa)</button>
+        <button type="button" class="kb" id="kIn">Entrou (receita)</button>
+      </div>
+    </div>
+    <div class="field"><label>Categoria</label>
+      <div class="catrow">
+        <select id="eCat"></select>
+        <button type="button" class="btn sm ghost" id="addCat">Nova</button>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="field"><label>Valor (R$) *</label><input id="eV" type="number" step="0.01" min="0" required></div>
+      <div class="field"><label>Data</label><input id="eD" type="date"></div>
+    </div>
+    <div class="field"><label>Descrição</label><input id="eDesc" placeholder="Ex.: fornecedor X, parcela 2/3"></div>
     <div class="dlg-foot">
       <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
       <button class="btn primary" id="save" value="ok" type="submit">Lançar</button>
     </div>
+  </form>
+</dialog>
+
+<!-- Categorias -->
+<dialog id="dlgCat">
+  <form class="dlg" method="dialog">
+    <h3>Plano de contas</h3>
+    <p class="hint" style="margin:0;font-size:12px;color:var(--ink-3)">
+      As categorias padrão já vêm prontas. Você pode criar as suas — e remover as que criou.</p>
+    <div class="field"><label style="color:var(--ok)">Entradas</label><div class="cats-list" id="listIn"></div></div>
+    <div class="field"><label style="color:var(--crit)">Saídas</label><div class="cats-list" id="listOut"></div></div>
+    <div class="field"><label>Criar nova</label>
+      <div class="catrow">
+        <input id="ncName" placeholder="Nome da categoria">
+        <select id="ncKind" style="max-width:130px"><option value="despesa">Saída</option><option value="receita">Entrada</option></select>
+        <button type="button" class="btn sm" id="ncAdd">Criar</button>
+      </div>
+    </div>
+    <div class="dlg-foot"><button class="btn ghost" value="ok" type="submit">Fechar</button></div>
   </form>
 </dialog>
 
@@ -85,15 +153,25 @@
 const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const D=(s)=>s?new Date(s).toLocaleDateString('pt-BR'):'—';
 async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
-const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
-document.getElementById('desp').insertAdjacentHTML('afterbegin',ICO('mais',16));
-let per='month';
+const vazio=(i,t,d)=>`<div class="empty">${ICO(i,28)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
+document.getElementById('novo').insertAdjacentHTML('afterbegin',ICO('mais',16));
+document.getElementById('cats').insertAdjacentHTML('afterbegin',ICO('lista',16));
+let per='month', kind='despesa', CATS={receita:[],despesa:[]};
 
 function kpi(o){return `<div class="kpi ${o.mod||''}">
   <div class="kpi-top"><span class="label">${o.label}</span>
     <span class="ico-box ${o.tone||''}" style="width:30px;height:30px">${ICO(o.ico,16)}</span></div>
   <div class="kpi-val" style="${o.color?'color:'+o.color:''}">${o.val}</div>
   <div class="kpi-sub"><span>${o.sub}</span></div></div>`;}
+
+function barras(el,dados,tipo){
+  if(!dados.length){el.innerHTML=vazio('financeiro','Sem lançamentos','Nada neste período.');return;}
+  const max=Math.max(...dados.map(d=>d.total),1);
+  el.innerHTML=dados.map(d=>`<div class="bar-row">
+    <span class="bar-lab" title="${d.label}">${d.label}</span>
+    <span class="bar-track"><span class="bar-fill ${tipo}" style="width:${Math.max(3,Math.round(d.total/max*100))}%"></span></span>
+    <span class="bar-val">${BRL(d.total)}</span></div>`).join('');
+}
 
 async function load(){
   const d=await api('/api/financial?period='+per);
@@ -105,14 +183,20 @@ async function load(){
     kpi({label:'A receber',ico:'relogio',tone:d.a_receber>0?'warn':'',mod:d.a_receber>0?'is-warn':'',val:BRL(d.a_receber),sub:'fiado em aberto'}),
   ].join('');
 
-  const bm=document.getElementById('bm');
-  if(d.by_method.length){
-    const max=Math.max(...d.by_method.map(m=>m.total),1);
-    bm.innerHTML=d.by_method.map(m=>`<div class="bar-row">
-      <span class="bar-lab">${m.label}</span>
-      <span class="bar-track"><span class="bar-fill" style="width:${Math.max(3,Math.round(m.total/max*100))}%"></span></span>
-      <span class="bar-val">${BRL(m.total)}</span></div>`).join('');
-  } else bm.innerHTML=vazio('financeiro','Sem recebimentos','Nenhuma venda paga neste período.');
+  // duas frentes
+  const pdv=d.por_origem.find(o=>o.origem==='PDV')||{total:0,n:0};
+  const site=d.por_origem.find(o=>o.origem==='Site')||{total:0,n:0};
+  document.getElementById('origem').innerHTML=`
+    <div class="card org"><span class="ico-box brand">${ICO('pdv',18)}</span>
+      <span class="txt"><span class="v">${BRL(pdv.total)}</span><span class="n">${pdv.n} venda(s) no balcão</span></span></div>
+    <div class="card org"><span class="ico-box brand">${ICO('site',18)}</span>
+      <span class="txt"><span class="v">${BRL(site.total)}</span><span class="n">${site.n} venda(s) pelo site</span></span>
+      <button class="btn sm ghost" id="impBtn" type="button" style="margin-left:auto">Buscar vendas</button></div>`;
+  document.getElementById('imp').textContent=d.ultima_importacao?('site lido em '+D(d.ultima_importacao)):'';
+  document.getElementById('impBtn').onclick=importar;
+
+  barras(document.getElementById('catIn'),d.por_categoria_receita,'in');
+  barras(document.getElementById('catOut'),d.por_categoria_despesa,'out');
 
   const mov=document.getElementById('mov');
   mov.innerHTML=d.entries.length?d.entries.map(e=>{
@@ -120,22 +204,74 @@ async function load(){
     return `<div class="m"><div class="l">
       <span class="ico-box ${inn?'brand':'crit'}" style="width:30px;height:30px">${ICO(inn?'subiu':'desceu',15)}</span>
       <span class="txt"><span class="d">${e.description||e.category}</span><span class="s">${D(e.created_at)} · ${e.category}</span></span>
-      </div><span class="r ${inn?'in':'out'}">${inn?'+':'−'} ${BRL(e.amount)}</span></div>`;
+      </div><span class="rt"><span class="r ${inn?'in':'out'}">${inn?'+':'−'} ${BRL(e.amount)}</span>
+      ${e.ref?'':`<button class="ib" data-del="${e.id}" type="button" aria-label="apagar">${ICO('lixeira',15)}</button>`}</span></div>`;
   }).join(''):vazio('recibo','Sem lançamentos','Nada movimentado neste período.');
+  mov.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Apagar este lançamento?'))return;
+    await api('/api/financial/entry/'+b.dataset.del,{method:'DELETE'});load();});
 }
 
-document.getElementById('per').onclick=e=>{const b=e.target.closest('button');if(!b)return;
-  document.querySelectorAll('#per button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');per=b.dataset.p;load();};
-const dlg=document.getElementById('dlg');
-document.getElementById('desp').onclick=()=>{['eD','eC','eV'].forEach(i=>document.getElementById(i).value='');dlg.showModal();};
+async function importar(){
+  const b=document.getElementById('impBtn');b.disabled=true;b.textContent='Buscando…';
+  try{
+    const r=await api('/api/import-orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({days:30})});
+    alert(`Vendas do site (últimos 30 dias):\n\n${r.importados} lançada(s) agora\n${r.ja_existiam} já estavam aqui\n${r.aguardando_pagamento} aguardando pagamento\n\nTotal analisado: ${r.analisados}`);
+    load();
+  }catch(e){alert('Não deu pra buscar: '+e.message);}
+  finally{b.disabled=false;b.textContent='Buscar vendas';}
+}
+
+/* categorias */
+async function carregarCats(){
+  CATS=await api('/api/fin-categories');
+  const sel=document.getElementById('eCat');
+  sel.innerHTML=CATS[kind].map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+  const render=(el,arr)=>{el.innerHTML=arr.map(c=>`<span class="cat-chip ${c.is_system?'sys':''}">${c.name}
+    ${c.is_system?'':`<span class="x" data-cat="${c.id}">${ICO('lixeira',12)}</span>`}</span>`).join('')||'<span class="hint">—</span>';};
+  render(document.getElementById('listIn'),CATS.receita);
+  render(document.getElementById('listOut'),CATS.despesa);
+  document.querySelectorAll('[data-cat]').forEach(x=>x.onclick=async()=>{
+    try{await api('/api/fin-categories/'+x.dataset.cat,{method:'DELETE'});carregarCats();}catch(e){alert(e.message);}});
+}
+function setKind(k){kind=k;
+  document.getElementById('kOut').className='kb'+(k==='despesa'?' sel-out':'');
+  document.getElementById('kIn').className='kb'+(k==='receita'?' sel-in':'');
+  const sel=document.getElementById('eCat');
+  sel.innerHTML=CATS[k].map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+}
+document.getElementById('kOut').onclick=()=>setKind('despesa');
+document.getElementById('kIn').onclick=()=>setKind('receita');
+document.getElementById('addCat').onclick=async()=>{
+  const nome=prompt('Nome da nova categoria:');if(!nome)return;
+  await api('/api/fin-categories',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:nome,kind})});
+  await carregarCats();setKind(kind);document.getElementById('eCat').value=nome;
+};
+document.getElementById('ncAdd').onclick=async()=>{
+  const nome=document.getElementById('ncName').value.trim();if(!nome)return;
+  await api('/api/fin-categories',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:nome,kind:document.getElementById('ncKind').value})});
+  document.getElementById('ncName').value='';carregarCats();
+};
+
+const dlg=document.getElementById('dlg'),dlgCat=document.getElementById('dlgCat');
+document.getElementById('novo').onclick=()=>{
+  ['eV','eDesc'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('eD').value=new Date().toISOString().slice(0,10);
+  setKind('despesa');dlg.showModal();
+};
+document.getElementById('cats').onclick=()=>{carregarCats();dlgCat.showModal();};
 document.getElementById('save').onclick=async e=>{
   const v=parseFloat(document.getElementById('eV').value);if(!v||v<=0)return;
   e.preventDefault();
-  try{await api('/api/financial/expense',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({description:document.getElementById('eD').value.trim(),category:document.getElementById('eC').value.trim(),amount:v})});
+  try{await api('/api/financial/entry',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({type:kind,category:document.getElementById('eCat').value,
+      description:document.getElementById('eDesc').value.trim(),amount:v,date:document.getElementById('eD').value})});
     dlg.close();load();}catch(err){alert(err.message);}
 };
-load();
+document.getElementById('per').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+  document.querySelectorAll('#per button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');per=b.dataset.p;load();};
+carregarCats().then(()=>setKind('despesa'));load();
 </script>
 </body>
 </html>

@@ -26,6 +26,13 @@
     grafico: '<path d="M4 20V4"/><path d="M4 20h16"/><rect x="7.5" y="12" width="3" height="5" rx="1"/><rect x="12.5" y="8" width="3" height="9" rx="1"/><rect x="17" y="14" width="3" height="3" rx="1"/>',
     sair: '<path d="M14 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H14"/><path d="M17.5 12H10"/><path d="m15 9 3 3-3 3"/>',
     sync: '<path d="M20 12a8 8 0 0 1-13.7 5.6L4 15.5"/><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.5"/><path d="M4 20v-4.5h4.5M20 4v4.5h-4.5"/>',
+    lembrete: '<path d="M6.5 4.5h11a1.5 1.5 0 0 1 1.5 1.5v14l-3.5-2.2-3.5 2.2-3.5-2.2L5 20V6a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M9 9h6M9 12.5h4"/>',
+    sino: '<path d="M18 9a6 6 0 1 0-12 0c0 5-2 6.5-2 6.5h16S18 14 18 9z"/><path d="M13.7 19.5a2 2 0 0 1-3.4 0"/>',
+    site: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.2 2.4 3.4 5.4 3.4 8.5S14.2 18.2 12 20.5c-2.2-2.3-3.4-5.4-3.4-8.5S9.8 5.9 12 3.5z"/>',
+    lista: '<path d="M8.5 6.5h11M8.5 12h11M8.5 17.5h11"/><circle cx="4.8" cy="6.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.8" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.8" cy="17.5" r="1.1" fill="currentColor" stroke="none"/>',
+    lixeira: '<path d="M4.5 6.5h15"/><path d="M9.5 6.5V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v1.5"/><path d="M6.5 6.5 7.4 19a1.5 1.5 0 0 0 1.5 1.4h6.2a1.5 1.5 0 0 0 1.5-1.4l.9-12.5"/>',
+    calendario: '<rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3.5v4M16 3.5v4"/>',
+    baixar: '<path d="M12 3.5v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4.5 19.5h15"/>',
     caixa_vazia: '<path d="M3.5 8.5h17v10a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M2.5 8.5 5 4h14l2.5 4.5"/><path d="M12 4v4.5"/><path d="M9.5 13h5"/>',
   };
   window.ICO = function (name, size) {

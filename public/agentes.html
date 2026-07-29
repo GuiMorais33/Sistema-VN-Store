@@ -80,6 +80,7 @@ function card(a){
 
 async function load(){
   const d=await api('/api/dashboard');
+  const R=d.reminders||{atrasados:0,hoje:0,abertos:0};
   const ativos=[
     {nome:'Vendas',fn:'PDV & pedidos',ico:'pdv',tone:'brand',estado:'Ativo',pill:'live',k:'Hoje',
      txt:d.orders_today>0?`<b>${d.orders_today}</b> venda(s) · <b>${BRL(d.revenue_today)}</b> no caixa.`:'Pronto pra vender. Nada lançado hoje ainda.',
@@ -97,6 +98,11 @@ async function load(){
      link:'/clientes',linkTxt:'Ver clientes',meta:'baixa em 1 clique'},
     {nome:'Clientes',fn:'Cadastro & ranking',ico:'clientes',tone:'brand',estado:'Ativo',pill:'live',k:'Base',
      txt:'Ranking de quem mais gasta e o histórico completo de cada cliente.',link:'/clientes',linkTxt:'Abrir',meta:'tempo real'},
+    {nome:'Lembretes',fn:'Não deixa escapar',ico:'sino',tone:(R.atrasados>0?'crit':(R.hoje>0?'warn':'brand')),
+     estado:R.atrasados>0?'Atrasado':(R.hoje>0?'Pra hoje':'Em dia'),pill:R.atrasados>0?'crit':(R.hoje>0?'demo':'ok'),k:'Situação',
+     txt:R.atrasados>0?`<b>${R.atrasados}</b> lembrete(s) passaram da data e <b>${R.abertos}</b> estão em aberto.`
+        :(R.hoje>0?`<b>${R.hoje}</b> lembrete(s) vencem hoje.`:(R.abertos>0?`<b>${R.abertos}</b> lembrete(s) em aberto, nenhum vencido.`:'Nada pendente por aqui.')),
+     link:'/lembretes',linkTxt:'Ver lembretes',meta:'pagamentos e encomendas'},
   ];
   const futuros=[
     {nome:'Atendimento',fn:'SAC · WhatsApp',ico:'conversa',estado:'Em breve',k:'Vai fazer',soon:true,
@@ -115,6 +121,7 @@ async function load(){
   if(d.orders_today>0)p.push(`<b>${d.orders_today}</b> venda(s) hoje, <b class="hl">${BRL(d.revenue_today)}</b> no caixa.`);
   else p.push('Sem vendas hoje ainda.');
   if(d.receivable_count>0)p.push(`<b class="hl">${BRL(d.receivable_total)}</b> em fiado pra receber.`);
+  if(R.atrasados>0)p.push(`<b>${R.atrasados}</b> lembrete(s) atrasado(s).`);
   if(d.low_stock>0)p.push(`<b>${d.low_stock}</b> item(ns) perto da ruptura.`);
   document.getElementById('msg').innerHTML='Fala, chefe. '+p.join(' ')+' O resto do time está no aguardo pra você acionar.';
 }

@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import db, { seedDemoIfEmpty, getSetting, setSetting } from './db.js';
+import db, { seedDemoIfEmpty, getSetting, setSetting, seedCategories, categoryId, migrateOldCategories } from './db.js';
 import * as nuvem from './nuvemshop.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -63,6 +63,8 @@ const nameOf = (obj) => {
   return obj.pt || obj.es || obj.en || Object.values(obj)[0] || '';
 };
 
+if (seedCategories()) console.log('› Plano de contas padrão criado.');
+{ const m = migrateOldCategories(); if (m) console.log(`› ${m} categoria(s) antiga(s) traduzida(s) para o plano de contas.`); }
 if (!isLive() && seedDemoIfEmpty()) console.log('› Modo demonstração: catálogo e clientes de exemplo criados.');
 
 // ---------------------- Saúde ----------------------
@@ -524,7 +526,11 @@ app.post('/api/sales', async (req, res) => {
       if (l.v.stock_management) { updStock.run(l.qty, ts, l.v.id); insMove.run(l.v.id, -l.qty, 'venda_pdv', code, ts); }
     }
     // Caixa: só entra quando PAGO. Fiado vira conta a receber (a própria venda pendente).
-    if (status === 'pago') db.prepare(`INSERT INTO financial_entries (type, category, description, amount, ref, created_at) VALUES ('receita','venda_pdv',?,?,?,?)`).run(`Venda PDV ${code}`, total, code, ts);
+    if (status === 'pago') {
+      db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, ref, created_at)
+        VALUES ('receita','Venda PDV',?,?,?,?,?)`)
+        .run(categoryId('Venda PDV', 'receita'), `Venda PDV ${code}`, total, code, ts);
+    }
     return id;
   })();
 
@@ -557,9 +563,11 @@ app.post('/api/sales/:id/settle', (req, res) => {
   if (s.payment_status === 'pago') return res.json({ ok: true, already: true });
   const ts = now();
   const method = (req.body && req.body.payment_method) || s.payment_method || '';
+  const cat = s.channel === 'site' ? 'Venda Site' : 'Venda PDV';
   db.transaction(() => {
     db.prepare("UPDATE sales SET payment_status='pago', paid_at=?, payment_method=? WHERE id=?").run(ts, method, s.id);
-    db.prepare(`INSERT INTO financial_entries (type, category, description, amount, ref, created_at) VALUES ('receita','venda_pdv',?,?,?,?)`).run(`Recebimento ${s.code}`, s.total, s.code, ts);
+    db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, ref, created_at)
+      VALUES ('receita',?,?,?,?,?,?)`).run(cat, categoryId(cat, 'receita'), `Recebimento ${s.code}`, s.total, s.code, ts);
   })();
   res.json({ ok: true, code: s.code, total: s.total });
 });
@@ -578,8 +586,23 @@ app.get('/api/dashboard', (req, res) => {
   const recent = db.prepare('SELECT code, customer_name, payment_method, payment_status, total, created_at, synced_nuvemshop FROM sales ORDER BY id DESC LIMIT 8').all();
   const lowList = db.prepare('SELECT product_name, variant_name, stock FROM variants WHERE stock_management = 1 AND stock <= 4 ORDER BY stock ASC LIMIT 8').all();
   const pendingList = db.prepare(`SELECT id, code, customer_name, total, created_at FROM sales WHERE payment_status='pendente' ORDER BY created_at ASC LIMIT 8`).all();
+  // Lembretes: o que vence hoje ou já passou
+  const hojeStr = new Date().toISOString().slice(0, 10);
+  const remResumo = db.prepare(`SELECT
+      COALESCE(SUM(CASE WHEN done=0 AND due_date < ? THEN 1 ELSE 0 END),0) atrasados,
+      COALESCE(SUM(CASE WHEN done=0 AND due_date = ? THEN 1 ELSE 0 END),0) hoje,
+      COALESCE(SUM(CASE WHEN done=0 THEN 1 ELSE 0 END),0) abertos FROM reminders`).get(hojeStr, hojeStr);
+  const remLista = db.prepare(`SELECT r.id, r.title, r.due_date, r.kind, r.amount, c.name customer_name
+    FROM reminders r LEFT JOIN customers c ON c.id = r.customer_id
+    WHERE r.done = 0 AND (r.due_date IS NULL OR r.due_date <= date(?, '+2 day'))
+    ORDER BY COALESCE(r.due_date,'9999-12-31') LIMIT 6`).all(hojeStr);
+  // Vendas por origem hoje (PDV x Site)
+  const origemHoje = db.prepare(`SELECT CASE WHEN channel='site' THEN 'site' ELSE 'pdv' END o,
+    COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
+    WHERE payment_status='pago' AND created_at >= ? GROUP BY o`).all(iso);
   res.json({
     mode: isLive() ? 'live' : 'demo',
+    reminders: remResumo, reminders_list: remLista, por_origem_hoje: origemHoje,
     revenue_today: money(today.revenue), orders_today: today.orders, ticket, margin_pct: marginPct,
     low_stock: lowStock, stock_value_cost: money(stockVal),
     receivable_total: money(recv.total), receivable_count: recv.n,
@@ -632,17 +655,167 @@ app.get('/api/financial', (req, res) => {
   const aReceber = db.prepare("SELECT COALESCE(SUM(total),0) n FROM sales WHERE payment_status='pendente'").get().n;
   const byMethod = db.prepare(`SELECT COALESCE(NULLIF(payment_method,''),'—') label, COUNT(*) n, COALESCE(SUM(total),0) total
     FROM sales WHERE payment_status='pago' ${cond} GROUP BY payment_method ORDER BY total DESC`).all(...a);
-  const entries = db.prepare(`SELECT type, category, description, amount, ref, created_at FROM financial_entries
-    ${since ? 'WHERE created_at >= ?' : ''} ORDER BY id DESC LIMIT 80`).all(...a);
-  res.json({ period, receita: money(receita), despesa: money(despesa), saldo: money(receita - despesa), a_receber: money(aReceber), by_method: byMethod, entries });
+  const entries = db.prepare(`SELECT id, type, category, description, amount, ref, created_at FROM financial_entries
+    ${since ? 'WHERE created_at >= ?' : ''} ORDER BY id DESC LIMIT 120`).all(...a);
+  // Por categoria (o coração da gestão): entra e sai, agrupado.
+  const porCategoria = (tipo) => db.prepare(`SELECT COALESCE(NULLIF(category,''),'Sem categoria') label,
+      COUNT(*) n, COALESCE(SUM(amount),0) total FROM financial_entries
+      WHERE type = ? ${cond} GROUP BY label ORDER BY total DESC`).all(tipo, ...a);
+  // Receita por origem (PDV x Site) — as duas frentes.
+  const porOrigem = db.prepare(`SELECT CASE WHEN channel='site' THEN 'Site' ELSE 'PDV' END origem,
+      COUNT(*) n, COALESCE(SUM(total),0) total FROM sales
+      WHERE payment_status='pago' ${cond} GROUP BY origem ORDER BY total DESC`).all(...a);
+  res.json({
+    period, receita: money(receita), despesa: money(despesa), saldo: money(receita - despesa),
+    a_receber: money(aReceber), by_method: byMethod, entries,
+    por_categoria_receita: porCategoria('receita'), por_categoria_despesa: porCategoria('despesa'),
+    por_origem: porOrigem, ultima_importacao: getSetting('last_orders_import'),
+  });
 });
 
-app.post('/api/financial/expense', (req, res) => {
+// Lançamento manual (despesa ou receita avulsa)
+app.post('/api/financial/entry', (req, res) => {
   const b = req.body || {};
+  const kind = b.type === 'receita' ? 'receita' : 'despesa';
   const amount = money(b.amount);
   if (!amount || amount <= 0) return res.status(400).json({ error: 'Informe um valor maior que zero.' });
-  db.prepare("INSERT INTO financial_entries (type, category, description, amount, created_at) VALUES ('despesa', ?, ?, ?, ?)")
-    .run(b.category || 'geral', b.description || 'Despesa', amount, now());
+  const catName = (b.category || '').trim() || (kind === 'receita' ? 'Outras receitas' : 'Outras despesas');
+  const cid = categoryId(catName, kind);
+  const when = b.date ? new Date(b.date + 'T12:00:00').toISOString() : now();
+  db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, created_at)
+    VALUES (?,?,?,?,?,?)`).run(kind, catName, cid, (b.description || '').trim() || catName, amount, when);
+  res.json({ ok: true });
+});
+// Compatibilidade com a versão anterior
+app.post('/api/financial/expense', (req, res) => {
+  req.body = { ...(req.body || {}), type: 'despesa' };
+  const b = req.body;
+  const amount = money(b.amount);
+  if (!amount || amount <= 0) return res.status(400).json({ error: 'Informe um valor maior que zero.' });
+  const catName = (b.category || '').trim() || 'Outras despesas';
+  db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, created_at)
+    VALUES ('despesa',?,?,?,?,?)`).run(catName, categoryId(catName, 'despesa'), b.description || catName, amount, now());
+  res.json({ ok: true });
+});
+
+app.delete('/api/financial/entry/:id', (req, res) => {
+  db.prepare('DELETE FROM financial_entries WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ---- Plano de contas ----
+app.get('/api/fin-categories', (req, res) => {
+  const rows = db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM financial_entries e WHERE e.category_id = c.id) AS uses
+    FROM fin_categories c WHERE archived = 0 ORDER BY kind, name`).all();
+  res.json({ receita: rows.filter((r) => r.kind === 'receita'), despesa: rows.filter((r) => r.kind === 'despesa') });
+});
+app.post('/api/fin-categories', (req, res) => {
+  const b = req.body || {};
+  const name = String(b.name || '').trim();
+  const kind = b.kind === 'receita' ? 'receita' : 'despesa';
+  if (!name) return res.status(400).json({ error: 'Dê um nome à categoria.' });
+  const id = categoryId(name, kind);
+  res.json({ ok: true, category: db.prepare('SELECT * FROM fin_categories WHERE id = ?').get(id) });
+});
+app.delete('/api/fin-categories/:id', (req, res) => {
+  const c = db.prepare('SELECT * FROM fin_categories WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Categoria não encontrada.' });
+  if (c.is_system) return res.status(400).json({ error: 'Categoria padrão não pode ser removida.' });
+  db.prepare('UPDATE fin_categories SET archived = 1 WHERE id = ?').run(c.id);
+  res.json({ ok: true });
+});
+
+// ==================== VENDAS DO SITE (Nuvemshop) ====================
+// Lê os pedidos da loja e lança a receita. NÃO mexe no estoque: quem
+// vende no site é a Nuvemshop, e ela já baixa o estoque dela — o nosso
+// acerta na sincronização de produtos (que traz o valor atual dela).
+app.post('/api/import-orders', async (req, res) => {
+  if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
+  const b = req.body || {};
+  const dias = Math.min(365, Math.max(1, parseInt(b.days, 10) || 30));
+  const desde = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10);
+  try {
+    const orders = await nuvem.listOrders({ since: desde });
+    const jaTem = db.prepare('SELECT 1 FROM sales WHERE nuvemshop_order_id = ?');
+    const insSale = db.prepare(`INSERT INTO sales (code, channel, nuvemshop_order_id, customer_id, customer_name,
+      payment_method, payment_status, paid_at, subtotal, discount, total, cost_total, margin, synced_nuvemshop, created_at)
+      VALUES (?, 'site', ?, NULL, ?, ?, ?, ?, ?, 0, ?, 0, ?, 1, ?)`);
+    const insFin = db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, ref, created_at)
+      VALUES ('receita','Venda Site',?,?,?,?,?)`);
+    const catSite = categoryId('Venda Site', 'receita');
+
+    let novos = 0, pulados = 0, pendentes = 0;
+    db.transaction(() => {
+      for (const o of orders) {
+        const oid = String(o.id);
+        if (jaTem.get(oid)) { pulados += 1; continue; }
+        const pago = (o.payment_status || '').toLowerCase() === 'paid';
+        const cancelado = (o.status || '').toLowerCase() === 'cancelled' || o.cancelled_at;
+        if (cancelado) { pulados += 1; continue; }
+        if (!pago) { pendentes += 1; continue; }  // só entra no caixa quando pago
+        const total = money(parseFloat(o.total) || 0);
+        const quando = o.created_at ? new Date(o.created_at).toISOString() : now();
+        const cliente = (o.customer && (o.customer.name || o.customer.email)) || 'Cliente do site';
+        const forma = (o.payment_details && o.payment_details.method) || o.gateway || 'Site';
+        const code = 'SITE-' + (o.number || oid);
+        insSale.run(code, oid, cliente, forma, 'pago', quando, total, total, total, quando);
+        insFin.run(catSite, `Venda no site ${code}`, total, code, quando);
+        novos += 1;
+      }
+    })();
+    setSetting('last_orders_import', now());
+    res.json({ ok: true, importados: novos, ja_existiam: pulados, aguardando_pagamento: pendentes, analisados: orders.length, desde });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// ==================== LEMBRETES ====================
+app.get('/api/reminders', (req, res) => {
+  const filtro = req.query.filter || 'abertos';
+  const hoje = new Date().toISOString().slice(0, 10);
+  let where = 'r.done = 0';
+  if (filtro === 'feitos') where = 'r.done = 1';
+  else if (filtro === 'todos') where = '1=1';
+  const rows = db.prepare(`SELECT r.*, c.name AS customer_name FROM reminders r
+    LEFT JOIN customers c ON c.id = r.customer_id
+    WHERE ${where} ORDER BY r.done, COALESCE(r.due_date,'9999-12-31'), r.id DESC LIMIT 200`).all();
+  const marcado = rows.map((r) => ({
+    ...r,
+    atrasado: !r.done && r.due_date && r.due_date < hoje,
+    hoje: !r.done && r.due_date === hoje,
+  }));
+  const resumo = db.prepare(`SELECT
+      SUM(CASE WHEN done=0 AND due_date < ? THEN 1 ELSE 0 END) AS atrasados,
+      SUM(CASE WHEN done=0 AND due_date = ? THEN 1 ELSE 0 END) AS hoje,
+      SUM(CASE WHEN done=0 THEN 1 ELSE 0 END) AS abertos
+    FROM reminders`).get(hoje, hoje);
+  res.json({ items: marcado, resumo });
+});
+app.post('/api/reminders', (req, res) => {
+  const b = req.body || {};
+  const title = String(b.title || '').trim();
+  if (!title) return res.status(400).json({ error: 'Escreva o que precisa ser lembrado.' });
+  const id = db.prepare(`INSERT INTO reminders (title, notes, due_date, kind, customer_id, amount, created_at)
+    VALUES (?,?,?,?,?,?,?)`).run(title, (b.notes || '').trim(), b.due_date || null,
+    b.kind || 'geral', b.customer_id || null, b.amount ? money(b.amount) : null, now()).lastInsertRowid;
+  res.json({ ok: true, id });
+});
+app.put('/api/reminders/:id', (req, res) => {
+  const r = db.prepare('SELECT * FROM reminders WHERE id = ?').get(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Lembrete não encontrado.' });
+  const b = req.body || {};
+  if (b.done !== undefined) {
+    db.prepare('UPDATE reminders SET done = ?, done_at = ? WHERE id = ?').run(b.done ? 1 : 0, b.done ? now() : null, r.id);
+  } else {
+    db.prepare('UPDATE reminders SET title=?, notes=?, due_date=?, kind=?, customer_id=?, amount=? WHERE id=?')
+      .run(b.title ?? r.title, b.notes ?? r.notes, b.due_date ?? r.due_date, b.kind ?? r.kind,
+        b.customer_id ?? r.customer_id, b.amount !== undefined ? money(b.amount) : r.amount, r.id);
+  }
+  res.json({ ok: true });
+});
+app.delete('/api/reminders/:id', (req, res) => {
+  db.prepare('DELETE FROM reminders WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 
@@ -693,6 +866,7 @@ app.get('/produtos', page('produtos.html'));
 app.get('/estoque', page('produtos.html'));
 app.get('/financeiro', page('financeiro.html'));
 app.get('/agentes', page('agentes.html'));
+app.get('/lembretes', page('lembretes.html'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {

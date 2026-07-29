@@ -101,6 +101,26 @@ export async function listAllProducts(opts = {}) {
   return all;
 }
 
+// Pedidos da loja (vendas do site). opts.since = AAAA-MM-DD.
+export async function listOrders(opts = {}) {
+  const all = [];
+  let page = 1;
+  const per = 50;
+  const since = opts.since ? `&created_at_min=${opts.since}T00:00:00-03:00` : '';
+  const status = opts.status ? `&status=${opts.status}` : '';
+  const maxPages = opts.maxPages || 40;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data } = await request('GET', `/orders?per_page=${per}&page=${page}${since}${status}`);
+    if (!Array.isArray(data) || data.length === 0) break;
+    all.push(...data);
+    if (data.length < per) break;
+    page += 1;
+    if (page > maxPages) break;
+  }
+  return all;
+}
+
 // Categorias da loja (id + nome), para espelhar a organização do site.
 export async function listAllCategories() {
   const all = [];
