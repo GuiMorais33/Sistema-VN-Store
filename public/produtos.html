@@ -30,9 +30,13 @@
   select{padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:13px}
 
   .table{display:flex;flex-direction:column;gap:8px}
-  .thead,.trow{display:grid;grid-template-columns:2.4fr 1fr 1fr .8fr 1fr 1fr auto;gap:10px;align-items:center}
+  .thead,.trow{display:grid;grid-template-columns:52px 2.4fr 1fr 1fr .8fr 1fr 1fr auto;gap:10px;align-items:center}
   .thead{padding:0 14px;font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-faint);font-weight:700}
   .trow{padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,var(--panel-2),var(--panel));cursor:pointer;transition:.15s}
+  /* Miniatura: com muitos produtos de nome parecido, a foto é o que distingue. */
+  .thumb{width:52px;height:52px;border-radius:10px;overflow:hidden;background:var(--bg-2);border:1px solid var(--line);display:grid;place-items:center;flex:0 0 auto}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .thumb .ph{font-size:18px;opacity:.35}
   .trow:hover{border-color:rgba(47,210,79,.4)}
   .trow .nm{font-weight:700;font-size:14px}
   .trow .meta{font-size:11.5px;color:var(--ink-dim)}
@@ -41,7 +45,13 @@
   .lowb{color:var(--amber);font-weight:700}
   .sync{font-size:10px;font-weight:800;text-transform:uppercase;padding:4px 8px;border-radius:999px;white-space:nowrap}
   .sync.on{color:var(--green-hi);background:rgba(47,210,79,.1)} .sync.off{color:var(--amber);background:rgba(245,178,31,.1)}
-  @media (max-width:760px){.thead{display:none}.trow{grid-template-columns:1fr auto;grid-auto-rows:auto}.trow>*:nth-child(n+3){grid-column:1/-1}}
+  @media (max-width:760px){
+    .thead{display:none}
+    /* No celular: foto à esquerda, dados empilhados ao lado. */
+    .trow{grid-template-columns:52px 1fr;grid-auto-rows:auto;gap:4px 12px;align-items:start}
+    .trow .thumb{grid-row:1 / span 6;align-self:center}
+    .trow>*:not(.thumb){grid-column:2}
+  }
 
   dialog{border:1px solid var(--line);border-radius:16px;background:var(--panel-2);color:var(--ink);padding:0;max-width:640px;width:94vw;max-height:92vh}
   dialog::backdrop{background:rgba(0,0,0,.65)}
@@ -87,7 +97,7 @@
   </div>
 
   <div class="table">
-    <div class="thead"><div>Produto</div><div>Marca</div><div>Categoria</div><div>Variações</div><div>Estoque</div><div>Valor custo</div><div>Site</div></div>
+    <div class="thead"><div>Foto</div><div>Produto</div><div>Marca</div><div>Categoria</div><div>Variações</div><div>Estoque</div><div>Valor custo</div><div>Site</div></div>
     <div id="rows"><div class="note" style="padding:16px">Carregando…</div></div>
   </div>
 </div>
@@ -158,7 +168,10 @@ async function loadRows(){ const q=document.getElementById('search').value.trim(
   if(!rows.length){ box.innerHTML='<div class="note" style="padding:16px">Nenhum produto. Clique em “Novo produto”.</div>'; return; }
   box.innerHTML='';
   for(const p of rows){ const low=p.total_stock<=4; const el=document.createElement('div'); el.className='trow';
-    el.innerHTML=`<div><div class="nm">${p.name}</div><div class="meta">${p.min_price===p.max_price?BRL(p.min_price):BRL(p.min_price)+'–'+BRL(p.max_price)}</div></div>
+    const thumb = p.image_url
+      ? `<div class="thumb"><img src="${p.image_url}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<span class=\\'ph\\'>👕</span>'"></div>`
+      : `<div class="thumb"><span class="ph">👕</span></div>`;
+    el.innerHTML=`${thumb}<div><div class="nm">${p.name}</div><div class="meta">${p.min_price===p.max_price?BRL(p.min_price):BRL(p.min_price)+'–'+BRL(p.max_price)}</div></div>
       <div class="meta">${p.brand||'—'}</div><div class="meta">${p.category||'—'}</div>
       <div class="num">${p.variant_count}</div>
       <div class="num ${low?'lowb':''}">${p.total_stock} un.</div>

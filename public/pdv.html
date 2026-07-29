@@ -22,6 +22,10 @@
   .search:focus{outline:2px solid var(--green);outline-offset:1px;border-color:var(--green)}
   .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:14px}
   .prod{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:13px;padding:12px;text-align:left;cursor:pointer;transition:.15s;display:flex;flex-direction:column;gap:6px;min-height:104px}
+  /* Foto no card: distingue produtos de nome parecido na hora de vender. */
+  .prod .ph{width:100%;aspect-ratio:1;max-height:112px;border-radius:9px;overflow:hidden;background:var(--bg-2);border:1px solid var(--line-soft);display:grid;place-items:center;margin-bottom:2px}
+  .prod .ph img{width:100%;height:100%;object-fit:cover;display:block}
+  .prod .ph span{font-size:22px;opacity:.3}
   .prod:hover{transform:translateY(-2px);border-color:rgba(47,210,79,.4);box-shadow:0 8px 22px rgba(0,0,0,.45)}
   .prod:disabled{opacity:.4;cursor:not-allowed;transform:none}
   .prod .nm{font-weight:700;font-size:13.5px;line-height:1.25}
@@ -155,7 +159,10 @@ function renderProducts(){ const g=document.getElementById('prodGrid');
   g.innerHTML='';
   for(const v of state.products){ const [cls,label]=stockClass(v); const out=v.stock_management&&v.stock<=0;
     const b=document.createElement('button'); b.className='prod'; b.type='button'; b.disabled=out;
-    b.innerHTML=`<div class="nm">${v.product_name}</div><div class="vr">${v.variant_name||''}${v.sku?' · '+v.sku:''}</div><div class="pr">${BRL(v.price)}</div><div class="st ${cls}">${label}</div>`;
+    const ph = v.image_url
+      ? `<div class="ph"><img src="${v.image_url}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<span>👕</span>'"></div>`
+      : `<div class="ph"><span>👕</span></div>`;
+    b.innerHTML=`${ph}<div class="nm">${v.product_name}</div><div class="vr">${v.variant_name||''}${v.brand?' · '+v.brand:''}</div><div class="pr">${BRL(v.price)}</div><div class="st ${cls}">${label}</div>`;
     b.addEventListener('click',()=>addToCart(v)); g.appendChild(b); } }
 
 function addToCart(v){ const cur=state.cart.get(v.id)||{v,qty:0};

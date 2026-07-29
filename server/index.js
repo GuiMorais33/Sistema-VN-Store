@@ -79,7 +79,7 @@ app.get('/api/health', (req, res) => {
 // ==================== PRODUTOS (PDV) ====================
 app.get('/api/products', (req, res) => {
   const q = (req.query.q || '').trim();
-  const base = `SELECT v.*, p.brand, p.category FROM variants v LEFT JOIN products p ON p.id = v.product_id`;
+  const base = `SELECT v.*, p.brand, p.category, p.image_url FROM variants v LEFT JOIN products p ON p.id = v.product_id`;
   let rows;
   if (q) {
     const like = `%${q}%`;
