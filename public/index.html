@@ -61,6 +61,37 @@
   @media (max-width:560px){.maestro{grid-template-columns:1fr}}
 
   .settle{display:flex;align-items:center;gap:var(--s3)}
+
+  /* Filas de trabalho */
+  .filas{display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));gap:var(--s3);margin-bottom:var(--s4)}
+  .fila{display:flex;align-items:center;gap:var(--s3);padding:14px var(--s4);text-align:left;cursor:pointer;
+    background:linear-gradient(180deg,var(--surface-2),var(--surface));border:1px solid var(--line);
+    border-radius:var(--r-lg);transition:var(--t-fast);font-family:var(--font-body)}
+  .fila:hover{border-color:rgba(47,210,79,.4);transform:translateY(-1px);box-shadow:var(--sh-2)}
+  .fila .txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .fila .n{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:19px;line-height:1.1}
+  .fila .l{font-size:11.5px;color:var(--ink-3);font-weight:600}
+  .fila.zero{opacity:.55}
+  .fila.zero .n{color:var(--ink-2)}
+  .fila.alerta .n{color:var(--warn)}
+
+  /* Abas de período */
+  .per-wrap{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);
+    border-bottom:1px solid var(--line);margin-bottom:var(--s4);flex-wrap:wrap}
+  .tabs{display:flex;gap:var(--s1)}
+  .tabs button{padding:9px 15px;border:none;background:none;color:var(--ink-3);cursor:pointer;
+    font-size:13.5px;font-weight:700;font-family:var(--font-body);position:relative;transition:var(--t-fast)}
+  .tabs button:hover{color:var(--ink)}
+  .tabs button.sel{color:var(--brand-hi)}
+  .tabs button.sel::after{content:"";position:absolute;left:6px;right:6px;bottom:-1px;height:2px;
+    background:var(--brand);border-radius:2px 2px 0 0;box-shadow:0 0 8px var(--glow)}
+  .auto{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;color:var(--ink-3);padding-bottom:6px}
+  .auto .dot{width:6px;height:6px;border-radius:50%;background:var(--brand);animation:pulse 2.4s ease-in-out infinite}
+
+  /* Modal de fila */
+  .dlgf{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);min-width:min(560px,94vw);max-height:80vh}
+  .dlgf h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;font-size:19px;transform:skewX(-5deg)}
+  .dlgf .lst{display:flex;flex-direction:column;gap:6px;overflow-y:auto}
 </style>
 </head>
 <body>
@@ -84,6 +115,18 @@
     </div>
   </div>
 
+  <!-- Filas de trabalho: o que precisa de ação agora -->
+  <div class="filas" id="filas"></div>
+
+  <!-- Números do período -->
+  <div class="per-wrap">
+    <div class="tabs" id="tabs">
+      <button data-p="hoje" class="sel" type="button">Hoje</button>
+      <button data-p="ontem" type="button">Ontem</button>
+      <button data-p="semana" type="button">Esta semana</button>
+    </div>
+    <span class="auto" id="auto"></span>
+  </div>
   <div class="kpis" id="kpis"></div>
 
   <div class="card chart-card" style="margin-top:var(--s3)">
@@ -122,6 +165,14 @@
 
 </div>
 
+<dialog id="dlgFila">
+  <form class="dlgf" method="dialog">
+    <h3 id="fTit">Fila</h3>
+    <div class="lst rows" id="fLista"></div>
+    <div style="display:flex;justify-content:flex-end"><button class="btn ghost" value="ok" type="submit">Fechar</button></div>
+  </form>
+</dialog>
+
 <script src="/icons.js"></script>
 <script src="/nav.js"></script>
 <script>
@@ -141,19 +192,63 @@ function kpi(o){
     <div class="kpi-sub">${o.subIco?ICO(o.subIco,13):''}<span>${o.sub}</span></div>
   </div>`;
 }
-function renderKpis(d){
-  const el=document.getElementById('kpis');
-  el.innerHTML=[
-    kpi({label:'Faturamento hoje',ico:'financeiro',tone:'brand',mod:'is-brand',val:BRL(d.revenue_today),sub:'vendas pagas'}),
-    kpi({label:'Pedidos hoje',ico:'recibo',val:d.orders_today,sub:'lançados no PDV'}),
-    kpi({label:'Ticket médio',ico:'grafico',val:BRL(d.ticket),sub:'por venda'}),
-    kpi({label:'Margem',ico:'subiu',val:d.margin_pct+'%',sub:'do faturamento'}),
-    kpi({label:'A receber',ico:'relogio',tone:d.receivable_count?'warn':'',mod:d.receivable_count?'is-warn':'',
-         val:BRL(d.receivable_total),sub:d.receivable_count+' venda(s) fiado'}),
-    kpi({label:'Estoque a custo',ico:'estoque',val:BRL(d.stock_value_cost),sub:'capital parado'}),
-    kpi({label:'Ruptura',ico:'alerta',tone:d.low_stock?'warn':'',mod:d.low_stock?'is-warn':'',
-         val:d.low_stock,sub:'itens com 4 un. ou menos'}),
+let OP=null, periodo='hoje', DASH=null;
+
+const FILAS=[
+  {k:'por_cobrar',ico:'financeiro',lab:'Por cobrar',tit:'Aguardando pagamento'},
+  {k:'por_embalar',ico:'estoque',lab:'Por embalar',tit:'Pagos, aguardando separação'},
+  {k:'por_enviar',ico:'entrega',lab:'Por enviar',tit:'Embalados, aguardando despacho'},
+  {k:'por_retirar',ico:'pdv',lab:'Por retirar',tit:'Retirada na loja'},
+];
+function renderFilas(){
+  if(!OP) return;
+  document.getElementById('filas').innerHTML=FILAS.map(f=>{
+    const v=OP.filas[f.k]||{n:0,t:0};
+    const zero=v.n===0;
+    return `<button class="fila ${zero?'zero':(f.k==='por_cobrar'?'alerta':'')}" data-fila="${f.k}" type="button" title="${f.tit}">
+      <span class="ico-box ${zero?'':(f.k==='por_cobrar'?'warn':'brand')}">${ICO(f.ico,17)}</span>
+      <span class="txt"><span class="n">${v.n} ${v.n===1?'venda':'vendas'}</span>
+      <span class="l">${f.lab}${v.t>0?' · '+BRL(v.t):''}</span></span></button>`;
+  }).join('');
+  document.querySelectorAll('[data-fila]').forEach(b=>b.onclick=()=>abrirFila(b.dataset.fila));
+}
+function renderKpis(){
+  if(!OP||!DASH) return;
+  const p=OP.periodos[periodo]||{};
+  const rot={hoje:'hoje',ontem:'ontem',semana:'nesta semana'}[periodo];
+  document.getElementById('kpis').innerHTML=[
+    kpi({label:'Faturamento',ico:'financeiro',tone:'brand',mod:'is-brand',val:BRL(p.faturamento),sub:rot}),
+    kpi({label:'Vendas',ico:'recibo',val:p.pedidos,sub:`${p.pdv.n} no balcão · ${p.site.n} no site`}),
+    kpi({label:'Ticket médio',ico:'grafico',val:BRL(p.ticket),sub:'por venda'}),
+    kpi({label:'Margem',ico:'subiu',val:p.margem_pct+'%',sub:'do faturamento'}),
+    kpi({label:'A receber',ico:'relogio',tone:DASH.receivable_count?'warn':'',mod:DASH.receivable_count?'is-warn':'',
+         val:BRL(DASH.receivable_total),sub:DASH.receivable_count+' em aberto'}),
+    kpi({label:'Estoque a custo',ico:'estoque',val:BRL(DASH.stock_value_cost),sub:'capital parado'}),
+    kpi({label:'Ruptura',ico:'alerta',tone:DASH.low_stock?'warn':'',mod:DASH.low_stock?'is-warn':'',
+         val:DASH.low_stock,sub:'itens com 4 un. ou menos'}),
   ].join('');
+}
+document.getElementById('tabs').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#tabs button').forEach(x=>x.classList.remove('sel'));
+  b.classList.add('sel'); periodo=b.dataset.p; renderKpis();
+};
+
+const NOME_FILA=Object.fromEntries(FILAS.map(f=>[f.k,f.lab]));
+async function abrirFila(k){
+  const dlg=document.getElementById('dlgFila');
+  document.getElementById('fTit').textContent=NOME_FILA[k];
+  const box=document.getElementById('fLista');
+  box.innerHTML='<div class="empty">'+ICO('sync',26)+'<div class="t">Carregando…</div></div>';
+  dlg.showModal();
+  try{
+    const rows=await api('/api/operacao/'+k);
+    box.innerHTML=rows.length?rows.map(r=>`<div class="row-item">
+      <div class="l"><span>${r.code} · ${r.customer_name||'Sem cliente'}</span>
+      <span class="s">${new Date(r.created_at).toLocaleDateString('pt-BR')} · ${r.channel==='site'?'site':'balcão'}${r.items_count?' · '+r.items_count+' item(ns)':''}</span></div>
+      <span class="r">${BRL(r.total)}</span></div>`).join('')
+      :vazio('ok','Fila vazia','Nada pendente aqui.');
+  }catch(e){ box.innerHTML=vazio('alerta','Não deu pra carregar',e.message); }
 }
 
 /* ---------- Gráfico ---------- */
@@ -206,7 +301,15 @@ let rz;window.addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(rend
 /* ---------- Carregar ---------- */
 async function load(){
   const d=await api('/api/dashboard');
-  renderKpis(d);
+  DASH=d;
+  try{
+    OP=await api('/api/operacao');
+    renderFilas(); renderKpis();
+    const a=document.getElementById('auto');
+    a.innerHTML=OP.conectado
+      ? `<span class="dot"></span>lendo a loja a cada ${OP.intervalo_min} min`
+      : `loja não conectada`;
+  }catch(e){}
 
   const rec=document.getElementById('recent');
   rec.innerHTML = d.recent_sales.length ? d.recent_sales.map(s=>{

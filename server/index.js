@@ -729,45 +729,173 @@ app.delete('/api/fin-categories/:id', (req, res) => {
 // Lê os pedidos da loja e lança a receita. NÃO mexe no estoque: quem
 // vende no site é a Nuvemshop, e ela já baixa o estoque dela — o nosso
 // acerta na sincronização de produtos (que traz o valor atual dela).
+// Sincroniza os pedidos do site: cria os novos e ATUALIZA os que mudaram
+// de status (pagou, embalou, enviou). Roda sozinho de tempos em tempos.
+async function sincronizarPedidos(dias = 45) {
+  if (!isLive()) return { skipped: true };
+  const desde = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10);
+  const orders = await nuvem.listOrders({ since: desde });
+
+  const achar = db.prepare('SELECT id, payment_status, fin_posted FROM sales WHERE nuvemshop_order_id = ?');
+  const insSale = db.prepare(`INSERT INTO sales (code, channel, nuvemshop_order_id, customer_name, payment_method,
+      payment_status, paid_at, subtotal, discount, total, cost_total, margin, synced_nuvemshop, created_at,
+      ns_payment_status, ns_shipping_status, ns_status, ns_shipping_type, items_count, fin_posted)
+    VALUES (?, 'site', ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, 1, ?, ?, ?, ?, ?, ?, ?)`);
+  const updSale = db.prepare(`UPDATE sales SET payment_status=?, paid_at=COALESCE(paid_at,?), total=?, subtotal=?, margin=?,
+      ns_payment_status=?, ns_shipping_status=?, ns_status=?, ns_shipping_type=?, items_count=?, payment_method=?
+    WHERE id=?`);
+  const marcarFin = db.prepare('UPDATE sales SET fin_posted = 1 WHERE id = ?');
+  const insFin = db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, ref, created_at)
+    VALUES ('receita','Venda Site',?,?,?,?,?)`);
+  const catSite = categoryId('Venda Site', 'receita');
+
+  let novos = 0, atualizados = 0, lancados = 0;
+  db.transaction(() => {
+    for (const o of orders) {
+      const oid = String(o.id);
+      const nsPay = String(o.payment_status || '').toLowerCase();       // pending | paid | ...
+      const nsShip = String(o.shipping_status || o.fulfillment_status || '').toLowerCase();
+      const nsStat = String(o.status || '').toLowerCase();              // open | closed | cancelled
+      const cancelado = nsStat === 'cancelled' || Boolean(o.cancelled_at);
+      const pago = nsPay === 'paid';
+      const retirada = Boolean(o.shipping_pickup_details)
+        || /pickup|retir/i.test(String(o.shipping_option || o.shipping || ''));
+      const total = money(parseFloat(o.total) || 0);
+      const quando = o.created_at ? new Date(o.created_at).toISOString() : now();
+      const cliente = (o.customer && (o.customer.name || o.customer.email)) || 'Cliente do site';
+      const forma = (o.payment_details && o.payment_details.method) || o.gateway_name || o.gateway || 'Site';
+      const nItens = Array.isArray(o.products) ? o.products.reduce((s, p) => s + (parseInt(p.quantity, 10) || 0), 0) : 0;
+      const code = 'SITE-' + (o.number || oid);
+      const nosso = cancelado ? 'cancelado' : (pago ? 'pago' : 'pendente');
+
+      const ex = achar.get(oid);
+      if (!ex) {
+        const id = insSale.run(code, oid, cliente, forma, nosso, pago ? quando : null, total, total, total, quando,
+          nsPay, nsShip, nsStat, retirada ? 'retirada' : 'envio', nItens, 0).lastInsertRowid;
+        novos += 1;
+        if (pago && !cancelado) { insFin.run(catSite, `Venda no site ${code}`, total, code, quando); marcarFin.run(id); lancados += 1; }
+      } else {
+        updSale.run(nosso, pago ? quando : null, total, total, total,
+          nsPay, nsShip, nsStat, retirada ? 'retirada' : 'envio', nItens, forma, ex.id);
+        atualizados += 1;
+        // Pagou depois? Agora entra no caixa (uma única vez).
+        if (pago && !cancelado && !ex.fin_posted) {
+          insFin.run(catSite, `Venda no site ${code}`, total, code, now());
+          marcarFin.run(ex.id); lancados += 1;
+        }
+      }
+    }
+  })();
+  setSetting('last_orders_import', now());
+  return { novos, atualizados, lancados, analisados: orders.length, desde };
+}
+
+// Motor automático: verifica a loja de tempos em tempos, sozinho.
+const INTERVALO_MIN = Math.max(2, parseInt(process.env.SYNC_MINUTES, 10) || 10);
+let sincronizando = false;
+async function tickAutomatico(motivo = 'automático') {
+  if (sincronizando || !isLive()) return;
+  sincronizando = true;
+  try {
+    const r = await sincronizarPedidos();
+    if (r && !r.skipped && (r.novos || r.lancados)) {
+      console.log(`› Pedidos do site (${motivo}): ${r.novos} novo(s), ${r.lancados} lançado(s) no caixa.`);
+    }
+  } catch (err) {
+    console.error('Sincronização de pedidos falhou:', err.message);
+    setSetting('last_orders_error', err.message);
+  } finally { sincronizando = false; }
+}
+setInterval(() => tickAutomatico(), INTERVALO_MIN * 60 * 1000);
+setTimeout(() => tickAutomatico('início'), 8000);
+
+// Disparo manual (a tela usa para "atualizar agora")
 app.post('/api/import-orders', async (req, res) => {
   if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
-  const b = req.body || {};
-  const dias = Math.min(365, Math.max(1, parseInt(b.days, 10) || 30));
-  const desde = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10);
   try {
-    const orders = await nuvem.listOrders({ since: desde });
-    const jaTem = db.prepare('SELECT 1 FROM sales WHERE nuvemshop_order_id = ?');
-    const insSale = db.prepare(`INSERT INTO sales (code, channel, nuvemshop_order_id, customer_id, customer_name,
-      payment_method, payment_status, paid_at, subtotal, discount, total, cost_total, margin, synced_nuvemshop, created_at)
-      VALUES (?, 'site', ?, NULL, ?, ?, ?, ?, ?, 0, ?, 0, ?, 1, ?)`);
-    const insFin = db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, ref, created_at)
-      VALUES ('receita','Venda Site',?,?,?,?,?)`);
-    const catSite = categoryId('Venda Site', 'receita');
+    const r = await sincronizarPedidos(parseInt((req.body || {}).days, 10) || 45);
+    res.json({ ok: true, ...r });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
 
-    let novos = 0, pulados = 0, pendentes = 0;
-    db.transaction(() => {
-      for (const o of orders) {
-        const oid = String(o.id);
-        if (jaTem.get(oid)) { pulados += 1; continue; }
-        const pago = (o.payment_status || '').toLowerCase() === 'paid';
-        const cancelado = (o.status || '').toLowerCase() === 'cancelled' || o.cancelled_at;
-        if (cancelado) { pulados += 1; continue; }
-        if (!pago) { pendentes += 1; continue; }  // só entra no caixa quando pago
-        const total = money(parseFloat(o.total) || 0);
-        const quando = o.created_at ? new Date(o.created_at).toISOString() : now();
-        const cliente = (o.customer && (o.customer.name || o.customer.email)) || 'Cliente do site';
-        const forma = (o.payment_details && o.payment_details.method) || o.gateway || 'Site';
-        const code = 'SITE-' + (o.number || oid);
-        insSale.run(code, oid, cliente, forma, 'pago', quando, total, total, total, quando);
-        insFin.run(catSite, `Venda no site ${code}`, total, code, quando);
-        novos += 1;
-      }
-    })();
-    setSetting('last_orders_import', now());
-    res.json({ ok: true, importados: novos, ja_existiam: pulados, aguardando_pagamento: pendentes, analisados: orders.length, desde });
-  } catch (err) {
-    res.status(502).json({ error: err.message });
-  }
+// ==================== VISÃO OPERACIONAL ====================
+// O que precisa de ação agora, juntando site e balcão, e os números
+// do período (hoje / ontem / esta semana).
+app.get('/api/operacao', (req, res) => {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const ontem = new Date(hoje); ontem.setDate(ontem.getDate() - 1);
+  const semana = new Date(hoje); semana.setDate(semana.getDate() - hoje.getDay()); // domingo
+
+  const metricas = (de, ate) => {
+    const args = ate ? [de.toISOString(), ate.toISOString()] : [de.toISOString()];
+    const cond = ate ? 'created_at >= ? AND created_at < ?' : 'created_at >= ?';
+    const t = db.prepare(`SELECT COUNT(*) pedidos, COALESCE(SUM(total),0) fat, COALESCE(SUM(margin),0) marg,
+        COALESCE(SUM(items_count),0) pecas FROM sales
+        WHERE payment_status='pago' AND ${cond}`).get(...args);
+    const porCanal = db.prepare(`SELECT CASE WHEN channel='site' THEN 'site' ELSE 'pdv' END c,
+        COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
+        WHERE payment_status='pago' AND ${cond} GROUP BY c`).all(...args);
+    const pdv = porCanal.find((x) => x.c === 'pdv') || { n: 0, t: 0 };
+    const site = porCanal.find((x) => x.c === 'site') || { n: 0, t: 0 };
+    return {
+      pedidos: t.pedidos, faturamento: money(t.fat), ticket: t.pedidos ? money(t.fat / t.pedidos) : 0,
+      margem_pct: t.fat > 0 ? Math.round((t.marg / t.fat) * 100) : 0,
+      pdv: { n: pdv.n, total: money(pdv.t) }, site: { n: site.n, total: money(site.t) },
+    };
+  };
+
+  // Filas de trabalho. "Por cobrar" junta o fiado do balcão com o
+  // pedido do site que ainda não foi pago.
+  const fila = (sql, ...a) => db.prepare(sql).get(...a);
+  const naoEnviado = `(COALESCE(ns_shipping_status,'') NOT IN ('shipped','fulfilled','delivered'))`;
+  const ativo = `COALESCE(ns_status,'open') <> 'cancelled' AND payment_status <> 'cancelado'`;
+
+  const porCobrar = fila(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
+    WHERE payment_status='pendente' AND ${ativo}`);
+  const porEmbalar = fila(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
+    WHERE channel='site' AND payment_status='pago' AND ${ativo} AND COALESCE(ns_shipping_type,'envio')='envio'
+      AND COALESCE(ns_shipping_status,'') IN ('','unpacked','unfulfilled')`);
+  const porEnviar = fila(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
+    WHERE channel='site' AND payment_status='pago' AND ${ativo} AND COALESCE(ns_shipping_type,'envio')='envio'
+      AND COALESCE(ns_shipping_status,'') IN ('packed','ready','unshipped')`);
+  const porRetirar = fila(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
+    WHERE channel='site' AND payment_status='pago' AND ${ativo} AND ns_shipping_type='retirada' AND ${naoEnviado}`);
+
+  const listar = (where, args = []) => db.prepare(`SELECT id, code, channel, customer_name, total, created_at,
+      payment_status, ns_shipping_status, ns_shipping_type FROM sales WHERE ${where}
+      ORDER BY created_at DESC LIMIT 40`).all(...args);
+
+  res.json({
+    filas: {
+      por_cobrar: { ...porCobrar, t: money(porCobrar.t) },
+      por_embalar: { ...porEmbalar, t: money(porEmbalar.t) },
+      por_enviar: { ...porEnviar, t: money(porEnviar.t) },
+      por_retirar: { ...porRetirar, t: money(porRetirar.t) },
+    },
+    periodos: {
+      hoje: metricas(hoje),
+      ontem: metricas(ontem, hoje),
+      semana: metricas(semana),
+    },
+    conectado: isLive(),
+    ultima_leitura: getSetting('last_orders_import'),
+    intervalo_min: INTERVALO_MIN,
+  });
+});
+
+// Lista de uma fila específica (ao clicar no card)
+app.get('/api/operacao/:fila', (req, res) => {
+  const ativo = `COALESCE(ns_status,'open') <> 'cancelled' AND payment_status <> 'cancelado'`;
+  const mapa = {
+    por_cobrar: `payment_status='pendente' AND ${ativo}`,
+    por_embalar: `channel='site' AND payment_status='pago' AND ${ativo} AND COALESCE(ns_shipping_type,'envio')='envio' AND COALESCE(ns_shipping_status,'') IN ('','unpacked','unfulfilled')`,
+    por_enviar: `channel='site' AND payment_status='pago' AND ${ativo} AND COALESCE(ns_shipping_type,'envio')='envio' AND COALESCE(ns_shipping_status,'') IN ('packed','ready','unshipped')`,
+    por_retirar: `channel='site' AND payment_status='pago' AND ${ativo} AND ns_shipping_type='retirada' AND COALESCE(ns_shipping_status,'') NOT IN ('shipped','fulfilled','delivered')`,
+  };
+  const where = mapa[req.params.fila];
+  if (!where) return res.status(404).json({ error: 'Fila desconhecida.' });
+  res.json(db.prepare(`SELECT id, code, channel, customer_name, total, created_at, payment_status,
+    ns_shipping_type, items_count FROM sales WHERE ${where} ORDER BY created_at DESC LIMIT 60`).all());
 });
 
 // ==================== LEMBRETES ====================

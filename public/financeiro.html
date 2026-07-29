@@ -191,9 +191,10 @@ async function load(){
       <span class="txt"><span class="v">${BRL(pdv.total)}</span><span class="n">${pdv.n} venda(s) no balcão</span></span></div>
     <div class="card org"><span class="ico-box brand">${ICO('site',18)}</span>
       <span class="txt"><span class="v">${BRL(site.total)}</span><span class="n">${site.n} venda(s) pelo site</span></span>
-      <button class="btn sm ghost" id="impBtn" type="button" style="margin-left:auto">Buscar vendas</button></div>`;
-  document.getElementById('imp').textContent=d.ultima_importacao?('site lido em '+D(d.ultima_importacao)):'';
-  document.getElementById('impBtn').onclick=importar;
+      </div>`;
+  document.getElementById('imp').innerHTML=d.ultima_importacao
+    ? `<span style="color:var(--brand-hi)">●</span> site lido automaticamente · ${D(d.ultima_importacao)}`
+    : 'as vendas do site entram sozinhas';
 
   barras(document.getElementById('catIn'),d.por_categoria_receita,'in');
   barras(document.getElementById('catOut'),d.por_categoria_despesa,'out');
@@ -212,15 +213,6 @@ async function load(){
     await api('/api/financial/entry/'+b.dataset.del,{method:'DELETE'});load();});
 }
 
-async function importar(){
-  const b=document.getElementById('impBtn');b.disabled=true;b.textContent='Buscando…';
-  try{
-    const r=await api('/api/import-orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({days:30})});
-    alert(`Vendas do site (últimos 30 dias):\n\n${r.importados} lançada(s) agora\n${r.ja_existiam} já estavam aqui\n${r.aguardando_pagamento} aguardando pagamento\n\nTotal analisado: ${r.analisados}`);
-    load();
-  }catch(e){alert('Não deu pra buscar: '+e.message);}
-  finally{b.disabled=false;b.textContent='Buscar vendas';}
-}
 
 /* categorias */
 async function carregarCats(){

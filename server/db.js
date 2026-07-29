@@ -160,6 +160,13 @@ function ensureColumn(table, column, ddl) {
 ensureColumn('products', 'categories_all', 'categories_all TEXT');
 ensureColumn('financial_entries', 'category_id', 'category_id INTEGER');
 ensureColumn('sales', 'nuvemshop_order_id', 'nuvemshop_order_id TEXT');
+// Status operacionais do pedido do site (espelho da Nuvemshop)
+ensureColumn('sales', 'ns_payment_status', 'ns_payment_status TEXT');
+ensureColumn('sales', 'ns_shipping_status', 'ns_shipping_status TEXT');
+ensureColumn('sales', 'ns_status', 'ns_status TEXT');
+ensureColumn('sales', 'ns_shipping_type', 'ns_shipping_type TEXT'); // envio | retirada
+ensureColumn('sales', 'items_count', 'items_count INTEGER DEFAULT 0');
+ensureColumn('sales', 'fin_posted', 'fin_posted INTEGER NOT NULL DEFAULT 0');
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_order ON sales(nuvemshop_order_id) WHERE nuvemshop_order_id IS NOT NULL'); } catch (_) {}
 
 // ---- Plano de contas padrão (criado uma vez) ----
