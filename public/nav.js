@@ -1,23 +1,37 @@
 // Navegação lateral compartilhada — injetada em todas as páginas.
 (function () {
-  const items = [
-    { href: '/',          ico: '🏠', label: 'Início',     match: (p) => p === '/' },
-    { href: '/pdv',       ico: '🛒', label: 'PDV',        match: (p) => p.startsWith('/pdv') },
-    { href: '/produtos',  ico: '📦', label: 'Estoque',    match: (p) => p.startsWith('/produtos') || p.startsWith('/estoque') },
-    { href: '/clientes',  ico: '👥', label: 'Clientes',   match: (p) => p.startsWith('/clientes') },
-    { href: '/financeiro',ico: '💰', label: 'Financeiro', match: (p) => p.startsWith('/financeiro') },
-    { href: '/agentes',   ico: '🐊', label: 'Agentes',    match: (p) => p.startsWith('/agentes') },
-    { href: '/conectar',  ico: '🔌', label: 'Conectar',   match: (p) => p.startsWith('/conectar') },
+  const grupos = [
+    { titulo: 'Operação', itens: [
+      { href: '/',           ico: 'inicio',     label: 'Início',     match: (p) => p === '/' },
+      { href: '/pdv',        ico: 'pdv',        label: 'PDV',        match: (p) => p.startsWith('/pdv') },
+      { href: '/produtos',   ico: 'estoque',    label: 'Estoque',    match: (p) => p.startsWith('/produtos') || p.startsWith('/estoque') },
+      { href: '/clientes',   ico: 'clientes',   label: 'Clientes',   match: (p) => p.startsWith('/clientes') },
+    ] },
+    { titulo: 'Gestão', itens: [
+      { href: '/financeiro', ico: 'financeiro', label: 'Financeiro', match: (p) => p.startsWith('/financeiro') },
+      { href: '/agentes',    ico: 'agentes',    label: 'Agentes',    match: (p) => p.startsWith('/agentes') },
+      { href: '/conectar',   ico: 'conectar',   label: 'Conectar',   match: (p) => p.startsWith('/conectar') },
+    ] },
   ];
+
   const path = location.pathname;
+  const item = (it) => `<a class="nav-item${it.match(path) ? ' active' : ''}" href="${it.href}">`
+    + ICO(it.ico, 19) + `<span>${it.label}</span></a>`;
+
   const side = document.createElement('aside');
   side.className = 'sidebar';
   side.innerHTML =
-    `<a class="nav-brand" href="/"><span class="badge"><img src="/logo.webp" alt="VN Store"></span><span class="nav-word">VN<br>Store</span></a>` +
-    `<nav class="nav-list">` +
-    items.map((it) => `<a class="nav-item${it.match(path) ? ' active' : ''}" href="${it.href}"><span class="ico">${it.ico}</span><span class="lbl">${it.label}</span></a>`).join('') +
-    `</nav>` +
-    `<div class="nav-foot"><span id="navStatus" class="pill demo"><span class="dot"></span>…</span><span id="navClock" class="nav-clock">--:--</span><a href="#" id="navLogout" class="nav-clock" style="text-decoration:none;color:var(--ink-faint)">Sair</a></div>`;
+    `<a class="nav-brand" href="/"><span class="badge"><img src="/logo.webp" alt=""></span>`
+    + `<span class="wordmark">VN<br>Store</span></a>`
+    + grupos.map((g) => `<div class="nav-sec label">${g.titulo}</div>`
+        + `<nav class="nav-list">${g.itens.map(item).join('')}</nav>`).join('')
+    + `<div class="nav-foot">`
+    +   `<span id="navStatus" class="pill"><span class="dot"></span>…</span>`
+    +   `<div class="nav-meta">`
+    +     `<span id="navClock" class="nav-clock">--:--</span>`
+    +     `<a href="#" id="navLogout" class="nav-exit">${ICO('sair', 15)}<span>Sair</span></a>`
+    +   `</div>`
+    + `</div>`;
   document.body.insertAdjacentElement('afterbegin', side);
 
   // Relógio
@@ -27,13 +41,16 @@
   tick(); setInterval(tick, 1000);
 
   // Sair
-  const lo = side.querySelector('#navLogout');
-  if (lo) lo.addEventListener('click', async (e) => { e.preventDefault(); try { await fetch('/api/logout', { method: 'POST' }); } catch (_) {} location.href = '/login'; });
+  side.querySelector('#navLogout').addEventListener('click', async (e) => {
+    e.preventDefault();
+    try { await fetch('/api/logout', { method: 'POST' }); } catch (_) {}
+    location.href = '/login';
+  });
 
-  // Status ao vivo / demo
+  // Estado da conexão
   fetch('/api/health').then((r) => r.json()).then((h) => {
     const p = side.querySelector('#navStatus');
     if (h.mode === 'live') { p.className = 'pill live'; p.innerHTML = '<span class="dot"></span>Ao vivo'; }
-    else { p.className = 'pill demo'; p.innerHTML = '<span class="dot"></span>Demo'; }
+    else { p.className = 'pill demo'; p.innerHTML = '<span class="dot"></span>Demonstração'; }
   }).catch(() => {});
 })();

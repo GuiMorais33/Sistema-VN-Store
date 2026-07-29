@@ -3,237 +3,286 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#080a08">
-<title>VN Store — Produtos</title>
+<meta name="theme-color" content="#070907">
+<title>VN Store — Estoque</title>
 <link rel="icon" href="/logo.webp">
 <link rel="stylesheet" href="/theme.css">
 <style>
-  .app{max-width:1240px;margin:0 auto;padding:clamp(12px,2.4vw,24px)}
-  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-bottom:14px;margin-bottom:18px;border-bottom:1px solid var(--line)}
-  .brand{display:flex;align-items:center;gap:12px;margin-right:auto}
-  .brand .wordmark{font-size:22px}.brand .wordmark .cmd{display:block;font-size:13px}
-  .top-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .top{display:grid;grid-template-columns:1.15fr 1fr 1fr;gap:var(--s3);margin-bottom:var(--s4)}
+  @media (max-width:860px){.top{grid-template-columns:1fr}}
+  .box{padding:var(--s4)}
+  .box .big{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;
+    font-size:clamp(24px,2.8vw,30px);color:var(--brand-hi);text-shadow:0 0 20px rgba(47,210,79,.22);
+    letter-spacing:-.8px;margin-top:8px}
+  .box .sub{font-size:12px;color:var(--ink-3);margin-top:5px}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:11px;max-height:96px;overflow-y:auto}
+  .chip{font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;cursor:pointer;
+    background:var(--bg-elev);border:1px solid var(--line);color:var(--ink-2);transition:var(--t-fast);white-space:nowrap}
+  .chip:hover{border-color:var(--line-str);color:var(--ink)}
+  .chip.on{border-color:var(--brand);color:var(--brand-hi);background:rgba(47,210,79,.1)}
+  .chip b{font-family:var(--font-mono);color:var(--ink)}
+  .chip.on b{color:var(--brand-hi)}
 
-  .summary{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:12px;margin-bottom:16px}
-  @media (max-width:760px){.summary{grid-template-columns:1fr}}
-  .box{padding:15px 16px}
-  .box .l{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-dim);font-weight:700}
-  .box .big{font-family:var(--mono);font-weight:700;font-size:26px;margin-top:6px;color:var(--green-hi);text-shadow:0 0 14px var(--glow)}
-  .box .sub{font-size:12px;color:var(--ink-faint);margin-top:3px}
-  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-  .chip{font-size:11px;font-weight:700;padding:5px 9px;border-radius:999px;background:var(--bg-2);border:1px solid var(--line);color:var(--ink-dim)}
-  .chip b{color:var(--ink)}
+  .bar{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center;margin-bottom:var(--s3)}
+  .bar .search-wrap{flex:1;min-width:200px}
+  .bar select{width:auto;min-width:150px}
 
-  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
-  .search{flex:1;min-width:200px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:14px}
-  .search:focus{outline:2px solid var(--green);border-color:var(--green)}
-  select{padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:13px}
-
-  .table{display:flex;flex-direction:column;gap:8px}
-  .thead,.trow{display:grid;grid-template-columns:52px 2.4fr 1fr 1fr .8fr 1fr 1fr auto;gap:10px;align-items:center}
-  .thead{padding:0 14px;font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-faint);font-weight:700}
-  .trow{padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,var(--panel-2),var(--panel));cursor:pointer;transition:.15s}
-  /* Miniatura: com muitos produtos de nome parecido, a foto é o que distingue. */
-  .thumb{width:52px;height:52px;border-radius:10px;overflow:hidden;background:var(--bg-2);border:1px solid var(--line);display:grid;place-items:center;flex:0 0 auto}
-  .thumb img{width:100%;height:100%;object-fit:cover;display:block}
-  .thumb .ph{font-size:18px;opacity:.35}
-  .trow:hover{border-color:rgba(47,210,79,.4)}
-  .trow .nm{font-weight:700;font-size:14px}
-  .trow .meta{font-size:11.5px;color:var(--ink-dim)}
-  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
-  .cost{color:var(--green-hi);font-weight:700}
-  .lowb{color:var(--amber);font-weight:700}
-  .sync{font-size:10px;font-weight:800;text-transform:uppercase;padding:4px 8px;border-radius:999px;white-space:nowrap}
-  .sync.on{color:var(--green-hi);background:rgba(47,210,79,.1)} .sync.off{color:var(--amber);background:rgba(245,178,31,.1)}
-  @media (max-width:760px){
+  .thead,.trow{display:grid;grid-template-columns:52px minmax(0,2.3fr) 1fr 1fr 62px 82px 96px 84px;gap:var(--s3);align-items:center}
+  .thead{padding:0 var(--s4) var(--s2);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-3);font-weight:700}
+  .rowsw{display:flex;flex-direction:column;gap:6px}
+  .trow{padding:10px var(--s4);border:1px solid var(--line);border-radius:var(--r);cursor:pointer;
+    background:linear-gradient(180deg,var(--surface-2),var(--surface));transition:var(--t-fast)}
+  .trow:hover{border-color:rgba(47,210,79,.35);transform:translateY(-1px);box-shadow:var(--sh-1)}
+  .trow .thumb{width:52px;height:52px}
+  .trow .nm{font-weight:600;font-size:13.5px;line-height:1.3}
+  .trow .meta{font-size:11px;color:var(--ink-3);margin-top:2px;font-family:var(--font-mono)}
+  .trow .cell{font-size:12.5px;color:var(--ink-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:13px}
+  .num.cost{color:var(--brand-hi);font-weight:700}
+  .num.low{color:var(--warn);font-weight:700}
+  .tag{font-size:9.5px;font-weight:700;text-transform:uppercase;padding:4px 8px;border-radius:999px;white-space:nowrap;letter-spacing:.3px}
+  .tag.on{color:var(--ok);background:rgba(53,192,138,.1)}
+  .tag.off{color:var(--warn);background:rgba(232,163,23,.1)}
+  @media (max-width:860px){
     .thead{display:none}
-    /* No celular: foto à esquerda, dados empilhados ao lado. */
-    .trow{grid-template-columns:52px 1fr;grid-auto-rows:auto;gap:4px 12px;align-items:start}
-    .trow .thumb{grid-row:1 / span 6;align-self:center}
+    .trow{grid-template-columns:52px 1fr;gap:4px var(--s3);align-items:start;padding:12px}
+    .trow .thumb{grid-row:1/span 6;align-self:center}
     .trow>*:not(.thumb){grid-column:2}
   }
 
-  dialog{border:1px solid var(--line);border-radius:16px;background:var(--panel-2);color:var(--ink);padding:0;max-width:640px;width:94vw;max-height:92vh}
-  dialog::backdrop{background:rgba(0,0,0,.65)}
-  .dlg{padding:18px;display:flex;flex-direction:column;gap:12px;overflow-y:auto}
-  .dlg h3{margin:0;font-family:var(--disp);text-transform:uppercase;letter-spacing:.5px;font-size:19px}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .fld{display:flex;flex-direction:column;gap:5px}
-  .fld label{font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-faint);font-weight:700}
-  .fld input,.fld textarea{padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:14px;font-family:var(--body)}
-  .fld input:focus,.fld textarea:focus{outline:2px solid var(--green);border-color:var(--green)}
-  .vhead,.vrow{display:grid;grid-template-columns:1.1fr 1fr .9fr .9fr .8fr auto;gap:6px;align-items:center}
-  .vhead{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);font-weight:700;padding:0 2px}
-  .vrow input{padding:8px 9px;font-size:13px}
-  .vrow .del{background:none;border:none;color:var(--ink-faint);cursor:pointer;font-size:16px}
-  .vrow .del:hover{color:var(--red)}
-  .dlg-actions{display:flex;gap:8px;justify-content:space-between;align-items:center;position:sticky;bottom:0;background:var(--panel-2);padding-top:8px}
-  .note{font-size:11.5px;color:var(--ink-faint)}
-  .photo{display:flex;gap:10px;align-items:center}
-  .photo-thumb{width:56px;height:56px;border-radius:10px;border:1px solid var(--line);background:var(--bg-2);display:grid;place-items:center;overflow:hidden;flex:0 0 auto;font-size:22px;color:var(--ink-faint)}
-  .photo-thumb img{width:100%;height:100%;object-fit:cover}
+  /* Diálogo */
+  .dlg{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);overflow-y:auto}
+  .dlg h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;letter-spacing:.5px;font-size:19px;transform:skewX(-5deg)}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+  @media (max-width:560px){.g2{grid-template-columns:1fr}}
+  .photo{display:flex;gap:var(--s3);align-items:center}
+  .photo .thumb{width:60px;height:60px}
   .photo-side{display:flex;flex-direction:column;gap:5px;align-items:flex-start}
-  .mini{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:6px 10px;border-radius:8px;border:1px solid rgba(47,210,79,.35);color:var(--green-hi);background:rgba(47,210,79,.06);cursor:pointer}
-  .mini.ghost{border-color:var(--line);color:var(--ink-dim);background:transparent}
+  .vhead,.vrow{display:grid;grid-template-columns:1.05fr .95fr .85fr .85fr .7fr 28px;gap:5px;align-items:center}
+  .vhead{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3);font-weight:700;padding:0 2px}
+  .vrow input{padding:7px 9px;font-size:12.5px;border-radius:8px}
+  .vrow .del{background:none;border:none;color:var(--ink-3);cursor:pointer;display:grid;place-items:center}
+  .vrow .del:hover{color:var(--crit)}
+  .vars{display:flex;flex-direction:column;gap:5px}
+  .dlg-foot{display:flex;gap:var(--s2);justify-content:flex-end;position:sticky;bottom:0;
+    background:var(--surface);padding-top:var(--s3);margin:0 calc(var(--s5)*-1) calc(var(--s5)*-1);
+    padding:var(--s3) var(--s5) var(--s5);border-top:1px solid var(--line-soft)}
+  .hint{font-size:11.5px;color:var(--ink-3);line-height:1.5}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="pagehead">
-    <div><h1>Estoque</h1><div class="ph-sub">Produtos · custo · valor de estoque · publicar na loja</div></div>
+    <div><h1>Estoque</h1><div class="ph-sub">Produtos · custo · publicação na loja</div></div>
+    <div class="ph-actions"><button class="btn primary" id="novo" type="button">Novo produto</button></div>
   </div>
 
-  <div class="summary">
-    <div class="box card"><div class="l">Valor de estoque (a custo)</div><div class="big" id="sVal">—</div><div class="sub" id="sUnits">— peças no total</div></div>
-    <div class="box card"><div class="l">Por categoria</div><div class="chips" id="sCats"></div></div>
-    <div class="box card"><div class="l">Por marca</div><div class="chips" id="sBrands"></div></div>
+  <div class="top">
+    <div class="card box">
+      <span class="label">Valor de estoque · a custo</span>
+      <div class="big" id="sVal">—</div>
+      <div class="sub" id="sSub">—</div>
+    </div>
+    <div class="card box">
+      <span class="label">Por categoria</span>
+      <div class="chips" id="sCats"></div>
+    </div>
+    <div class="card box">
+      <span class="label">Por marca</span>
+      <div class="chips" id="sBrands"></div>
+    </div>
   </div>
 
   <div class="bar">
-    <input id="search" class="search" type="search" placeholder="Buscar produto ou marca…">
-    <select id="fCat"><option value="">Todas categorias</option></select>
-    <select id="fBrand"><option value="">Todas marcas</option></select>
-    <button class="btn primary" id="newBtn" type="button">＋ Novo produto</button>
+    <div class="search-wrap"><input id="q" type="search" placeholder="Buscar produto ou marca…"></div>
+    <select id="fCat"><option value="">Todas as categorias</option></select>
+    <select id="fBrand"><option value="">Todas as marcas</option></select>
   </div>
 
-  <div class="table">
-    <div class="thead"><div>Foto</div><div>Produto</div><div>Marca</div><div>Categoria</div><div>Variações</div><div>Estoque</div><div>Valor custo</div><div>Site</div></div>
-    <div id="rows"><div class="note" style="padding:16px">Carregando…</div></div>
+  <div class="thead">
+    <div></div><div>Produto</div><div>Marca</div><div>Categoria</div>
+    <div>Var.</div><div>Estoque</div><div>Valor custo</div><div>Loja</div>
   </div>
+  <div class="rowsw" id="rows"></div>
 </div>
 
 <dialog id="dlg">
   <form class="dlg" method="dialog">
-    <h3 id="dlgTitle">Novo produto</h3>
+    <h3 id="dlgT">Novo produto</h3>
     <input type="hidden" id="pId">
-    <div class="grid2">
-      <div class="fld"><label>Nome *</label><input id="pName" required></div>
-      <div class="fld"><label>Marca <span style="color:var(--green-hi)">(só nosso)</span></label><input id="pBrand"></div>
+    <div class="g2">
+      <div class="field"><label>Nome *</label><input id="pName" required></div>
+      <div class="field"><label>Marca</label><input id="pBrand" list="brandList"></div>
     </div>
-    <div class="grid2">
-      <div class="fld"><label>Categoria</label><input id="pCat" list="catList"></div>
-      <div class="fld"><label>Foto do produto</label>
+    <div class="g2">
+      <div class="field"><label>Categoria</label><input id="pCat" list="catList"></div>
+      <div class="field"><label>Foto</label>
         <div class="photo">
-          <div class="photo-thumb" id="pThumb"><span>📷</span></div>
+          <span class="thumb" id="pThumb"></span>
           <div class="photo-side">
-            <button type="button" class="mini" id="pFileBtn">Enviar foto</button>
-            <button type="button" class="mini ghost" id="pClear" hidden>Remover</button>
-            <span class="note" id="pFileNote">Do celular ou galeria</span>
+            <button type="button" class="btn sm" id="pFileBtn">Enviar foto</button>
+            <button type="button" class="btn sm ghost" id="pClear" hidden>Remover</button>
+            <span class="hint" id="pNote">Da câmera ou galeria</span>
           </div>
           <input type="file" id="pFile" accept="image/*" hidden>
           <input type="hidden" id="pImg">
         </div>
       </div>
     </div>
-    <div class="fld"><label>Descrição</label><textarea id="pDesc" rows="2"></textarea></div>
+    <div class="field"><label>Descrição</label><textarea id="pDesc" rows="2"></textarea></div>
 
-    <div class="fld"><label>Variações · preço e <b style="color:var(--green-hi)">custo</b> por tamanho</label>
-      <div class="vhead"><div>Variação</div><div>SKU</div><div>Preço R$</div><div>Custo R$</div><div>Estoque</div><div></div></div>
-      <div id="vars"></div>
-      <button class="mini" id="addVar" type="button" style="width:fit-content;margin-top:6px;font-size:11px;font-weight:800;text-transform:uppercase;padding:6px 10px;border-radius:8px;border:1px solid var(--line);color:var(--ink-dim);background:transparent;cursor:pointer">＋ Adicionar variação</button>
+    <div class="field">
+      <label>Variações · preço e custo</label>
+      <div class="vhead"><div>Variação</div><div>SKU</div><div>Preço</div><div>Custo</div><div>Estoque</div><div></div></div>
+      <div id="vars" class="vars"></div>
+      <button class="btn sm ghost" id="addVar" type="button" style="width:fit-content;margin-top:5px">Adicionar variação</button>
     </div>
 
-    <div class="note" id="dlgNote">Ao salvar: cadastra aqui e publica/atualiza na Nuvemshop (nome, descrição, categoria, preço, estoque, foto). Marca e custo ficam só aqui.</div>
-    <div class="dlg-actions">
+    <div class="hint">Ao salvar, o produto é publicado/atualizado na sua loja Nuvemshop.
+      <b style="color:var(--brand-hi)">Marca e custo ficam só aqui</b> — a loja não tem esses campos.</div>
+
+    <div class="dlg-foot">
       <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
-      <button class="btn primary" id="saveBtn" value="ok" type="submit">Salvar &amp; publicar</button>
+      <button class="btn primary" id="save" value="ok" type="submit">Salvar e publicar</button>
     </div>
   </form>
 </dialog>
 <datalist id="catList"></datalist>
+<datalist id="brandList"></datalist>
 
+<script src="/icons.js"></script>
+<script src="/nav.js"></script>
 <script>
 const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
-let SUMMARY={by_category:[],by_brand:[]};
+const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
+document.querySelector('.bar .search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
+document.getElementById('novo').insertAdjacentHTML('afterbegin',ICO('mais',16));
 
-async function health(){ try{ const h=await api('/api/health'); const p=document.getElementById('statusPill');
-  if(h.mode==='live'){p.className='pill live';p.innerHTML='<span class="dot"></span>Ao vivo';}else{p.className='pill demo';p.innerHTML='<span class="dot"></span>Demo';} }catch(e){} }
-
-async function loadSummary(){ const s=await api('/api/catalog/summary'); SUMMARY=s;
+async function resumo(){
+  const s=await api('/api/catalog/summary');
   document.getElementById('sVal').textContent=BRL(s.totals.value_cost);
-  document.getElementById('sUnits').textContent=`${s.totals.units} peças · ${BRL(s.totals.value_price)} a preço de venda`;
-  document.getElementById('sCats').innerHTML=s.by_category.map(c=>`<span class="chip">${c.label} <b>${c.units}</b></span>`).join('')||'<span class="note">—</span>';
-  document.getElementById('sBrands').innerHTML=s.by_brand.map(b=>`<span class="chip">${b.label} <b>${b.units}</b></span>`).join('')||'<span class="note">—</span>';
-  // filtros
-  const fc=document.getElementById('fCat'), fb=document.getElementById('fBrand'), dl=document.getElementById('catList');
-  fc.innerHTML='<option value="">Todas categorias</option>'+s.by_category.filter(c=>c.label!=='(sem categoria)').map(c=>`<option>${c.label}</option>`).join('');
-  fb.innerHTML='<option value="">Todas marcas</option>'+s.by_brand.filter(b=>b.label!=='(sem marca)').map(b=>`<option>${b.label}</option>`).join('');
-  dl.innerHTML=s.by_category.filter(c=>c.label!=='(sem categoria)').map(c=>`<option value="${c.label}">`).join('');
+  document.getElementById('sSub').textContent=`${s.totals.units} peças · ${BRL(s.totals.value_price)} a preço de venda`;
+  const chip=(x,tipo)=>`<button type="button" class="chip" data-${tipo}="${x.label}">${x.label} <b>${x.units}</b></button>`;
+  document.getElementById('sCats').innerHTML=s.by_category.map(c=>chip(c,'cat')).join('')||'<span class="hint">—</span>';
+  document.getElementById('sBrands').innerHTML=s.by_brand.map(b=>chip(b,'brand')).join('')||'<span class="hint">—</span>';
+  document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{const v=b.dataset.cat;
+    document.getElementById('fCat').value=(document.getElementById('fCat').value===v?'':v);lista();});
+  document.querySelectorAll('[data-brand]').forEach(b=>b.onclick=()=>{const v=b.dataset.brand;
+    document.getElementById('fBrand').value=(document.getElementById('fBrand').value===v?'':v);lista();});
+  const fc=document.getElementById('fCat'),fb=document.getElementById('fBrand');
+  const cur1=fc.value,cur2=fb.value;
+  fc.innerHTML='<option value="">Todas as categorias</option>'+s.by_category.filter(c=>c.label[0]!=='(').map(c=>`<option>${c.label}</option>`).join('');
+  fb.innerHTML='<option value="">Todas as marcas</option>'+s.by_brand.filter(b=>b.label[0]!=='(').map(b=>`<option>${b.label}</option>`).join('');
+  fc.value=cur1;fb.value=cur2;
+  document.getElementById('catList').innerHTML=s.by_category.filter(c=>c.label[0]!=='(').map(c=>`<option value="${c.label}">`).join('');
+  document.getElementById('brandList').innerHTML=s.by_brand.filter(b=>b.label[0]!=='(').map(b=>`<option value="${b.label}">`).join('');
+  document.querySelectorAll('.chip').forEach(c=>{
+    if(c.dataset.cat&&c.dataset.cat===fc.value)c.classList.add('on');
+    if(c.dataset.brand&&c.dataset.brand===fb.value)c.classList.add('on');});
 }
 
-async function loadRows(){ const q=document.getElementById('search').value.trim(); const cat=document.getElementById('fCat').value; const brand=document.getElementById('fBrand').value;
-  const rows=await api(`/api/catalog?q=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&brand=${encodeURIComponent(brand)}`);
+async function lista(){
+  const q=document.getElementById('q').value.trim();
+  const cat=document.getElementById('fCat').value,br=document.getElementById('fBrand').value;
   const box=document.getElementById('rows');
-  if(!rows.length){ box.innerHTML='<div class="note" style="padding:16px">Nenhum produto. Clique em “Novo produto”.</div>'; return; }
+  const rows=await api(`/api/catalog?q=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&brand=${encodeURIComponent(br)}`);
+  if(!rows.length){box.innerHTML=vazio('caixa_vazia','Nenhum produto aqui',
+    q||cat||br?'Tente limpar os filtros.':'Importe da sua loja em Conectar, ou cadastre um novo.');return;}
   box.innerHTML='';
-  for(const p of rows){ const low=p.total_stock<=4; const el=document.createElement('div'); el.className='trow';
-    const thumb = p.image_url
-      ? `<div class="thumb"><img src="${p.image_url}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<span class=\\'ph\\'>👕</span>'"></div>`
-      : `<div class="thumb"><span class="ph">👕</span></div>`;
-    el.innerHTML=`${thumb}<div><div class="nm">${p.name}</div><div class="meta">${p.min_price===p.max_price?BRL(p.min_price):BRL(p.min_price)+'–'+BRL(p.max_price)}</div></div>
-      <div class="meta">${p.brand||'—'}</div><div class="meta">${p.category||'—'}</div>
+  for(const p of rows){
+    const low=p.total_stock<=4;
+    const el=document.createElement('div');el.className='trow';
+    const img=p.image_url?`<img src="${p.image_url}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:ICO('estoque',20)}))">`:ICO('estoque',20);
+    el.innerHTML=`<span class="thumb">${img}</span>
+      <div><div class="nm">${p.name}</div><div class="meta">${p.min_price===p.max_price?BRL(p.min_price):BRL(p.min_price)+'–'+BRL(p.max_price)}</div></div>
+      <div class="cell">${p.brand||'—'}</div>
+      <div class="cell">${p.category||'—'}</div>
       <div class="num">${p.variant_count}</div>
-      <div class="num ${low?'lowb':''}">${p.total_stock} un.</div>
+      <div class="num ${low?'low':''}">${p.total_stock} un.</div>
       <div class="num cost">${BRL(p.stock_value_cost)}</div>
-      <div><span class="sync ${p.synced_nuvemshop?'on':'off'}">${p.synced_nuvemshop?'✔ no ar':'pendente'}</span></div>`;
-    el.addEventListener('click',()=>openEdit(p.id)); box.appendChild(el); }
+      <div><span class="tag ${p.synced_nuvemshop?'on':'off'}">${p.synced_nuvemshop?'no ar':'pendente'}</span></div>`;
+    el.onclick=()=>abrir(p.id);box.appendChild(el);
+  }
 }
 
-// ---- form ----
+/* diálogo */
 const dlg=document.getElementById('dlg');
-function varRow(v={}){ const div=document.createElement('div'); div.className='vrow';
-  div.innerHTML=`<input class="vn" placeholder="P / M / Único" value="${v.variant_name||''}"><input class="vsku" placeholder="SKU" value="${v.sku||''}"><input class="vprice" type="number" step="0.01" placeholder="0,00" value="${v.price??''}"><input class="vcost" type="number" step="0.01" placeholder="0,00" value="${v.cost??''}"><input class="vstock" type="number" placeholder="0" value="${v.stock??''}"><button class="del" type="button" aria-label="remover">✕</button>`;
-  div.querySelector('.del').addEventListener('click',()=>div.remove()); return div; }
-document.getElementById('addVar').addEventListener('click',()=>document.getElementById('vars').appendChild(varRow()));
+function linhaVar(v={}){
+  const d=document.createElement('div');d.className='vrow';
+  if(v.id)d.dataset.id=v.id;
+  d.innerHTML=`<input class="vn" placeholder="P / Único" value="${v.variant_name||''}">
+    <input class="vsku" placeholder="—" value="${v.sku||''}">
+    <input class="vprice" type="number" step="0.01" placeholder="0,00" value="${v.price??''}">
+    <input class="vcost" type="number" step="0.01" placeholder="0,00" value="${v.cost??''}">
+    <input class="vstock" type="number" placeholder="0" value="${v.stock??''}">
+    <button class="del" type="button" aria-label="remover">${ICO('sair',15)}</button>`;
+  d.querySelector('.del').onclick=()=>d.remove();return d;
+}
+document.getElementById('addVar').onclick=()=>document.getElementById('vars').appendChild(linhaVar());
 
-// ---- foto: redimensiona no navegador e envia ----
-function resizeImage(file,maxDim,q){ return new Promise((res,rej)=>{ const img=new Image(),url=URL.createObjectURL(file);
-  img.onload=()=>{ URL.revokeObjectURL(url); let w=img.width,h=img.height;
-    if(w>h && w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; } else if(h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; }
-    const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); res(cv.toDataURL('image/jpeg',q)); };
-  img.onerror=()=>rej(new Error('imagem inválida')); img.src=url; }); }
-function setPhoto(url){ document.getElementById('pImg').value=url||''; const t=document.getElementById('pThumb'), c=document.getElementById('pClear'), note=document.getElementById('pFileNote');
-  if(url){ t.innerHTML='<img src="'+url+'" alt="">'; c.hidden=false; note.textContent='Foto pronta ✔'; }
-  else{ t.innerHTML='<span>📷</span>'; c.hidden=true; note.textContent='Do celular ou galeria'; } }
-document.getElementById('pFileBtn').addEventListener('click',()=>document.getElementById('pFile').click());
-document.getElementById('pClear').addEventListener('click',()=>setPhoto(''));
-document.getElementById('pFile').addEventListener('change',async(e)=>{ const f=e.target.files[0]; if(!f) return; const note=document.getElementById('pFileNote'); note.textContent='Enviando…';
-  try{ const dataURL=await resizeImage(f,1280,0.82); const r=await api('/api/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:dataURL})}); setPhoto(r.url); }
-  catch(err){ note.textContent='Falhou: '+err.message; } finally{ e.target.value=''; } });
+function resize(file,max,q){return new Promise((ok,fail)=>{const img=new Image(),u=URL.createObjectURL(file);
+  img.onload=()=>{URL.revokeObjectURL(u);let w=img.width,h=img.height;
+    if(w>h&&w>max){h=Math.round(h*max/w);w=max;}else if(h>max){w=Math.round(w*max/h);h=max;}
+    const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
+    ok(c.toDataURL('image/jpeg',q));};img.onerror=()=>fail(new Error('imagem inválida'));img.src=u;});}
+function setFoto(url){
+  document.getElementById('pImg').value=url||'';
+  const t=document.getElementById('pThumb');
+  t.innerHTML=url?`<img src="${url}" alt="">`:ICO('estoque',22);
+  document.getElementById('pClear').hidden=!url;
+  document.getElementById('pNote').textContent=url?'Foto pronta':'Da câmera ou galeria';
+}
+document.getElementById('pFileBtn').onclick=()=>document.getElementById('pFile').click();
+document.getElementById('pClear').onclick=()=>setFoto('');
+document.getElementById('pFile').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;const n=document.getElementById('pNote');n.textContent='Enviando…';
+  try{const data=await resize(f,1280,.82);
+    const r=await api('/api/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data})});
+    setFoto(r.url);}catch(err){n.textContent='Falhou: '+err.message;}finally{e.target.value='';}
+};
 
-function openNew(){ document.getElementById('dlgTitle').textContent='Novo produto'; document.getElementById('pId').value='';
-  ['pName','pBrand','pCat','pDesc'].forEach(id=>document.getElementById(id).value=''); setPhoto('');
-  const vs=document.getElementById('vars'); vs.innerHTML=''; vs.appendChild(varRow({variant_name:'Único'})); dlg.showModal(); }
-async function openEdit(id){ const p=await api('/api/catalog/'+id);
-  document.getElementById('dlgTitle').textContent='Editar produto'; document.getElementById('pId').value=p.id;
-  document.getElementById('pName').value=p.name; document.getElementById('pBrand').value=p.brand||''; document.getElementById('pCat').value=p.category||'';
-  setPhoto(p.image_url||''); document.getElementById('pDesc').value=p.description||'';
-  const vs=document.getElementById('vars'); vs.innerHTML=''; (p.variants.length?p.variants:[{variant_name:'Único'}]).forEach(v=>vs.appendChild(varRow(v))); dlg.showModal(); }
-document.getElementById('newBtn').addEventListener('click',openNew);
+function novo(){
+  document.getElementById('dlgT').textContent='Novo produto';document.getElementById('pId').value='';
+  ['pName','pBrand','pCat','pDesc'].forEach(i=>document.getElementById(i).value='');
+  setFoto('');const v=document.getElementById('vars');v.innerHTML='';v.appendChild(linhaVar({variant_name:'Único'}));
+  dlg.showModal();
+}
+async function abrir(id){
+  const p=await api('/api/catalog/'+id);
+  document.getElementById('dlgT').textContent='Editar produto';document.getElementById('pId').value=p.id;
+  document.getElementById('pName').value=p.name;document.getElementById('pBrand').value=p.brand||'';
+  document.getElementById('pCat').value=p.category||'';document.getElementById('pDesc').value=p.description||'';
+  setFoto(p.image_url||'');
+  const v=document.getElementById('vars');v.innerHTML='';
+  (p.variants.length?p.variants:[{variant_name:'Único'}]).forEach(x=>v.appendChild(linhaVar(x)));
+  dlg.showModal();
+}
+document.getElementById('novo').onclick=novo;
 
-document.getElementById('saveBtn').addEventListener('click',async(e)=>{
-  const name=document.getElementById('pName').value.trim(); if(!name) return;
+document.getElementById('save').onclick=async e=>{
+  const name=document.getElementById('pName').value.trim();if(!name)return;
   e.preventDefault();
   const variants=[...document.querySelectorAll('#vars .vrow')].map(r=>({
-    id: r.dataset.id || undefined,
-    variant_name:r.querySelector('.vn').value.trim()||'Único', sku:r.querySelector('.vsku').value.trim(),
-    price:parseFloat(r.querySelector('.vprice').value)||0, cost:parseFloat(r.querySelector('.vcost').value)||0, stock:parseInt(r.querySelector('.vstock').value)||0 }));
-  const body={ name, brand:document.getElementById('pBrand').value.trim(), category:document.getElementById('pCat').value.trim(),
-    description:document.getElementById('pDesc').value.trim(), image_url:document.getElementById('pImg').value.trim(), variants };
-  const id=document.getElementById('pId').value;
-  const btn=document.getElementById('saveBtn'); btn.textContent='Salvando…';
-  try{ const r=await api(id?('/api/catalog/'+id):'/api/catalog',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    dlg.close(); await loadSummary(); await loadRows();
-    const s=r.sync; if(s && s.mode==='live' && !s.ok) alert('Salvo aqui, mas a publicação na Nuvemshop falhou: '+(s.note||''));
-  }catch(err){ alert(err.message); } finally{ btn.textContent='Salvar & publicar'; }
-});
+    id:r.dataset.id||undefined,
+    variant_name:r.querySelector('.vn').value.trim()||'Único',sku:r.querySelector('.vsku').value.trim(),
+    price:parseFloat(r.querySelector('.vprice').value)||0,cost:parseFloat(r.querySelector('.vcost').value)||0,
+    stock:parseInt(r.querySelector('.vstock').value)||0}));
+  const body={name,brand:document.getElementById('pBrand').value.trim(),category:document.getElementById('pCat').value.trim(),
+    description:document.getElementById('pDesc').value.trim(),image_url:document.getElementById('pImg').value.trim(),variants};
+  const id=document.getElementById('pId').value,btn=document.getElementById('save');
+  btn.textContent='Salvando…';btn.disabled=true;
+  try{const r=await api(id?('/api/catalog/'+id):'/api/catalog',{method:id?'PUT':'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    dlg.close();await resumo();await lista();
+    if(r.sync&&r.sync.mode==='live'&&!r.sync.ok)alert('Salvo aqui, mas a publicação na loja falhou: '+(r.sync.note||''));
+  }catch(err){alert(err.message);}finally{btn.textContent='Salvar e publicar';btn.disabled=false;}
+};
 
-let t; document.getElementById('search').addEventListener('input',()=>{clearTimeout(t);t=setTimeout(loadRows,200);});
-document.getElementById('fCat').addEventListener('change',loadRows);
-document.getElementById('fBrand').addEventListener('change',loadRows);
-health(); loadSummary(); loadRows();
+let t;document.getElementById('q').oninput=()=>{clearTimeout(t);t=setTimeout(lista,220);};
+document.getElementById('fCat').onchange=()=>{lista();resumo();};
+document.getElementById('fBrand').onchange=()=>{lista();resumo();};
+resumo();lista();
 </script>
-<script src="/nav.js"></script>
 </body>
 </html>

@@ -3,133 +3,152 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#080a08">
+<meta name="theme-color" content="#070907">
 <title>VN Store — Clientes</title>
 <link rel="icon" href="/logo.webp">
 <link rel="stylesheet" href="/theme.css">
 <style>
-  .app{max-width:1180px;margin:0 auto;padding:clamp(12px,2.4vw,24px)}
-  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-bottom:14px;margin-bottom:18px;border-bottom:1px solid var(--line)}
-  .brand{display:flex;align-items:center;gap:12px;margin-right:auto}
-  .brand .wordmark{font-size:22px}.brand .wordmark .cmd{display:block;font-size:13px}
-  .top-actions{display:flex;gap:8px;flex-wrap:wrap}
-  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
-  .search{flex:1;min-width:200px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:14px}
-  .search:focus{outline:2px solid var(--green);border-color:var(--green)}
-  .layout{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start}
-  @media (max-width:820px){.layout{grid-template-columns:1fr}}
+  .bar{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center;margin-bottom:var(--s4)}
+  .bar .search-wrap{flex:1;min-width:220px}
+  .layout{display:grid;grid-template-columns:1fr 348px;gap:var(--s4);align-items:start}
+  @media (max-width:900px){.layout{grid-template-columns:1fr}}
 
-  .rank{display:flex;flex-direction:column;gap:8px}
-  .row{display:grid;grid-template-columns:34px 1fr auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,var(--panel-2),var(--panel));cursor:pointer;transition:.15s}
-  .row:hover{border-color:rgba(47,210,79,.4);transform:translateY(-1px)}
-  .row.sel{border-color:var(--green)}
-  .pos{font-family:var(--disp);font-weight:900;font-size:18px;color:var(--ink-faint);text-align:center}
-  .row:nth-child(1) .pos{color:var(--green-hi)}
-  .who .nm{font-weight:700;font-size:14px}
-  .who .sub{font-size:11.5px;color:var(--ink-dim);font-family:var(--mono);margin-top:2px}
+  .rank{display:flex;flex-direction:column;gap:6px}
+  .r-item{display:grid;grid-template-columns:34px 1fr auto;gap:var(--s3);align-items:center;
+    padding:11px var(--s4);border:1px solid var(--line);border-radius:var(--r);cursor:pointer;
+    background:linear-gradient(180deg,var(--surface-2),var(--surface));transition:var(--t-fast)}
+  .r-item:hover{border-color:rgba(47,210,79,.35);transform:translateY(-1px)}
+  .r-item.sel{border-color:var(--brand);box-shadow:0 0 0 1px rgba(47,210,79,.2)}
+  .pos{font-family:var(--font-disp);font-weight:900;font-size:17px;color:var(--ink-3);text-align:center;transform:skewX(-6deg)}
+  .r-item:nth-child(1) .pos{color:var(--brand-hi)}
+  .r-item:nth-child(2) .pos,.r-item:nth-child(3) .pos{color:var(--ink-2)}
+  .who .nm{font-weight:600;font-size:13.5px}
+  .who .s{font-size:11px;color:var(--ink-3);font-family:var(--font-mono);margin-top:2px}
   .val{text-align:right}
-  .val .spent{font-family:var(--mono);font-weight:700;font-size:15px}
-  .val .pend{font-size:11px;font-weight:700;color:var(--amber);margin-top:2px}
-  .val .ord{font-size:11px;color:var(--ink-faint);margin-top:2px}
+  .val .sp{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:14.5px}
+  .val .pd{font-size:10.5px;font-weight:700;color:var(--warn);margin-top:2px}
+  .val .or{font-size:10.5px;color:var(--ink-3);margin-top:2px}
 
-  .panel{padding:16px;position:sticky;top:16px}
-  .panel h3{margin:0 0 4px;font-family:var(--disp);text-transform:uppercase;letter-spacing:.5px;font-size:18px;transform:skewX(-5deg)}
-  .muted{color:var(--ink-faint);font-size:13px;text-align:center;padding:24px 0}
-  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
-  .stat{background:var(--bg-2);border:1px solid var(--line-soft);border-radius:11px;padding:11px}
-  .stat .l{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-faint);font-weight:700}
-  .stat .v{font-family:var(--mono);font-weight:700;font-size:17px;margin-top:3px}
-  .stat .v.green{color:var(--green-hi)} .stat .v.amber{color:var(--amber)}
-  .hist{display:flex;flex-direction:column;gap:7px;margin-top:8px;max-height:46vh;overflow-y:auto}
-  .h-item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 11px;background:var(--bg-2);border:1px solid var(--line-soft);border-radius:10px;font-size:12.5px}
-  .h-item .c{font-family:var(--mono);color:var(--ink-dim)}
-  .badge-st{font-size:10px;font-weight:800;text-transform:uppercase;padding:3px 7px;border-radius:999px}
-  .badge-st.pago{color:var(--green-hi);background:rgba(47,210,79,.1)} .badge-st.pendente{color:var(--amber);background:rgba(245,178,31,.1)}
-  .h-item .r{font-family:var(--mono);font-weight:700}
-  .mini{font-size:11px;font-weight:800;text-transform:uppercase;padding:6px 9px;border-radius:8px;border:1px solid rgba(47,210,79,.35);color:var(--green-hi);background:rgba(47,210,79,.06);cursor:pointer}
+  .det{position:sticky;top:var(--s4);padding:var(--s4)}
+  .det h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;letter-spacing:.5px;font-size:18px;transform:skewX(-5deg)}
+  .det .contact{font-family:var(--font-mono);color:var(--ink-3);font-size:11.5px;margin-top:4px}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:var(--s3) 0}
+  .stat{background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:10px;padding:10px}
+  .stat .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-3);font-weight:700}
+  .stat .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:16px;margin-top:3px}
+  .stat .v.g{color:var(--brand-hi)} .stat .v.w{color:var(--warn)}
+  .hist{display:flex;flex-direction:column;gap:5px;margin-top:6px;max-height:44vh;overflow-y:auto}
+  .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 10px;
+    background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:10px;font-size:12.5px}
+  .h .c{font-family:var(--font-mono);color:var(--ink-3);font-size:10.5px;margin-top:2px}
+  .h .r{font-family:var(--font-mono);font-weight:700}
+  .bst{font-size:9px;font-weight:700;text-transform:uppercase;padding:2px 6px;border-radius:999px;margin-left:5px}
+  .bst.pago{color:var(--ok);background:rgba(53,192,138,.1)}
+  .bst.pendente{color:var(--warn);background:rgba(232,163,23,.1)}
 
-  dialog{border:1px solid var(--line);border-radius:16px;background:var(--panel-2);color:var(--ink);padding:0;max-width:420px;width:92vw}
-  dialog::backdrop{background:rgba(0,0,0,.6)}
-  .dlg{padding:18px;display:flex;flex-direction:column;gap:12px}
-  .dlg h3{margin:0;font-family:var(--disp);text-transform:uppercase;letter-spacing:.5px;font-size:18px}
-  .fld{display:flex;flex-direction:column;gap:5px}
-  .fld label{font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-faint);font-weight:700}
-  .fld input{padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:14px}
-  .fld input:focus{outline:2px solid var(--green);border-color:var(--green)}
-  .dlg-actions{display:flex;gap:8px;justify-content:flex-end}
+  .dlg{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);min-width:min(380px,90vw)}
+  .dlg h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;font-size:18px;transform:skewX(-5deg)}
+  .dlg-foot{display:flex;gap:var(--s2);justify-content:flex-end;margin-top:var(--s1)}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="pagehead">
-    <div><h1>Clientes</h1><div class="ph-sub">Cadastro · ranking · histórico de compras</div></div>
+    <div><h1>Clientes</h1><div class="ph-sub">Ranking · histórico de compras</div></div>
+    <div class="ph-actions"><button class="btn primary" id="novo" type="button">Novo cliente</button></div>
   </div>
 
   <div class="bar">
-    <input id="search" class="search" type="search" placeholder="Buscar cliente por nome, telefone ou e-mail…">
-    <button class="btn primary" id="newBtn" type="button">＋ Novo cliente</button>
+    <div class="search-wrap"><input id="q" type="search" placeholder="Buscar por nome, telefone ou e-mail…"></div>
   </div>
 
   <div class="layout">
     <div>
-      <div class="eyebrow" style="display:flex;align-items:center;gap:10px;margin:0 2px 12px">
-        <h2 style="font-family:var(--disp);text-transform:uppercase;font-size:18px;margin:0;transform:skewX(-6deg)">Ranking · quem mais gastou</h2>
-      </div>
-      <div class="rank" id="rank"><div class="muted">Carregando…</div></div>
+      <div class="sec" style="margin-top:0"><h2>Quem mais gastou</h2><span class="rule"></span><span class="meta" id="tot"></span></div>
+      <div class="rank" id="rank"></div>
     </div>
-
-    <aside class="panel card">
-      <div id="detail"><div class="muted">Clique num cliente pra ver o histórico.</div></div>
-    </aside>
+    <aside class="card det" id="det"></aside>
   </div>
 </div>
 
 <dialog id="dlg">
   <form class="dlg" method="dialog">
     <h3>Novo cliente</h3>
-    <div class="fld"><label for="nName">Nome *</label><input id="nName" required></div>
-    <div class="fld"><label for="nPhone">Telefone / WhatsApp</label><input id="nPhone"></div>
-    <div class="fld"><label for="nEmail">E-mail</label><input id="nEmail" type="email"></div>
-    <div class="dlg-actions"><button class="btn ghost" value="cancel" type="submit">Cancelar</button><button class="btn primary" id="saveCust" value="ok" type="submit">Salvar</button></div>
+    <div class="field"><label>Nome *</label><input id="nName" required></div>
+    <div class="field"><label>Telefone / WhatsApp</label><input id="nPhone"></div>
+    <div class="field"><label>E-mail</label><input id="nMail" type="email"></div>
+    <div class="dlg-foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn primary" id="save" value="ok" type="submit">Salvar</button>
+    </div>
   </form>
 </dialog>
 
+<script src="/icons.js"></script>
+<script src="/nav.js"></script>
 <script>
 const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-const fmtDate=(s)=>s?new Date(s).toLocaleDateString('pt-BR'):'—';
+const D=(s)=>s?new Date(s).toLocaleDateString('pt-BR'):'—';
 async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
-let selected=null;
+const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
+document.querySelector('.search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
+document.getElementById('novo').insertAdjacentHTML('afterbegin',ICO('mais',16));
+let sel=null;
 
-async function loadRank(q=''){ const rows=await api('/api/customers?q='+encodeURIComponent(q)); const box=document.getElementById('rank');
-  if(!rows.length){ box.innerHTML='<div class="muted">Nenhum cliente.</div>'; return; }
+async function rank(q=''){
+  const rows=await api('/api/customers?q='+encodeURIComponent(q));
+  const box=document.getElementById('rank');
+  document.getElementById('tot').textContent=rows.length?rows.length+' cliente(s)':'';
+  if(!rows.length){box.innerHTML=vazio('clientes','Nenhum cliente','Cadastre no botão acima ou direto na venda pelo PDV.');return;}
   box.innerHTML='';
-  rows.forEach((c,i)=>{ const el=document.createElement('div'); el.className='row'+(selected===c.id?' sel':''); el.dataset.id=c.id;
-    el.innerHTML=`<div class="pos">${i+1}</div><div class="who"><div class="nm">${c.name}</div><div class="sub">${c.phone||c.email||'—'} · ${fmtDate(c.last_purchase)}</div></div>
-      <div class="val"><div class="spent">${BRL(c.total_spent)}</div>${c.pending>0?`<div class="pend">⏳ ${BRL(c.pending)} a receber</div>`:''}<div class="ord">${c.orders} compra(s)</div></div>`;
-    el.addEventListener('click',()=>openDetail(c.id)); box.appendChild(el); }); }
+  rows.forEach((c,i)=>{
+    const el=document.createElement('div');el.className='r-item'+(sel===c.id?' sel':'');el.dataset.id=c.id;
+    el.innerHTML=`<div class="pos">${i+1}</div>
+      <div class="who"><div class="nm">${c.name}</div><div class="s">${c.phone||c.email||'—'} · ${D(c.last_purchase)}</div></div>
+      <div class="val"><div class="sp">${BRL(c.total_spent)}</div>
+        ${c.pending>0?`<div class="pd">${BRL(c.pending)} a receber</div>`:''}
+        <div class="or">${c.orders} compra(s)</div></div>`;
+    el.onclick=()=>detalhe(c.id);box.appendChild(el);
+  });
+}
 
-async function openDetail(id){ selected=id; document.querySelectorAll('.row').forEach(r=>r.classList.toggle('sel',r.dataset.id==id));
-  const c=await api('/api/customers/'+id); const d=document.getElementById('detail');
-  let hist='<div class="muted">Sem compras ainda.</div>';
-  if(c.sales.length){ hist=''; for(const s of c.sales){ hist+=`<div class="h-item"><div><div>${s.code} <span class="badge-st ${s.payment_status}">${s.payment_status}</span></div><div class="c">${fmtDate(s.created_at)} · ${s.payment_method||'—'}</div></div><div style="text-align:right"><div class="r">${BRL(s.total)}</div>${s.payment_status==='pendente'?`<button class="mini" data-settle="${s.id}" type="button">Receber</button>`:''}</div></div>`; } }
-  d.innerHTML=`<h3>${c.name}</h3><div class="c" style="font-family:var(--mono);color:var(--ink-dim);font-size:12px">${c.phone||''} ${c.email?'· '+c.email:''}</div>
-    <div class="stats"><div class="stat"><div class="l">Total gasto</div><div class="v green">${BRL(c.total_spent)}</div></div>
-    <div class="stat"><div class="l">Compras</div><div class="v">${c.orders}</div></div>
-    <div class="stat"><div class="l">A receber</div><div class="v amber">${BRL(c.pending)}</div></div>
-    <div class="stat"><div class="l">Ticket médio</div><div class="v">${BRL(c.orders?c.total_spent/c.orders:0)}</div></div></div>
-    <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-faint);font-weight:700">Histórico</div>
-    <div class="hist">${hist}</div>`;
-  d.querySelectorAll('[data-settle]').forEach(b=>b.addEventListener('click',async()=>{ try{ await api('/api/sales/'+b.dataset.settle+'/settle',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); await openDetail(id); await loadRank(document.getElementById('search').value.trim()); }catch(e){ alert(e.message);} })); }
+async function detalhe(id){
+  sel=id;document.querySelectorAll('.r-item').forEach(r=>r.classList.toggle('sel',r.dataset.id==id));
+  const c=await api('/api/customers/'+id),d=document.getElementById('det');
+  const hist=c.sales.length?c.sales.map(s=>`<div class="h">
+      <div><div>${s.code}<span class="bst ${s.payment_status}">${s.payment_status}</span></div>
+      <div class="c">${D(s.created_at)} · ${s.payment_method||'—'}</div></div>
+      <div style="text-align:right"><div class="r">${BRL(s.total)}</div>
+      ${s.payment_status==='pendente'?`<button class="btn sm" data-s="${s.id}" type="button" style="margin-top:4px">Receber</button>`:''}</div>
+    </div>`).join(''):vazio('recibo','Sem compras','Ainda não comprou nada.');
+  d.innerHTML=`<h3>${c.name}</h3>
+    <div class="contact">${c.phone||''}${c.email?' · '+c.email:''}</div>
+    <div class="stats">
+      <div class="stat"><div class="l">Total gasto</div><div class="v g">${BRL(c.total_spent)}</div></div>
+      <div class="stat"><div class="l">Compras</div><div class="v">${c.orders}</div></div>
+      <div class="stat"><div class="l">A receber</div><div class="v w">${BRL(c.pending)}</div></div>
+      <div class="stat"><div class="l">Ticket médio</div><div class="v">${BRL(c.orders?c.total_spent/c.orders:0)}</div></div>
+    </div>
+    <span class="label">Histórico</span><div class="hist">${hist}</div>`;
+  d.querySelectorAll('[data-s]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true;
+    try{await api('/api/sales/'+b.dataset.s+'/settle',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      await detalhe(id);await rank(document.getElementById('q').value.trim());}catch(e){alert(e.message);b.disabled=false;}
+  });
+}
+function semSelecao(){document.getElementById('det').innerHTML=vazio('clientes','Escolha um cliente','Clique em alguém da lista para ver o histórico completo.');}
 
 const dlg=document.getElementById('dlg');
-document.getElementById('newBtn').addEventListener('click',()=>{ document.getElementById('nName').value='';document.getElementById('nPhone').value='';document.getElementById('nEmail').value=''; dlg.showModal(); });
-document.getElementById('saveCust').addEventListener('click',async(e)=>{ const name=document.getElementById('nName').value.trim(); if(!name){ e.preventDefault(); return; }
+document.getElementById('novo').onclick=()=>{['nName','nPhone','nMail'].forEach(i=>document.getElementById(i).value='');dlg.showModal();};
+document.getElementById('save').onclick=async e=>{
+  const name=document.getElementById('nName').value.trim();if(!name)return;
   e.preventDefault();
-  try{ await api('/api/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,phone:document.getElementById('nPhone').value.trim(),email:document.getElementById('nEmail').value.trim()})}); dlg.close(); await loadRank(); }catch(err){ alert(err.message);} });
-
-let t; document.getElementById('search').addEventListener('input',(e)=>{ clearTimeout(t); t=setTimeout(()=>loadRank(e.target.value.trim()),200); });
-loadRank();
+  try{await api('/api/customers',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name,phone:document.getElementById('nPhone').value.trim(),email:document.getElementById('nMail').value.trim()})});
+    dlg.close();await rank();}catch(err){alert(err.message);}
+};
+let t;document.getElementById('q').oninput=e=>{clearTimeout(t);t=setTimeout(()=>rank(e.target.value.trim()),220);};
+semSelecao();rank();
 </script>
-<script src="/nav.js"></script>
 </body>
 </html>

@@ -3,35 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#080a08">
+<meta name="theme-color" content="#070907">
 <title>VN Store — Agentes</title>
 <link rel="icon" href="/logo.webp">
 <link rel="stylesheet" href="/theme.css">
 <style>
-  .app{max-width:1180px;margin:0 auto;padding:clamp(14px,2.6vw,28px)}
-  .maestro{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:start;padding:20px;position:relative;overflow:hidden;margin-bottom:22px;background:radial-gradient(420px 200px at 100% 0%,rgba(47,210,79,.12),transparent 70%),linear-gradient(180deg,var(--panel-2),var(--panel))}
-  .m-ava{width:62px;height:62px;border-radius:18px;display:grid;place-items:center;font-size:32px;background:radial-gradient(circle at 35% 30%,#1e4a28,#0c1a10);border:1px solid rgba(47,210,79,.4);box-shadow:0 0 24px var(--glow)}
-  .m-body h3{margin:0;font-family:var(--disp);font-weight:900;text-transform:uppercase;letter-spacing:.6px;font-size:20px;transform:skewX(-6deg)}
-  .m-body .role{color:var(--green-hi);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-top:2px}
-  .m-body p{margin:12px 0 0;max-width:66ch}.m-body p b{color:var(--green-hi)}
+  .maestro{display:grid;grid-template-columns:auto 1fr;gap:var(--s4);align-items:start;padding:var(--s5);
+    position:relative;overflow:hidden;margin-bottom:var(--s5);
+    background:radial-gradient(480px 240px at 100% 0%,rgba(47,210,79,.11),transparent 68%),
+      linear-gradient(180deg,var(--surface-2),var(--surface))}
+  .m-ava{width:58px;height:58px;border-radius:var(--r-lg);display:grid;place-items:center;overflow:hidden;
+    background:radial-gradient(circle at 35% 30%,#1D4A28,#0A1A0F);
+    border:1px solid rgba(47,210,79,.35);box-shadow:0 0 24px var(--glow)}
+  .m-ava img{width:78%;height:78%;object-fit:contain}
+  .m-body h3{margin:0;font-family:var(--font-disp);font-weight:900;text-transform:uppercase;letter-spacing:.5px;font-size:20px;transform:skewX(-6deg)}
+  .m-role{color:var(--brand-hi);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-top:3px}
+  .m-body p{margin:var(--s3) 0 0;max-width:64ch;color:var(--ink-2);line-height:1.6}
+  .m-body b{color:var(--ink)} .m-body .hl{color:var(--brand-hi)}
   @media (max-width:560px){.maestro{grid-template-columns:1fr}}
-  .eyebrow{display:flex;align-items:center;gap:12px;margin:0 2px 14px}
-  .eyebrow h2{font-family:var(--disp);font-weight:900;text-transform:uppercase;font-size:19px;letter-spacing:1px;margin:0;transform:skewX(-6deg)}
-  .eyebrow .rule{height:1px;background:linear-gradient(90deg,var(--line),transparent);flex:1}
-  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(270px,1fr))}
-  .agent{padding:16px;display:flex;flex-direction:column;gap:11px;transition:transform .18s,border-color .18s}
-  .agent:hover{transform:translateY(-3px);border-color:rgba(47,210,79,.35)}
-  .a-head{display:flex;align-items:center;gap:11px}
-  .a-ava{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:21px;background:var(--bg-2);border:1px solid var(--line);flex:0 0 auto}
-  .a-id .nm{font-family:var(--disp);font-weight:900;text-transform:uppercase;letter-spacing:.4px;font-size:16px;line-height:1;transform:skewX(-5deg)}
-  .a-id .fn{font-size:11.5px;color:var(--ink-dim);margin-top:3px}
-  .a-status{margin-left:auto}
-  .a-find{background:var(--bg-2);border:1px solid var(--line-soft);border-radius:11px;padding:11px 12px}
-  .a-find .k{color:var(--ink-faint);font-size:10px;text-transform:uppercase;letter-spacing:.8px;font-weight:700;display:block;margin-bottom:5px}
-  .a-find p{margin:0;font-size:13px}.a-find b{color:var(--green-hi)}
-  .a-foot{margin-top:auto;display:flex;gap:8px;align-items:center}
-  .a-foot .meta{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-faint)}
-  .mini{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:7px 11px;border-radius:9px;border:1px solid rgba(47,210,79,.35);color:var(--green-hi);background:rgba(47,210,79,.06);cursor:pointer;text-decoration:none}
+
+  .grid{display:grid;gap:var(--s3);grid-template-columns:repeat(auto-fill,minmax(268px,1fr))}
+  .ag{padding:var(--s4);display:flex;flex-direction:column;gap:var(--s3);transition:var(--t-fast)}
+  .ag:hover{transform:translateY(-2px);border-color:rgba(47,210,79,.3);box-shadow:var(--sh-2)}
+  .ag.soon{opacity:.72}
+  .ag-head{display:flex;align-items:center;gap:11px}
+  .ag-id{min-width:0;flex:1;display:flex;flex-direction:column;gap:4px}
+  .ag-id .nm{display:block;font-family:var(--font-disp);font-weight:900;text-transform:uppercase;letter-spacing:.3px;font-size:16px;transform:skewX(-5deg);line-height:1}
+  .ag-id .fn{display:block;font-size:11px;color:var(--ink-3)}
+  .ag-body{background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:var(--r);padding:11px 12px}
+  .ag-body p{margin:0;font-size:12.5px;color:var(--ink-2);line-height:1.55}
+  .ag-body b{color:var(--brand-hi)}
+  .ag-foot{display:flex;align-items:center;gap:var(--s2);margin-top:auto}
+  .ag-foot .meta{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--ink-3)}
 </style>
 </head>
 <body>
@@ -40,87 +43,80 @@
     <div><h1>Agentes</h1><div class="ph-sub">O time que toca a loja</div></div>
   </div>
 
-  <div class="maestro card">
-    <div class="m-ava">🐊</div>
+  <div class="card maestro">
+    <div class="m-ava"><img src="/logo.webp" alt=""></div>
     <div class="m-body">
       <h3>Maestro</h3>
-      <div class="role">Gerente-geral · coordena todos os agentes</div>
-      <p id="maestroMsg">Lendo os números da loja…</p>
+      <div class="m-role">Gerente-geral · coordena o time</div>
+      <p id="msg"><span class="sk">Lendo os números…</span></p>
     </div>
   </div>
 
-  <div class="eyebrow"><h2>Ativos</h2><span class="rule"></span><span style="font-family:var(--mono);font-size:12px;color:var(--ink-faint)">já trabalhando</span></div>
-  <div class="grid" style="margin-bottom:24px">
-    <div class="agent card">
-      <div class="a-head"><div class="a-ava">🛒</div><div class="a-id"><div class="nm">Vendas</div><div class="fn">PDV &amp; pedidos</div></div><span class="a-status pill live"><span class="dot"></span>Ativo</span></div>
-      <div class="a-find"><span class="k">Hoje</span><p id="agVendas">—</p></div>
-      <div class="a-foot"><a class="mini" href="/pdv">Abrir PDV</a><span class="meta">tempo real</span></div>
-    </div>
-    <div class="agent card">
-      <div class="a-head"><div class="a-ava">📦</div><div class="a-id"><div class="nm">Estoque</div><div class="fn">Inventário &amp; reposição</div></div><span class="a-status pill" id="agEstoquePill"><span class="dot"></span>—</span></div>
-      <div class="a-find"><span class="k">Situação</span><p id="agEstoque">—</p></div>
-      <div class="a-foot"><a class="mini" href="/produtos">Ver estoque</a><span class="meta">valor a custo no painel</span></div>
-    </div>
-    <div class="agent card">
-      <div class="a-head"><div class="a-ava">💰</div><div class="a-id"><div class="nm">Financeiro</div><div class="fn">Caixa &amp; margem</div></div><span class="a-status pill live"><span class="dot"></span>Ativo</span></div>
-      <div class="a-find"><span class="k">Hoje</span><p id="agFin">—</p></div>
-      <div class="a-foot"><a class="mini" href="/financeiro">Ver caixa</a><span class="meta">lançamento automático</span></div>
-    </div>
-    <div class="agent card">
-      <div class="a-head"><div class="a-ava">🧾</div><div class="a-id"><div class="nm">Cobrança</div><div class="fn">Contas a receber</div></div><span class="a-status pill" id="agCobrancaPill"><span class="dot"></span>—</span></div>
-      <div class="a-find"><span class="k">Fiado em aberto</span><p id="agCobranca">—</p></div>
-      <div class="a-foot"><a class="mini" href="/clientes">Ver clientes</a><span class="meta">baixa em 1 clique</span></div>
-    </div>
-    <div class="agent card">
-      <div class="a-head"><div class="a-ava">👥</div><div class="a-id"><div class="nm">Clientes</div><div class="fn">Cadastro &amp; ranking</div></div><span class="a-status pill live"><span class="dot"></span>Ativo</span></div>
-      <div class="a-find"><span class="k">Base</span><p id="agClientes">—</p></div>
-      <div class="a-foot"><a class="mini" href="/clientes">Abrir</a><span class="meta">tempo real</span></div>
-    </div>
-  </div>
+  <div class="sec" style="margin-top:0"><h2>Em operação</h2><span class="rule"></span><span class="meta">já trabalhando</span></div>
+  <div class="grid" id="ativos"></div>
 
-  <div class="eyebrow"><h2>Próximas fases</h2><span class="rule"></span><span style="font-family:var(--mono);font-size:12px;color:var(--ink-faint)">você define o quê e a autonomia</span></div>
-  <div class="grid">
-    <div class="agent card">
-      <div class="a-head"><div class="a-ava">💬</div><div class="a-id"><div class="nm">Atendimento</div><div class="fn">SAC · WhatsApp</div></div><span class="a-status pill demo"><span class="dot"></span>Em breve</span></div>
-      <div class="a-find"><span class="k">Vai fazer</span><p>Responder clientes, tirar dúvidas e gerir trocas. Você define o tom e a autonomia.</p></div>
-      <div class="a-foot"><span class="meta">roadmap</span></div>
-    </div>
-    <div class="agent card">
-      <div class="a-head"><div class="a-ava">📣</div><div class="a-id"><div class="nm">Marketing</div><div class="fn">Conteúdo &amp; campanhas</div></div><span class="a-status pill demo"><span class="dot"></span>Em breve</span></div>
-      <div class="a-find"><span class="k">Vai fazer</span><p>Calendário de posts e campanhas a partir do que mais vende.</p></div>
-      <div class="a-foot"><span class="meta">roadmap</span></div>
-    </div>
-    <div class="agent card">
-      <div class="a-head"><div class="a-ava">🚚</div><div class="a-id"><div class="nm">Logística</div><div class="fn">Envios &amp; rastreio</div></div><span class="a-status pill demo"><span class="dot"></span>Em breve</span></div>
-      <div class="a-find"><span class="k">Vai fazer</span><p>Rastrear encomendas e avisar clientes proativamente.</p></div>
-      <div class="a-foot"><span class="meta">roadmap</span></div>
-    </div>
-    <div class="agent card">
-      <div class="a-head"><div class="a-ava">🤝</div><div class="a-id"><div class="nm">Compras</div><div class="fn">Fornecedores</div></div><span class="a-status pill demo"><span class="dot"></span>Em breve</span></div>
-      <div class="a-find"><span class="k">Vai fazer</span><p>Sugerir reposição dos campeões e organizar cotações.</p></div>
-      <div class="a-foot"><span class="meta">roadmap</span></div>
-    </div>
-  </div>
+  <div class="sec"><h2>Próximas fases</h2><span class="rule"></span><span class="meta">você define o quê e a autonomia</span></div>
+  <div class="grid" id="futuros"></div>
 </div>
 
+<script src="/icons.js"></script>
 <script src="/nav.js"></script>
 <script>
 const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 async function api(p){const r=await fetch(p);return r.json();}
-async function load(){ const d=await api('/api/dashboard');
-  document.getElementById('agVendas').innerHTML = d.orders_today>0?`<b>${d.orders_today}</b> venda(s) · <b>${BRL(d.revenue_today)}</b> no caixa.`:'Pronto pra vender. Nada lançado hoje ainda.';
-  document.getElementById('agFin').innerHTML=`Faturamento <b>${BRL(d.revenue_today)}</b> · margem <b>${d.margin_pct}%</b>. Estoque a custo: <b>${BRL(d.stock_value_cost)}</b>.`;
-  const eP=document.getElementById('agEstoquePill');
-  if(d.low_stock>0){ eP.className='a-status pill demo'; eP.innerHTML='<span class="dot"></span>Atenção'; document.getElementById('agEstoque').innerHTML=`<b>${d.low_stock}</b> item(ns) no vermelho (≤ 4 un.). Sugere repor os campeões.`; }
-  else{ eP.className='a-status pill live'; eP.innerHTML='<span class="dot"></span>Ok'; document.getElementById('agEstoque').textContent='Estoque saudável em todas as variações.'; }
-  const cP=document.getElementById('agCobrancaPill');
-  if(d.receivable_count>0){ cP.className='a-status pill demo'; cP.innerHTML='<span class="dot"></span>Atenção'; document.getElementById('agCobranca').innerHTML=`<b>${BRL(d.receivable_total)}</b> em <b>${d.receivable_count}</b> venda(s) fiado esperando recebimento.`; }
-  else{ cP.className='a-status pill live'; cP.innerHTML='<span class="dot"></span>Em dia'; document.getElementById('agCobranca').textContent='Sem fiado em aberto.'; }
-  document.getElementById('agClientes').textContent='Ranking de quem mais gasta e histórico de cada cliente.';
-  const parts=[]; if(d.orders_today>0) parts.push(`<b>${d.orders_today}</b> venda(s) hoje, <b>${BRL(d.revenue_today)}</b> no caixa.`); else parts.push('Sem vendas hoje ainda.');
-  if(d.receivable_count>0) parts.push(`<b>${BRL(d.receivable_total)}</b> em fiado pra receber.`);
-  if(d.low_stock>0) parts.push(`<b>${d.low_stock}</b> item(ns) perto da ruptura.`);
-  document.getElementById('maestroMsg').innerHTML='Fala, chefe. '+parts.join(' ')+' O resto do time está no aguardo pra você acionar.';
+
+function card(a){
+  return `<div class="card ag${a.soon?' soon':''}">
+    <div class="ag-head">
+      <span class="ico-box ${a.tone||''}">${ICO(a.ico,18)}</span>
+      <span class="ag-id"><span class="nm">${a.nome}</span><span class="fn">${a.fn}</span></span>
+      <span class="pill ${a.pill||''}"><span class="dot"></span>${a.estado}</span>
+    </div>
+    <div class="ag-body"><span class="label">${a.k}</span><p>${a.txt}</p></div>
+    <div class="ag-foot">${a.link?`<a class="btn sm" href="${a.link}">${a.linkTxt}</a>`:''}
+      <span class="meta">${a.meta||''}</span></div>
+  </div>`;
+}
+
+async function load(){
+  const d=await api('/api/dashboard');
+  const ativos=[
+    {nome:'Vendas',fn:'PDV & pedidos',ico:'pdv',tone:'brand',estado:'Ativo',pill:'live',k:'Hoje',
+     txt:d.orders_today>0?`<b>${d.orders_today}</b> venda(s) · <b>${BRL(d.revenue_today)}</b> no caixa.`:'Pronto pra vender. Nada lançado hoje ainda.',
+     link:'/pdv',linkTxt:'Abrir PDV',meta:'tempo real'},
+    {nome:'Estoque',fn:'Inventário & reposição',ico:'estoque',tone:d.low_stock?'warn':'brand',
+     estado:d.low_stock?'Atenção':'Em dia',pill:d.low_stock?'demo':'ok',k:'Situação',
+     txt:d.low_stock?`<b>${d.low_stock}</b> item(ns) com 4 unidades ou menos. Vale repor os campeões.`:'Estoque saudável em todas as variações.',
+     link:'/produtos',linkTxt:'Ver estoque',meta:BRL(d.stock_value_cost)+' a custo'},
+    {nome:'Financeiro',fn:'Caixa & margem',ico:'financeiro',tone:'brand',estado:'Ativo',pill:'live',k:'Hoje',
+     txt:`Faturamento <b>${BRL(d.revenue_today)}</b> com margem de <b>${d.margin_pct}%</b>. Toda venda entra sozinha no caixa.`,
+     link:'/financeiro',linkTxt:'Ver caixa',meta:'automático'},
+    {nome:'Cobrança',fn:'Contas a receber',ico:'recibo',tone:d.receivable_count?'warn':'brand',
+     estado:d.receivable_count?'Atenção':'Em dia',pill:d.receivable_count?'demo':'ok',k:'Fiado em aberto',
+     txt:d.receivable_count?`<b>${BRL(d.receivable_total)}</b> em <b>${d.receivable_count}</b> venda(s) esperando recebimento.`:'Sem fiado em aberto.',
+     link:'/clientes',linkTxt:'Ver clientes',meta:'baixa em 1 clique'},
+    {nome:'Clientes',fn:'Cadastro & ranking',ico:'clientes',tone:'brand',estado:'Ativo',pill:'live',k:'Base',
+     txt:'Ranking de quem mais gasta e o histórico completo de cada cliente.',link:'/clientes',linkTxt:'Abrir',meta:'tempo real'},
+  ];
+  const futuros=[
+    {nome:'Atendimento',fn:'SAC · WhatsApp',ico:'conversa',estado:'Em breve',k:'Vai fazer',soon:true,
+     txt:'Responder clientes, tirar dúvidas e cuidar das trocas. Você define o tom e o quanto ele decide sozinho.',meta:'roadmap'},
+    {nome:'Marketing',fn:'Conteúdo & campanhas',ico:'megafone',estado:'Em breve',k:'Vai fazer',soon:true,
+     txt:'Calendário de posts e campanhas a partir do que mais vende na loja.',meta:'roadmap'},
+    {nome:'Logística',fn:'Envios & rastreio',ico:'entrega',estado:'Em breve',k:'Vai fazer',soon:true,
+     txt:'Acompanhar encomendas e avisar o cliente antes dele perguntar.',meta:'roadmap'},
+    {nome:'Compras',fn:'Fornecedores',ico:'etiqueta',estado:'Em breve',k:'Vai fazer',soon:true,
+     txt:'Sugerir reposição dos campeões de venda e organizar cotações.',meta:'roadmap'},
+  ];
+  document.getElementById('ativos').innerHTML=ativos.map(card).join('');
+  document.getElementById('futuros').innerHTML=futuros.map(card).join('');
+
+  const p=[];
+  if(d.orders_today>0)p.push(`<b>${d.orders_today}</b> venda(s) hoje, <b class="hl">${BRL(d.revenue_today)}</b> no caixa.`);
+  else p.push('Sem vendas hoje ainda.');
+  if(d.receivable_count>0)p.push(`<b class="hl">${BRL(d.receivable_total)}</b> em fiado pra receber.`);
+  if(d.low_stock>0)p.push(`<b>${d.low_stock}</b> item(ns) perto da ruptura.`);
+  document.getElementById('msg').innerHTML='Fala, chefe. '+p.join(' ')+' O resto do time está no aguardo pra você acionar.';
 }
 load();
 </script>

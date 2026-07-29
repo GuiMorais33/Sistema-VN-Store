@@ -3,22 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#080a08">
+<meta name="theme-color" content="#070907">
 <title>VN Store — Entrar</title>
 <link rel="icon" href="/logo.webp">
 <link rel="stylesheet" href="/theme.css">
 <style>
   body{display:flex;align-items:center;justify-content:center;padding:20px}
   .box{width:100%;max-width:360px;padding:28px 24px;text-align:center;display:flex;flex-direction:column;gap:16px;
-    background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:20px;
+    background:linear-gradient(180deg,var(--surface-2),var(--surface));border:1px solid var(--line);border-radius:20px;
     box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 30px rgba(47,210,79,.12)}
   .badge{width:66px;height:66px;margin:0 auto}
-  .box .wm{font-family:var(--disp);font-weight:900;text-transform:uppercase;font-size:26px;letter-spacing:.5px;transform:skewX(-6deg);
+  .box .wm{font-family:var(--font-disp);font-weight:900;text-transform:uppercase;font-size:26px;letter-spacing:.5px;transform:skewX(-6deg);
     background:linear-gradient(180deg,#fff,#c3ccd3 55%,#828b92);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .box .sub{font-size:11.5px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-dim);font-weight:700;margin-top:-8px}
-  input{width:100%;padding:13px 15px;border-radius:12px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:16px;text-align:center;font-family:var(--body)}
-  input:focus{outline:2px solid var(--green);border-color:var(--green)}
-  .err{color:var(--red);font-size:13px;min-height:16px;font-weight:600}
+  .box .sub{font-size:11.5px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-2);font-weight:700;margin-top:-8px}
+  input{width:100%;padding:13px 15px;border-radius:12px;border:1px solid var(--line);background:var(--bg-elev);color:var(--ink);font-size:16px;text-align:center;font-family:var(--font-body)}
+  input:focus{outline:2px solid var(--brand);border-color:var(--brand)}
+  .err{color:var(--crit);font-size:13px;min-height:16px;font-weight:600}
 </style>
 </head>
 <body>
@@ -30,7 +30,7 @@
     </div>
     <input id="pwd" type="password" placeholder="Senha" autocomplete="current-password" autofocus>
     <div class="err" id="err"></div>
-    <button class="btn primary" type="submit" style="width:100%">Entrar 🐊</button>
+    <button class="btn primary" type="submit" style="width:100%">Entrar</button>
   </form>
 <script>
 document.getElementById('form').addEventListener('submit', async (e)=>{

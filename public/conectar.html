@@ -10,48 +10,48 @@
 <style>
   .app{max-width:820px;margin:0 auto;padding:clamp(14px,2.6vw,28px)}
   .card{padding:18px;margin-bottom:14px}
-  h3{margin:0 0 10px;font-family:var(--disp);text-transform:uppercase;letter-spacing:.5px;font-size:17px;transform:skewX(-5deg)}
+  h3{margin:0 0 10px;font-family:var(--font-disp);text-transform:uppercase;letter-spacing:.5px;font-size:17px;transform:skewX(-5deg)}
   .banner{padding:12px 14px;border-radius:12px;margin-bottom:14px;font-size:13.5px;font-weight:600}
-  .banner.ok{background:rgba(47,210,79,.1);border:1px solid rgba(47,210,79,.4);color:var(--green-hi)}
+  .banner.ok{background:rgba(47,210,79,.1);border:1px solid rgba(47,210,79,.4);color:var(--brand-hi)}
   .banner.err{background:rgba(255,81,66,.1);border:1px solid rgba(255,81,66,.4);color:#ff8377}
   .status{display:flex;align-items:center;gap:12px}
-  .status .big{font-family:var(--disp);text-transform:uppercase;font-size:18px}
+  .status .big{font-family:var(--font-disp);text-transform:uppercase;font-size:18px}
   ol{margin:0;padding-left:20px;line-height:1.7;font-size:13.5px;color:var(--ink)}
-  ol b{color:var(--green-hi)}
-  code{font-family:var(--mono);background:var(--bg-2);border:1px solid var(--line);border-radius:7px;padding:2px 7px;font-size:12.5px;color:var(--ink)}
+  ol b{color:var(--brand-hi)}
+  code{font-family:var(--font-mono);background:var(--bg-elev);border:1px solid var(--line);border-radius:7px;padding:2px 7px;font-size:12.5px;color:var(--ink)}
   .copybox{display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap}
-  .copybox input{flex:1;min-width:220px;font-family:var(--mono);font-size:12.5px;padding:9px 11px;border-radius:9px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink)}
+  .copybox input{flex:1;min-width:220px;font-family:var(--font-mono);font-size:12.5px;padding:9px 11px;border-radius:9px;border:1px solid var(--line);background:var(--bg-elev);color:var(--ink)}
   .fld{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
-  .fld label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);font-weight:700}
-  .fld input{padding:11px 13px;border-radius:10px;border:1px solid var(--line);background:var(--bg-2);color:var(--ink);font-size:14px;font-family:var(--body)}
-  .fld input:focus{outline:2px solid var(--green);border-color:var(--green)}
+  .fld label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-3);font-weight:700}
+  .fld input{padding:11px 13px;border-radius:10px;border:1px solid var(--line);background:var(--bg-elev);color:var(--ink);font-size:14px;font-family:var(--font-body)}
+  .fld input:focus{outline:2px solid var(--brand);border-color:var(--brand)}
   .row{display:flex;gap:8px;flex-wrap:wrap}
-  .note{font-size:12px;color:var(--ink-faint);margin-top:8px}
-  .ro{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--green-hi);background:rgba(47,210,79,.08);border:1px solid rgba(47,210,79,.3);padding:5px 10px;border-radius:999px}
+  .note{font-size:12px;color:var(--ink-3);margin-top:8px}
+  .ro{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--brand-hi);background:rgba(47,210,79,.08);border:1px solid rgba(47,210,79,.3);padding:5px 10px;border-radius:999px}
   .hidden{display:none}
   .msg{font-size:13px;margin-top:10px}
-  .opts{display:flex;flex-direction:column;gap:8px;margin-top:14px;padding:12px;background:var(--bg-2);border:1px solid var(--line-soft);border-radius:11px}
+  .opts{display:flex;flex-direction:column;gap:8px;margin-top:14px;padding:12px;background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:11px}
   .opt{display:flex;align-items:center;gap:9px;font-size:13.5px;cursor:pointer}
-  .opt input{width:17px;height:17px;accent-color:var(--green);cursor:pointer}
-  .opt b{color:var(--green-hi)}
+  .opt input{width:17px;height:17px;accent-color:var(--brand);cursor:pointer}
+  .opt b{color:var(--brand-hi)}
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-top:12px}
-  .stat{background:var(--bg-2);border:1px solid var(--line-soft);border-radius:10px;padding:10px}
-  .stat .l{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);font-weight:700}
-  .stat .v{font-family:var(--mono);font-weight:700;font-size:17px;margin-top:3px;color:var(--green-hi)}
+  .stat{background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:10px;padding:10px}
+  .stat .l{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-3);font-weight:700}
+  .stat .v{font-family:var(--font-mono);font-weight:700;font-size:17px;margin-top:3px;color:var(--brand-hi)}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="pagehead">
     <div><h1>Conectar Loja</h1><div class="ph-sub">Integração com a Nuvemshop</div></div>
-    <div class="ph-actions"><span class="ro">🔒 Somente leitura nesta etapa</span></div>
+    <div class="ph-actions"><span class="pill ok"><span class="dot"></span>Somente leitura</span></div>
   </div>
 
   <div id="banner"></div>
 
   <!-- Conectado -->
   <div class="card" id="connectedCard" style="display:none">
-    <div class="status"><span style="font-size:30px">✅</span><div><div class="big">Conectada</div><div class="note" id="storeInfo"></div></div></div>
+    <div class="status"><span class="ico-box brand" style="width:40px;height:40px" id="okIco"></span><div><div class="big">Conectada</div><div class="note" id="storeInfo"></div></div></div>
 
     <div class="opts">
       <label class="opt"><input type="checkbox" id="optAvail" checked> <span>Só produtos <b>com unidades em estoque</b></span></label>
@@ -59,7 +59,7 @@
     </div>
 
     <div class="row" style="margin-top:14px">
-      <button class="btn primary" id="syncBtn" type="button">↓ Ler produtos da loja</button>
+      <button class="btn primary" id="syncBtn" type="button">Ler produtos da loja</button>
       <button class="btn ghost" id="disconnectBtn" type="button">Desconectar</button>
     </div>
     <div class="msg" id="syncMsg"></div>
@@ -70,7 +70,7 @@
     <h3>Começar limpo</h3>
     <p class="note" style="margin-top:0">Apaga <b>tudo que está aqui no sistema</b> — catálogo, vendas, clientes e financeiro —
       pra você recomeçar só com os dados reais. <b>Não altera nada na sua Nuvemshop.</b></p>
-    <button class="btn ghost" id="resetBtn" type="button" style="border-color:rgba(255,81,66,.4);color:#ff8377">🧹 Limpar dados do sistema</button>
+    <button class="btn ghost" id="resetBtn" type="button" style="border-color:rgba(255,81,66,.4);color:#ff8377">Limpar dados do sistema</button>
     <div class="msg" id="resetMsg"></div>
   </div>
 
@@ -103,12 +103,13 @@
     <div class="card" id="authorizeCard" style="opacity:.5">
       <h3>3 · Autorizar na sua loja</h3>
       <p class="note">Depois de salvar as chaves, clique abaixo. Você vai pra Nuvemshop, confirma a instalação, e volta pra cá já conectado.</p>
-      <a class="btn primary" id="authorizeBtn" href="#" style="pointer-events:none">Autorizar na Nuvemshop 🐊</a>
+      <a class="btn primary" id="authorizeBtn" href="#" style="pointer-events:none">Autorizar na Nuvemshop</a>
       <div class="note">Se o botão não abrir a tela certa, você também pode <b>instalar o app pela própria página do Portal de Parceiros</b> — desde que a URL de redirecionamento seja a do passo 1.</div>
     </div>
   </div>
 </div>
 
+<script src="/icons.js"></script>
 <script src="/nav.js"></script>
 <script>
 async function api(p,o){ const r=await fetch(p,o); const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||('Erro '+r.status)); return d; }
@@ -145,7 +146,7 @@ document.getElementById('saveBtn').addEventListener('click', async ()=>{
   if(!client_id||!client_secret){ msg.innerHTML='<span style="color:#ff8377">Preencha os dois campos.</span>'; return; }
   try{
     const r=await api('/api/connect/app',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id,client_secret})});
-    msg.innerHTML='<span style="color:var(--green-hi)">Chaves salvas ✔ Agora clique no passo 3.</span>';
+    msg.innerHTML='<span style="color:var(--brand-hi)">Chaves salvas ✔ Agora clique no passo 3.</span>';
     const card=document.getElementById('authorizeCard'); card.style.opacity='1';
     const btn=document.getElementById('authorizeBtn'); btn.href=r.authorize_url; btn.style.pointerEvents='auto';
   }catch(e){ msg.innerHTML='<span style="color:#ff8377">'+e.message+'</span>'; }
@@ -159,7 +160,7 @@ document.getElementById('syncBtn').addEventListener('click', async (e)=>{
       only_available: document.getElementById('optAvail').checked,
       published_only: document.getElementById('optPub').checked })});
     if(r.mode!=='live'){ msg.innerHTML='<span>Modo demonstração.</span>'; return; }
-    msg.innerHTML='<span style="color:var(--green-hi)">✔ Importado com sucesso!</span>'
+    msg.innerHTML='<span style="color:var(--brand-hi)">✔ Importado com sucesso!</span>'
       +'<div class="stats">'
       +'<div class="stat"><div class="l">Produtos</div><div class="v">'+r.products+'</div></div>'
       +'<div class="stat"><div class="l">Variações</div><div class="v">'+r.variants+'</div></div>'
@@ -168,16 +169,16 @@ document.getElementById('syncBtn').addEventListener('click', async (e)=>{
       +'</div>'
       +'<div class="note">Analisei '+r.scanned+' produto(s) da loja e deixei de fora '+r.skipped_no_stock+' sem unidades em estoque.</div>';
   }catch(err){ msg.innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
-  finally{ e.target.disabled=false; e.target.textContent='↓ Ler produtos da loja'; }
+  finally{ e.target.disabled=false; e.target.textContent='Ler produtos da loja'; }
 });
 
 document.getElementById('resetBtn').addEventListener('click', async (e)=>{
   if(!confirm('Isso apaga TODOS os dados do sistema (catálogo, vendas, clientes e financeiro).\n\nSua loja na Nuvemshop NÃO é alterada.\n\nConfirma?')) return;
   const msg=document.getElementById('resetMsg'); e.target.disabled=true; e.target.textContent='Limpando…';
   try{ await api('/api/reset',{method:'POST'});
-    msg.innerHTML='<span style="color:var(--green-hi)">✔ Sistema limpo. Agora clique em “Ler produtos da loja” pra trazer só os disponíveis.</span>';
+    msg.innerHTML='<span style="color:var(--brand-hi)">✔ Sistema limpo. Agora clique em “Ler produtos da loja” pra trazer só os disponíveis.</span>';
   }catch(err){ msg.innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
-  finally{ e.target.disabled=false; e.target.textContent='🧹 Limpar dados do sistema'; }
+  finally{ e.target.disabled=false; e.target.textContent='Limpar dados do sistema'; }
 });
 
 document.getElementById('disconnectBtn').addEventListener('click', async ()=>{
@@ -185,6 +186,7 @@ document.getElementById('disconnectBtn').addEventListener('click', async ()=>{
   await api('/api/disconnect',{method:'POST'}); location.href='/conectar';
 });
 
+const oi=document.getElementById('okIco'); if(oi) oi.innerHTML=ICO('ok',20);
 load();
 </script>
 </body>
