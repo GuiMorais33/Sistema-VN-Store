@@ -88,6 +88,7 @@ export async function listAllProducts(opts = {}) {
   let page = 1;
   const perPage = 200;
   const pub = opts.publishedOnly ? '&published=true' : '';
+  const maxPages = opts.maxPages || 200; // trava de segurança
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const { data } = await request('GET', `/products?per_page=${perPage}&page=${page}${pub}`);
@@ -95,7 +96,7 @@ export async function listAllProducts(opts = {}) {
     all.push(...data);
     if (data.length < perPage) break;
     page += 1;
-    if (page > 200) break; // trava de segurança
+    if (page > maxPages) break;
   }
   return all;
 }

@@ -354,6 +354,59 @@ app.post('/api/sync', async (req, res) => {
   }
 });
 
+// Diagnóstico: mostra como a SUA loja organiza os produtos de verdade
+// (campos preenchidos, categorias, tags) para alinhar o sistema ao real.
+app.get('/api/debug/estrutura', async (req, res) => {
+  if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
+  try {
+    const sample = await nuvem.listAllProducts({ publishedOnly: true, maxPages: 1 });
+    const cats = await nuvem.listAllCategories();
+
+    // O que está de fato preenchido nos produtos?
+    let comBrand = 0, comTags = 0, comCategorias = 0;
+    const tagsVistas = new Set();
+    for (const p of sample) {
+      const brand = typeof p.brand === 'string' ? p.brand.trim() : '';
+      if (brand) comBrand += 1;
+      const tags = typeof p.tags === 'string' ? p.tags.split(',').map((t) => t.trim()).filter(Boolean) : (Array.isArray(p.tags) ? p.tags : []);
+      if (tags.length) { comTags += 1; tags.forEach((t) => tagsVistas.add(t)); }
+      if ((p.categories || []).length) comCategorias += 1;
+    }
+
+    // Árvore de categorias (pai → filhas), que é como o site costuma
+    // organizar "Marcas" e "Categorias".
+    const byId = new Map(cats.map((c) => [c.id, c]));
+    const arvore = cats.map((c) => ({
+      id: c.id,
+      nome: nameOf(c.name),
+      pai: c.parent ? (byId.get(c.parent) ? nameOf(byId.get(c.parent).name) : c.parent) : null,
+    }));
+    const raizes = arvore.filter((c) => !c.pai).map((r) => ({
+      nome: r.nome,
+      filhas: arvore.filter((c) => c.pai === r.nome).map((c) => c.nome),
+    }));
+
+    res.json({
+      analisados: sample.length,
+      campos_preenchidos: { brand: comBrand, tags: comTags, categorias: comCategorias },
+      total_categorias: cats.length,
+      arvore_categorias: raizes,
+      tags_encontradas: [...tagsVistas].slice(0, 40),
+      exemplos: sample.slice(0, 3).map((p) => ({
+        nome: nameOf(p.name),
+        brand: p.brand ?? null,
+        tags: p.tags ?? null,
+        categorias: (p.categories || []).map((c) => nameOf(c.name)),
+        variacoes: (p.variants || []).slice(0, 3).map((v) => ({
+          valores: (v.values || []).map((x) => nameOf(x)), preco: v.price, estoque: v.stock,
+        })),
+      })),
+    });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // Limpa os dados LOCAIS (catálogo, vendas, clientes, financeiro).
 // Não toca em nada na Nuvemshop — serve para começar do zero, limpo.
 app.post('/api/reset', (req, res) => {
