@@ -159,8 +159,9 @@ app.post('/api/catalog', async (req, res) => {
   const variants = Array.isArray(b.variants) && b.variants.length ? b.variants : [{ variant_name: 'Único', sku: '', price: b.price || 0, cost: b.cost || 0, stock: b.stock || 0 }];
   const ts = now();
   const productId = db.transaction(() => {
-    const pid = db.prepare(`INSERT INTO products (name, brand, category, description, image_url, published, synced_nuvemshop, created_at, updated_at)
-      VALUES (?,?,?,?,?,?,0,?,?)`).run(String(b.name).trim(), b.brand || '', b.category || '', b.description || '', b.image_url || '', b.published === false ? 0 : 1, ts, ts).lastInsertRowid;
+    const pid = db.prepare(`INSERT INTO products (name, brand, category, description, image_url, weight, published, synced_nuvemshop, created_at, updated_at)
+      VALUES (?,?,?,?,?,?,?,0,?,?)`).run(String(b.name).trim(), b.brand || '', b.category || '', b.description || '',
+        b.image_url || '', b.weight ? Number(b.weight) : null, b.published === false ? 0 : 1, ts, ts).lastInsertRowid;
     const insV = db.prepare(`INSERT INTO variants (product_id, product_name, variant_name, sku, price, cost, stock, stock_management, updated_at)
       VALUES (?,?,?,?,?,?,?,1,?)`);
     for (const v of variants) {
@@ -182,14 +183,31 @@ app.put('/api/catalog/:id', async (req, res) => {
   const b = req.body || {};
   const ts = now();
   db.transaction(() => {
-    db.prepare(`UPDATE products SET name=?, brand=?, category=?, description=?, image_url=?, published=?, updated_at=? WHERE id=?`)
-      .run(b.name ?? p.name, b.brand ?? p.brand, b.category ?? p.category, b.description ?? p.description, b.image_url ?? p.image_url, b.published === false ? 0 : 1, ts, p.id);
+    db.prepare(`UPDATE products SET name=?, brand=?, category=?, description=?, image_url=?, weight=?, published=?, updated_at=? WHERE id=?`)
+      .run(b.name ?? p.name, b.brand ?? p.brand, b.category ?? p.category, b.description ?? p.description,
+        b.image_url ?? p.image_url, b.weight !== undefined ? (b.weight ? Number(b.weight) : null) : p.weight,
+        b.published === false ? 0 : 1, ts, p.id);
     if (Array.isArray(b.variants)) {
+      // A lista recebida é a lista COMPLETA de variações do produto.
       const upd = db.prepare('UPDATE variants SET variant_name=?, sku=?, price=?, cost=?, stock=?, product_name=?, updated_at=? WHERE id=? AND product_id=?');
       const insV = db.prepare(`INSERT INTO variants (product_id, product_name, variant_name, sku, price, cost, stock, stock_management, updated_at) VALUES (?,?,?,?,?,?,?,1,?)`);
+      const mantidos = new Set();
       for (const v of b.variants) {
-        if (v.id) upd.run(v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost), parseInt(v.stock, 10) || 0, b.name ?? p.name, ts, v.id, p.id);
-        else insV.run(p.id, b.name ?? p.name, v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost), parseInt(v.stock, 10) || 0, ts);
+        if (v.id) {
+          upd.run(v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost), parseInt(v.stock, 10) || 0, b.name ?? p.name, ts, v.id, p.id);
+          mantidos.add(Number(v.id));
+        } else {
+          const novo = insV.run(p.id, b.name ?? p.name, v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost), parseInt(v.stock, 10) || 0, ts);
+          mantidos.add(Number(novo.lastInsertRowid));
+        }
+      }
+      // Remove as que você tirou do formulário — preservando as que já
+      // têm venda registrada (senão perderíamos o histórico).
+      const atuais = db.prepare('SELECT id FROM variants WHERE product_id = ?').all(p.id);
+      const temVenda = db.prepare('SELECT 1 FROM sale_items WHERE variant_id = ? LIMIT 1');
+      const del = db.prepare('DELETE FROM variants WHERE id = ?');
+      for (const { id } of atuais) {
+        if (!mantidos.has(Number(id)) && !temVenda.get(id)) del.run(id);
       }
     }
   })();
@@ -197,6 +215,30 @@ app.put('/api/catalog/:id', async (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(p.id);
   product.variants = db.prepare('SELECT * FROM variants WHERE product_id = ?').all(p.id);
   res.json({ ok: true, product, sync });
+});
+
+// Duplicar: copia o produto como rascunho local para agilizar o
+// lançamento de peças parecidas. NÃO leva a foto (é sempre outra) e
+// NÃO publica sozinho — só sobe quando você salvar.
+app.post('/api/catalog/:id/duplicate', (req, res) => {
+  const p = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Produto não encontrado.' });
+  const variants = db.prepare('SELECT * FROM variants WHERE product_id = ? ORDER BY id').all(p.id);
+  const ts = now();
+  const novoId = db.transaction(() => {
+    const id = db.prepare(`INSERT INTO products (name, brand, category, categories_all, description,
+        image_url, weight, published, synced_nuvemshop, created_at, updated_at)
+      VALUES (?,?,?,?,?, '', ?, 1, 0, ?, ?)`)
+      .run(`${p.name} (cópia)`, p.brand, p.category, p.categories_all, p.description, p.weight, ts, ts).lastInsertRowid;
+    const ins = db.prepare(`INSERT INTO variants (product_id, product_name, variant_name, sku, price, cost, stock, stock_management, updated_at)
+      VALUES (?,?,?,'',?,?,0,1,?)`);   // sem SKU e com estoque zerado: você preenche o que chegou
+    const base = variants.length ? variants : [{ variant_name: 'Único', price: 0, cost: 0 }];
+    for (const v of base) ins.run(id, `${p.name} (cópia)`, v.variant_name || 'Único', v.price, v.cost, ts);
+    return id;
+  })();
+  const novo = db.prepare('SELECT * FROM products WHERE id = ?').get(novoId);
+  novo.variants = db.prepare('SELECT * FROM variants WHERE product_id = ?').all(novoId);
+  res.json({ ok: true, product: novo });
 });
 
 app.post('/api/catalog/:id/push', async (req, res) => {
@@ -215,13 +257,19 @@ async function pushProduct(productId) {
   }
   try {
     const hasSizes = variants.some((v) => v.variant_name && v.variant_name !== 'Único');
-    const payload = { name: { pt: p.name }, description: { pt: p.description || '' } };
+    const payload = {
+      name: { pt: p.name },
+      description: { pt: p.description || '' },
+      published: p.published === 0 ? false : true, // sem isso o produto pode não aparecer no site
+    };
     // Monta cada variante no formato da Nuvemshop.
     //  - price é o ÚNICO campo obrigatório da variante;
     //  - stock_management:true garante controle de estoque (pra sincronizar);
+    //  - weight alimenta o cálculo de frete no checkout;
     //  - sku é OPCIONAL: só enviamos se estiver preenchido (você não usa SKU).
     const mkVariant = (v, withValues) => {
       const o = { price: String(v.price), stock: parseInt(v.stock, 10) || 0, stock_management: true };
+      if (p.weight > 0) o.weight = String(p.weight);
       if (v.sku && String(v.sku).trim()) o.sku = String(v.sku).trim();
       if (withValues) o.values = [{ pt: v.variant_name }];
       return o;
@@ -232,13 +280,35 @@ async function pushProduct(productId) {
     } else {
       payload.variants = variants.map((v) => mkVariant(v, false));
     }
-    // Categoria: resolve por nome (cria se faltar).
-    if (p.category) {
+    // Categorias na loja. A loja organiza assim:
+    //   MARCAS > Lacoste        (a marca)
+    //   Camisetas               (a categoria do produto)
+    // Então enviamos as duas, senão o produto não aparece no menu de
+    // marcas do site.
+    if (p.category || p.brand) {
       try {
-        const cats = await nuvem.listCategories();
-        let match = cats.find((c) => nameOf(c.name).toLowerCase() === p.category.toLowerCase());
-        if (!match) match = await nuvem.createCategory(p.category);
-        if (match && match.id) payload.categories = [match.id];
+        const cats = await nuvem.listAllCategories();
+        const acha = (nome, paiId) => cats.find((c) => nameOf(c.name).trim().toLowerCase() === String(nome).trim().toLowerCase()
+          && (paiId === undefined || c.parent === paiId));
+        const ids = [];
+
+        if (p.category) {
+          let c = acha(p.category);
+          if (!c) c = await nuvem.createCategory(p.category);
+          if (c && c.id) ids.push(c.id);
+        }
+        if (p.brand) {
+          const raizMarcas = cats.find((c) => /^marcas?$/i.test(nameOf(c.name).trim()));
+          // procura a marca dentro de MARCAS; se não houver, em qualquer lugar
+          let m = raizMarcas ? acha(p.brand, raizMarcas.id) : null;
+          if (!m) m = acha(p.brand);
+          if (!m) m = await nuvem.createCategory(p.brand, raizMarcas ? raizMarcas.id : undefined);
+          if (m && m.id) {
+            ids.push(m.id);
+            if (raizMarcas && !ids.includes(raizMarcas.id)) ids.push(raizMarcas.id); // o produto fica sob "MARCAS" também
+          }
+        }
+        if (ids.length) payload.categories = [...new Set(ids)];
       } catch (e) { /* segue sem categoria se falhar */ }
     }
 
@@ -253,17 +323,23 @@ async function pushProduct(productId) {
       const updIds = db.prepare('UPDATE variants SET nuvemshop_product_id=?, nuvemshop_variant_id=? WHERE id=?');
       variants.forEach((v, i) => { const rv = result.variants[i]; if (rv) updIds.run(String(result.id), String(rv.id), v.id); });
     }
-    // Imagem principal: se foi enviada pra cá, mandamos o arquivo (base64);
-    // se é uma URL externa, mandamos a URL. (best-effort)
-    if (p.image_url) {
+    // Foto: só sobe quando MUDOU. Antes, cada edição adicionava outra
+    // cópia da mesma foto no produto da loja.
+    if (p.image_url && p.image_url !== p.image_sent) {
       try {
-        if (p.image_url.startsWith('/uploads/')) {
-          const b64 = fs.readFileSync(join(PUBLIC, p.image_url)).toString('base64');
-          await nuvem.addProductImage(result.id, { attachment: b64, filename: p.image_url.split('/').pop() });
-        } else {
-          await nuvem.addProductImage(result.id, { src: p.image_url });
+        // Tira a foto anterior que este sistema tinha enviado.
+        if (p.ns_image_id) {
+          try { await nuvem.deleteProductImage(result.id, p.ns_image_id); } catch (e) { /* já pode não existir */ }
         }
-      } catch (e) { /* imagem é best-effort */ }
+        const nova = p.image_url.startsWith('/uploads/')
+          ? await nuvem.addProductImage(result.id, {
+              attachment: fs.readFileSync(join(PUBLIC, p.image_url)).toString('base64'),
+              filename: p.image_url.split('/').pop(),
+            })
+          : await nuvem.addProductImage(result.id, { src: p.image_url });
+        db.prepare('UPDATE products SET image_sent = ?, ns_image_id = ? WHERE id = ?')
+          .run(p.image_url, nova && nova.id ? String(nova.id) : null, productId);
+      } catch (e) { /* foto é best-effort: o produto já foi publicado */ }
     }
 
     return { mode: 'live', ok: true, nuvemshop_product_id: String(result.id) };

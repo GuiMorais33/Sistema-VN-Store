@@ -158,9 +158,17 @@ export async function updateProduct(nuvemshopProductId, payload) {
   return data;
 }
 export async function addProductImage(nuvemshopProductId, image) {
-  // image: { src: 'https://...' }  ou  { base64: '...', filename: 'foto.jpg' }
+  // image: { src: 'https://...' } ou { attachment: '<base64>', filename: 'foto.jpg' }
   const { data } = await request('POST', `/products/${nuvemshopProductId}/images`, image);
   return data;
+}
+export async function deleteProductImage(nuvemshopProductId, imageId) {
+  const { data } = await request('DELETE', `/products/${nuvemshopProductId}/images/${imageId}`);
+  return data;
+}
+export async function listProductImages(nuvemshopProductId) {
+  const { data } = await request('GET', `/products/${nuvemshopProductId}/images`);
+  return Array.isArray(data) ? data : [];
 }
 
 // -------- Categorias (resolver por nome; criar se faltar) --------
@@ -168,8 +176,10 @@ export async function listCategories() {
   const { data } = await request('GET', '/categories?per_page=200&fields=id,name');
   return Array.isArray(data) ? data : [];
 }
-export async function createCategory(name) {
-  const { data } = await request('POST', '/categories', { name: { pt: name } });
+export async function createCategory(name, parentId) {
+  const body = { name: { pt: name } };
+  if (parentId) body.parent = parentId;   // ex.: criar a marca dentro de "MARCAS"
+  const { data } = await request('POST', '/categories', body);
   return data;
 }
 

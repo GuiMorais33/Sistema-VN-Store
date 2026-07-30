@@ -116,7 +116,10 @@
     </div>
     <div class="g2">
       <div class="field"><label>Categoria</label><input id="pCat" list="catList"></div>
-      <div class="field"><label>Foto</label>
+      <div class="field"><label>Peso (kg) — usado no frete</label><input id="pW" type="number" step="0.01" min="0" placeholder="Ex.: 0,30"></div>
+    </div>
+    <div class="g2">
+      <div class="field" style="grid-column:1/-1"><label>Foto</label>
         <div class="photo">
           <span class="thumb" id="pThumb"></span>
           <div class="photo-side">
@@ -142,6 +145,7 @@
       <b style="color:var(--brand-hi)">Marca e custo ficam só aqui</b> — a loja não tem esses campos.</div>
 
     <div class="dlg-foot">
+      <button class="btn ghost" id="dup" type="button" hidden style="margin-right:auto">Duplicar</button>
       <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
       <button class="btn primary" id="save" value="ok" type="submit">Salvar e publicar</button>
     </div>
@@ -244,7 +248,8 @@ document.getElementById('pFile').onchange=async e=>{
 
 function novo(){
   document.getElementById('dlgT').textContent='Novo produto';document.getElementById('pId').value='';
-  ['pName','pBrand','pCat','pDesc'].forEach(i=>document.getElementById(i).value='');
+  ['pName','pBrand','pCat','pDesc','pW'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('dup').hidden=true;
   setFoto('');const v=document.getElementById('vars');v.innerHTML='';v.appendChild(linhaVar({variant_name:'Único'}));
   dlg.showModal();
 }
@@ -253,6 +258,8 @@ async function abrir(id){
   document.getElementById('dlgT').textContent='Editar produto';document.getElementById('pId').value=p.id;
   document.getElementById('pName').value=p.name;document.getElementById('pBrand').value=p.brand||'';
   document.getElementById('pCat').value=p.category||'';document.getElementById('pDesc').value=p.description||'';
+  document.getElementById('pW').value=p.weight||'';
+  document.getElementById('dup').hidden=false;
   setFoto(p.image_url||'');
   const v=document.getElementById('vars');v.innerHTML='';
   (p.variants.length?p.variants:[{variant_name:'Único'}]).forEach(x=>v.appendChild(linhaVar(x)));
@@ -269,7 +276,8 @@ document.getElementById('save').onclick=async e=>{
     price:parseFloat(r.querySelector('.vprice').value)||0,cost:parseFloat(r.querySelector('.vcost').value)||0,
     stock:parseInt(r.querySelector('.vstock').value)||0}));
   const body={name,brand:document.getElementById('pBrand').value.trim(),category:document.getElementById('pCat').value.trim(),
-    description:document.getElementById('pDesc').value.trim(),image_url:document.getElementById('pImg').value.trim(),variants};
+    description:document.getElementById('pDesc').value.trim(),image_url:document.getElementById('pImg').value.trim(),
+    weight:parseFloat(document.getElementById('pW').value)||null,variants};
   const id=document.getElementById('pId').value,btn=document.getElementById('save');
   btn.textContent='Salvando…';btn.disabled=true;
   try{const r=await api(id?('/api/catalog/'+id):'/api/catalog',{method:id?'PUT':'POST',
@@ -277,6 +285,19 @@ document.getElementById('save').onclick=async e=>{
     dlg.close();await resumo();await lista();
     if(r.sync&&r.sync.mode==='live'&&!r.sync.ok)alert('Salvo aqui, mas a publicação na loja falhou: '+(r.sync.note||''));
   }catch(err){alert(err.message);}finally{btn.textContent='Salvar e publicar';btn.disabled=false;}
+};
+
+document.getElementById('dup').onclick=async()=>{
+  const id=document.getElementById('pId').value;if(!id)return;
+  const b=document.getElementById('dup');b.disabled=true;b.textContent='Duplicando…';
+  try{
+    const r=await api('/api/catalog/'+id+'/duplicate',{method:'POST'});
+    await resumo();await lista();
+    // Abre a cópia já pronta para você trocar título, marca e tamanhos.
+    await abrir(r.product.id);
+    const n=document.getElementById('pName');n.focus();n.select();
+  }catch(e){alert(e.message);}
+  finally{b.disabled=false;b.textContent='Duplicar';}
 };
 
 let t;document.getElementById('q').oninput=()=>{clearTimeout(t);t=setTimeout(lista,220);};

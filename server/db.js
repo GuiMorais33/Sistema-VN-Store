@@ -158,6 +158,9 @@ function ensureColumn(table, column, ddl) {
   if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
 }
 ensureColumn('products', 'categories_all', 'categories_all TEXT');
+ensureColumn('products', 'image_sent', 'image_sent TEXT');      // qual foto já subiu (evita duplicar)
+ensureColumn('products', 'ns_image_id', 'ns_image_id TEXT');    // id da foto na Nuvemshop
+ensureColumn('products', 'weight', 'weight REAL');              // kg — a loja usa para calcular frete
 ensureColumn('financial_entries', 'category_id', 'category_id INTEGER');
 ensureColumn('sales', 'nuvemshop_order_id', 'nuvemshop_order_id TEXT');
 // Status operacionais do pedido do site (espelho da Nuvemshop)
