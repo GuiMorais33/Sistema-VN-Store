@@ -506,6 +506,36 @@ app.get('/api/debug/estrutura', async (req, res) => {
   }
 });
 
+// Diagnóstico do ranking: mostra por que alguém está no topo.
+app.get('/api/debug/clientes', (req, res) => {
+  const topo = db.prepare(`SELECT c.id, c.name, c.nuvemshop_customer_id AS ns_id, c.email, c.phone,
+      COUNT(s.id) vendas,
+      COALESCE(SUM(CASE WHEN s.payment_status='pago' THEN s.total ELSE 0 END),0) pago,
+      COUNT(DISTINCT s.ns_customer_id) ids_distintos_nos_pedidos
+    FROM customers c LEFT JOIN sales s ON s.customer_id = c.id
+    GROUP BY c.id ORDER BY pago DESC LIMIT 8`).all();
+
+  // Como está o vínculo dos pedidos do site?
+  const pedidos = db.prepare(`SELECT
+      COUNT(*) total,
+      SUM(CASE WHEN customer_id IS NULL THEN 1 ELSE 0 END) sem_cliente,
+      SUM(CASE WHEN ns_customer_id IS NULL THEN 1 ELSE 0 END) sem_id_da_loja
+    FROM sales WHERE channel='site'`).get();
+
+  // Nomes que o sistema considera "genéricos"
+  const genericos = db.prepare('SELECT id, name, nuvemshop_customer_id AS ns_id FROM customers').all()
+    .filter((c) => !nomeUtil(c.name))
+    .map((c) => ({ ...c, vendas: db.prepare('SELECT COUNT(*) n FROM sales WHERE customer_id = ?').get(c.id).n }));
+
+  // Amostra dos pedidos do 1º do ranking
+  const primeiro = topo[0];
+  const amostra = primeiro ? db.prepare(`SELECT code, customer_name, ns_customer_id, total, created_at
+    FROM sales WHERE customer_id = ? ORDER BY total DESC LIMIT 6`).all(primeiro.id) : [];
+
+  res.json({ topo_do_ranking: topo, pedidos_do_site: pedidos, cadastros_genericos: genericos,
+    amostra_do_primeiro: amostra });
+});
+
 // Limpa os dados LOCAIS (catálogo, vendas, clientes, financeiro).
 // Não toca em nada na Nuvemshop — serve para começar do zero, limpo.
 app.post('/api/reset', (req, res) => {
@@ -524,6 +554,12 @@ app.post('/api/reset', (req, res) => {
 app.get('/api/customers', (req, res) => {
   const q = (req.query.q || '').trim();
   const like = `%${q}%`;
+  // Compras sem comprador identificado (visitante) não entram no
+  // ranking de pessoas — mas continuam no faturamento.
+  const SEM_NOME = `lower(trim(c.name)) NOT IN
+    ('não informado','nao informado','não informada','nao informada','sem nome','cliente',
+     'cliente do site','consumidor final','consumidor','visitante','guest','n/a','na','-','')`;
+
   // "Gastou" = o que a pessoa efetivamente pagou. Pedido cancelado não
   // conta, e o que está em aberto aparece à parte, em "a receber".
   const rows = db.prepare(`
@@ -534,7 +570,7 @@ app.get('/api/customers', (req, res) => {
       MAX(CASE WHEN s.payment_status <> 'cancelado' THEN s.created_at END) AS last_purchase,
       CASE WHEN c.nuvemshop_customer_id IS NOT NULL THEN 1 ELSE 0 END AS da_loja
     FROM customers c LEFT JOIN sales s ON s.customer_id = c.id
-    ${q ? 'WHERE c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?' : ''}
+    WHERE ${SEM_NOME} ${q ? 'AND (c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)' : ''}
     GROUP BY c.id ORDER BY total_spent DESC, c.name
   `).all(...(q ? [like, like, like] : []));
   res.json(rows);
@@ -868,8 +904,10 @@ function vincularPedidos() {
 // juntados sob um cliente genérico voltam a ficar sem dono, e o cadastro
 // genérico é removido se não sobrar nada nele.
 function limparClientesGenericos() {
+  // Vale para qualquer cadastro sem nome de gente — inclusive os que
+  // vieram com identificador da loja.
   const suspeitos = db.prepare('SELECT id, name, nuvemshop_customer_id FROM customers').all()
-    .filter((c) => !nomeUtil(c.name) && !c.nuvemshop_customer_id);
+    .filter((c) => !nomeUtil(c.name));
   let soltos = 0, apagados = 0;
   db.transaction(() => {
     for (const c of suspeitos) {
