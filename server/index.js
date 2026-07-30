@@ -811,6 +811,11 @@ app.delete('/api/fin-categories/:id', (req, res) => {
 // Lê os pedidos da loja e lança a receita. NÃO mexe no estoque: quem
 // vende no site é a Nuvemshop, e ela já baixa o estoque dela — o nosso
 // acerta na sincronização de produtos (que traz o valor atual dela).
+// Nomes que a loja usa quando o comprador não se identificou. Nunca
+// servem para casar pessoas — senão vira tudo um cliente só.
+const NOME_GENERICO = /^(\s*|-+|n[ãa]o\s+informad[oa]|sem\s+nome|cliente(\s+do\s+site)?|consumidor(\s+final)?|visitante|guest|n\/?a)\s*$/i;
+const nomeUtil = (n) => Boolean(n) && !NOME_GENERICO.test(String(n).trim());
+
 // Traz os clientes da loja para cá (cadastro), sem duplicar.
 async function importarClientes() {
   const lista = await nuvem.listAllCustomers();
@@ -829,7 +834,8 @@ async function importarClientes() {
       const fone = (c.phone || (c.default_address && c.default_address.phone) || '').trim();
       if (porNs.get(nsId)) continue;
       // Já existe aqui (cadastrado no PDV)? Então só liga os dois.
-      const existente = (email && porEmail.get(email)) || porNome.get(nome);
+      // O nome só serve para casar se identificar mesmo a pessoa.
+      const existente = (email && porEmail.get(email)) || (nomeUtil(nome) ? porNome.get(nome) : null);
       if (existente) { upd.run(nsId, fone, email, existente.id); vinculados += 1; continue; }
       ins.run(nsId, nome, fone, email, c.created_at ? new Date(c.created_at).toISOString() : now());
       novos += 1;
@@ -849,12 +855,32 @@ function vincularPedidos() {
   let n = 0;
   db.transaction(() => {
     for (const s of pend) {
+      // Sem identificador da loja, o nome só vale se identificar alguém.
       let c = s.ns_customer_id ? porNs.get(String(s.ns_customer_id)) : null;
-      if (!c && s.customer_name) c = porNome.get(s.customer_name.trim());
+      if (!c && nomeUtil(s.customer_name)) c = porNome.get(s.customer_name.trim());
       if (c) { upd.run(c.id, s.id); n += 1; }
     }
   })();
   return n;
+}
+
+// Desfaz o agrupamento errado: pedidos de visitantes que tinham sido
+// juntados sob um cliente genérico voltam a ficar sem dono, e o cadastro
+// genérico é removido se não sobrar nada nele.
+function limparClientesGenericos() {
+  const suspeitos = db.prepare('SELECT id, name, nuvemshop_customer_id FROM customers').all()
+    .filter((c) => !nomeUtil(c.name) && !c.nuvemshop_customer_id);
+  let soltos = 0, apagados = 0;
+  db.transaction(() => {
+    for (const c of suspeitos) {
+      const r = db.prepare("UPDATE sales SET customer_id = NULL WHERE customer_id = ? AND channel = 'site'").run(c.id);
+      soltos += r.changes;
+      const aindaTem = db.prepare('SELECT 1 FROM sales WHERE customer_id = ? LIMIT 1').get(c.id);
+      const emLembrete = db.prepare('SELECT 1 FROM reminders WHERE customer_id = ? LIMIT 1').get(c.id);
+      if (!aindaTem && !emLembrete) { db.prepare('DELETE FROM customers WHERE id = ?').run(c.id); apagados += 1; }
+    }
+  })();
+  return { soltos, apagados };
 }
 
 // Sincroniza os pedidos do site: cria os novos e ATUALIZA os que mudaram
@@ -899,16 +925,22 @@ async function sincronizarPedidos(dias = 45) {
       const code = 'SITE-' + (o.number || oid);
       const nosso = cancelado ? 'cancelado' : (pago ? 'pago' : 'pendente');
 
-      // Cliente: liga ao cadastro (cria se ainda não existir aqui).
+      // Cliente do pedido. O identificador da loja é o que vale: só ele
+      // diz que dois pedidos são da MESMA pessoa. Compra de visitante
+      // (sem identificação) fica sem cliente, em vez de virar um
+      // "não informado" que engoliria o ranking.
       const nsCli = o.customer && o.customer.id ? String(o.customer.id) : null;
       let cliId = null;
       if (nsCli) {
         const c = acharCliente.get(nsCli);
         if (c) cliId = c.id;
         else {
-          const porNome = acharPorNome.get(cliente);
-          cliId = porNome ? porNome.id
-            : criarCliente.run(nsCli, cliente, (o.customer.phone || ''), (o.customer.email || ''), quando).lastInsertRowid;
+          // Pode ser alguém já cadastrado aqui pelo PDV: casa por nome
+          // apenas quando o nome identifica de verdade.
+          const local = nomeUtil(cliente) ? acharPorNome.get(cliente) : null;
+          if (local) { db.prepare('UPDATE customers SET nuvemshop_customer_id = ? WHERE id = ?').run(nsCli, local.id); cliId = local.id; }
+          else cliId = criarCliente.run(nsCli, nomeUtil(cliente) ? cliente : 'Cliente do site',
+            (o.customer.phone || ''), (o.customer.email || ''), quando).lastInsertRowid;
         }
       }
 
@@ -921,7 +953,8 @@ async function sincronizarPedidos(dias = 45) {
       } else {
         updSale.run(nosso, pago ? quando : null, total, total, total,
           nsPay, nsShip, nsStat, retirada ? 'retirada' : 'envio', nItens, forma, ex.id);
-        if (cliId) db.prepare('UPDATE sales SET customer_id = COALESCE(customer_id, ?), ns_customer_id = COALESCE(ns_customer_id, ?) WHERE id = ?').run(cliId, nsCli, ex.id);
+        // Corrige o vínculo (não usa COALESCE: se estava errado, conserta).
+        db.prepare('UPDATE sales SET customer_id = ?, ns_customer_id = ? WHERE id = ?').run(cliId, nsCli, ex.id);
         atualizados += 1;
         // Pagou depois? Agora entra no caixa (uma única vez).
         if (pago && !cancelado && !ex.fin_posted) {
@@ -965,6 +998,7 @@ app.post('/api/import-customers', async (req, res) => {
     const cli = await importarClientes();
     const ped = await sincronizarPedidos(dias);
     const ligados = vincularPedidos();
+    const limpeza = limparClientesGenericos();
     const rank = db.prepare(`SELECT COUNT(*) n FROM (
       SELECT customer_id FROM sales WHERE customer_id IS NOT NULL GROUP BY customer_id)`).get().n;
     res.json({
@@ -972,6 +1006,7 @@ app.post('/api/import-customers', async (req, res) => {
       clientes: cli,
       pedidos: { novos: ped.novos || 0, atualizados: ped.atualizados || 0, analisados: ped.analisados || 0, desde: ped.desde },
       pedidos_vinculados: ligados,
+      corrigidos: limpeza,
       clientes_com_historico: rank,
     });
   } catch (err) {
