@@ -524,12 +524,15 @@ app.post('/api/reset', (req, res) => {
 app.get('/api/customers', (req, res) => {
   const q = (req.query.q || '').trim();
   const like = `%${q}%`;
+  // "Gastou" = o que a pessoa efetivamente pagou. Pedido cancelado não
+  // conta, e o que está em aberto aparece à parte, em "a receber".
   const rows = db.prepare(`
     SELECT c.*,
-      COUNT(s.id) AS orders,
-      COALESCE(SUM(s.total),0) AS total_spent,
+      COUNT(CASE WHEN s.payment_status <> 'cancelado' THEN s.id END) AS orders,
+      COALESCE(SUM(CASE WHEN s.payment_status='pago' THEN s.total ELSE 0 END),0) AS total_spent,
       COALESCE(SUM(CASE WHEN s.payment_status='pendente' THEN s.total ELSE 0 END),0) AS pending,
-      MAX(s.created_at) AS last_purchase
+      MAX(CASE WHEN s.payment_status <> 'cancelado' THEN s.created_at END) AS last_purchase,
+      CASE WHEN c.nuvemshop_customer_id IS NOT NULL THEN 1 ELSE 0 END AS da_loja
     FROM customers c LEFT JOIN sales s ON s.customer_id = c.id
     ${q ? 'WHERE c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?' : ''}
     GROUP BY c.id ORDER BY total_spent DESC, c.name
@@ -541,8 +544,11 @@ app.get('/api/customers/:id', (req, res) => {
   const c = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
   if (!c) return res.status(404).json({ error: 'Cliente não encontrado.' });
   c.sales = db.prepare('SELECT id, code, total, payment_method, payment_status, created_at FROM sales WHERE customer_id = ? ORDER BY id DESC').all(c.id);
-  const agg = db.prepare(`SELECT COUNT(*) AS orders, COALESCE(SUM(total),0) AS total_spent,
-    COALESCE(SUM(CASE WHEN payment_status='pendente' THEN total ELSE 0 END),0) AS pending FROM sales WHERE customer_id = ?`).get(c.id);
+  const agg = db.prepare(`SELECT
+    COUNT(CASE WHEN payment_status <> 'cancelado' THEN 1 END) AS orders,
+    COALESCE(SUM(CASE WHEN payment_status='pago' THEN total ELSE 0 END),0) AS total_spent,
+    COALESCE(SUM(CASE WHEN payment_status='pendente' THEN total ELSE 0 END),0) AS pending
+    FROM sales WHERE customer_id = ?`).get(c.id);
   res.json({ ...c, ...agg });
 });
 
@@ -805,6 +811,52 @@ app.delete('/api/fin-categories/:id', (req, res) => {
 // Lê os pedidos da loja e lança a receita. NÃO mexe no estoque: quem
 // vende no site é a Nuvemshop, e ela já baixa o estoque dela — o nosso
 // acerta na sincronização de produtos (que traz o valor atual dela).
+// Traz os clientes da loja para cá (cadastro), sem duplicar.
+async function importarClientes() {
+  const lista = await nuvem.listAllCustomers();
+  const porNs = db.prepare('SELECT id FROM customers WHERE nuvemshop_customer_id = ?');
+  const porEmail = db.prepare("SELECT id FROM customers WHERE email <> '' AND lower(email) = lower(?)");
+  const porNome = db.prepare('SELECT id FROM customers WHERE lower(name) = lower(?) AND nuvemshop_customer_id IS NULL');
+  const ins = db.prepare(`INSERT INTO customers (nuvemshop_customer_id, name, phone, email, created_at) VALUES (?,?,?,?,?)`);
+  const upd = db.prepare('UPDATE customers SET nuvemshop_customer_id=?, phone=COALESCE(NULLIF(phone,\'\'),?), email=COALESCE(NULLIF(email,\'\'),?) WHERE id=?');
+
+  let novos = 0, vinculados = 0;
+  db.transaction(() => {
+    for (const c of lista) {
+      const nsId = String(c.id);
+      const nome = (c.name || c.email || 'Cliente').trim();
+      const email = (c.email || '').trim();
+      const fone = (c.phone || (c.default_address && c.default_address.phone) || '').trim();
+      if (porNs.get(nsId)) continue;
+      // Já existe aqui (cadastrado no PDV)? Então só liga os dois.
+      const existente = (email && porEmail.get(email)) || porNome.get(nome);
+      if (existente) { upd.run(nsId, fone, email, existente.id); vinculados += 1; continue; }
+      ins.run(nsId, nome, fone, email, c.created_at ? new Date(c.created_at).toISOString() : now());
+      novos += 1;
+    }
+  })();
+  return { total: lista.length, novos, vinculados };
+}
+
+// Liga os pedidos do site já importados ao cliente correspondente,
+// para o ranking mostrar o histórico real de cada pessoa.
+function vincularPedidos() {
+  const porNs = db.prepare('SELECT id FROM customers WHERE nuvemshop_customer_id = ?');
+  const porNome = db.prepare('SELECT id FROM customers WHERE lower(name) = lower(?) LIMIT 1');
+  const pend = db.prepare(`SELECT id, ns_customer_id, customer_name FROM sales
+    WHERE channel='site' AND customer_id IS NULL`).all();
+  const upd = db.prepare('UPDATE sales SET customer_id = ? WHERE id = ?');
+  let n = 0;
+  db.transaction(() => {
+    for (const s of pend) {
+      let c = s.ns_customer_id ? porNs.get(String(s.ns_customer_id)) : null;
+      if (!c && s.customer_name) c = porNome.get(s.customer_name.trim());
+      if (c) { upd.run(c.id, s.id); n += 1; }
+    }
+  })();
+  return n;
+}
+
 // Sincroniza os pedidos do site: cria os novos e ATUALIZA os que mudaram
 // de status (pagou, embalou, enviou). Roda sozinho de tempos em tempos.
 async function sincronizarPedidos(dias = 45) {
@@ -813,10 +865,13 @@ async function sincronizarPedidos(dias = 45) {
   const orders = await nuvem.listOrders({ since: desde });
 
   const achar = db.prepare('SELECT id, payment_status, fin_posted FROM sales WHERE nuvemshop_order_id = ?');
-  const insSale = db.prepare(`INSERT INTO sales (code, channel, nuvemshop_order_id, customer_name, payment_method,
+  const insSale = db.prepare(`INSERT INTO sales (code, channel, nuvemshop_order_id, customer_id, ns_customer_id, customer_name, payment_method,
       payment_status, paid_at, subtotal, discount, total, cost_total, margin, synced_nuvemshop, created_at,
       ns_payment_status, ns_shipping_status, ns_status, ns_shipping_type, items_count, fin_posted)
-    VALUES (?, 'site', ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, 1, ?, ?, ?, ?, ?, ?, ?)`);
+    VALUES (?, 'site', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, 1, ?, ?, ?, ?, ?, ?, ?)`);
+  const acharCliente = db.prepare('SELECT id FROM customers WHERE nuvemshop_customer_id = ?');
+  const acharPorNome = db.prepare('SELECT id FROM customers WHERE lower(name) = lower(?) LIMIT 1');
+  const criarCliente = db.prepare('INSERT INTO customers (nuvemshop_customer_id, name, phone, email, created_at) VALUES (?,?,?,?,?)');
   const updSale = db.prepare(`UPDATE sales SET payment_status=?, paid_at=COALESCE(paid_at,?), total=?, subtotal=?, margin=?,
       ns_payment_status=?, ns_shipping_status=?, ns_status=?, ns_shipping_type=?, items_count=?, payment_method=?
     WHERE id=?`);
@@ -844,15 +899,29 @@ async function sincronizarPedidos(dias = 45) {
       const code = 'SITE-' + (o.number || oid);
       const nosso = cancelado ? 'cancelado' : (pago ? 'pago' : 'pendente');
 
+      // Cliente: liga ao cadastro (cria se ainda não existir aqui).
+      const nsCli = o.customer && o.customer.id ? String(o.customer.id) : null;
+      let cliId = null;
+      if (nsCli) {
+        const c = acharCliente.get(nsCli);
+        if (c) cliId = c.id;
+        else {
+          const porNome = acharPorNome.get(cliente);
+          cliId = porNome ? porNome.id
+            : criarCliente.run(nsCli, cliente, (o.customer.phone || ''), (o.customer.email || ''), quando).lastInsertRowid;
+        }
+      }
+
       const ex = achar.get(oid);
       if (!ex) {
-        const id = insSale.run(code, oid, cliente, forma, nosso, pago ? quando : null, total, total, total, quando,
+        const id = insSale.run(code, oid, cliId, nsCli, cliente, forma, nosso, pago ? quando : null, total, total, total, quando,
           nsPay, nsShip, nsStat, retirada ? 'retirada' : 'envio', nItens, 0).lastInsertRowid;
         novos += 1;
         if (pago && !cancelado) { insFin.run(catSite, `Venda no site ${code}`, total, code, quando); marcarFin.run(id); lancados += 1; }
       } else {
         updSale.run(nosso, pago ? quando : null, total, total, total,
           nsPay, nsShip, nsStat, retirada ? 'retirada' : 'envio', nItens, forma, ex.id);
+        if (cliId) db.prepare('UPDATE sales SET customer_id = COALESCE(customer_id, ?), ns_customer_id = COALESCE(ns_customer_id, ?) WHERE id = ?').run(cliId, nsCli, ex.id);
         atualizados += 1;
         // Pagou depois? Agora entra no caixa (uma única vez).
         if (pago && !cancelado && !ex.fin_posted) {
@@ -884,6 +953,31 @@ async function tickAutomatico(motivo = 'automático') {
 }
 setInterval(() => tickAutomatico(), INTERVALO_MIN * 60 * 1000);
 setTimeout(() => tickAutomatico('início'), 8000);
+
+// Traz clientes + histórico de vendas da loja e monta o ranking real.
+// Pode demorar em lojas com muitos pedidos — por isso o retorno é um
+// resumo do que entrou.
+app.post('/api/import-customers', async (req, res) => {
+  if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
+  const b = req.body || {};
+  const dias = parseInt(b.days, 10) || 730; // 2 anos por padrão
+  try {
+    const cli = await importarClientes();
+    const ped = await sincronizarPedidos(dias);
+    const ligados = vincularPedidos();
+    const rank = db.prepare(`SELECT COUNT(*) n FROM (
+      SELECT customer_id FROM sales WHERE customer_id IS NOT NULL GROUP BY customer_id)`).get().n;
+    res.json({
+      ok: true,
+      clientes: cli,
+      pedidos: { novos: ped.novos || 0, atualizados: ped.atualizados || 0, analisados: ped.analisados || 0, desde: ped.desde },
+      pedidos_vinculados: ligados,
+      clientes_com_historico: rank,
+    });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
 
 // Disparo manual (a tela usa para "atualizar agora")
 app.post('/api/import-orders', async (req, res) => {

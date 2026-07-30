@@ -60,9 +60,11 @@
 
     <div class="row" style="margin-top:14px">
       <button class="btn primary" id="syncBtn" type="button">Ler produtos da loja</button>
+      <button class="btn" id="cliBtn" type="button">Ler clientes e histórico</button>
       <button class="btn ghost" id="disconnectBtn" type="button">Desconectar</button>
     </div>
     <div class="msg" id="syncMsg"></div>
+    <div class="msg" id="cliMsg"></div>
     <div class="note">A leitura só <b>traz</b> os dados da sua loja pra cá. Nada é criado ou alterado na Nuvemshop.</div>
   </div>
 
@@ -170,6 +172,25 @@ document.getElementById('syncBtn').addEventListener('click', async (e)=>{
       +'<div class="note">Analisei '+r.scanned+' produto(s) da loja e deixei de fora '+r.skipped_no_stock+' sem unidades em estoque.</div>';
   }catch(err){ msg.innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
   finally{ e.target.disabled=false; e.target.textContent='Ler produtos da loja'; }
+});
+
+document.getElementById('cliBtn').addEventListener('click', async (e)=>{
+  const b=e.target, msg=document.getElementById('cliMsg');
+  b.disabled=true; b.textContent='Lendo…';
+  msg.innerHTML='<span class="note">Trazendo clientes e o histórico de vendas… em lojas grandes isso leva alguns minutos.</span>';
+  try{
+    const r=await api('/api/import-customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({days:730})});
+    msg.innerHTML='<span style="color:var(--brand-hi)">✔ Pronto!</span>'
+      +'<div class="stats">'
+      +'<div class="stat"><div class="l">Clientes novos</div><div class="v">'+r.clientes.novos+'</div></div>'
+      +'<div class="stat"><div class="l">Já existiam</div><div class="v">'+r.clientes.vinculados+'</div></div>'
+      +'<div class="stat"><div class="l">Vendas lidas</div><div class="v">'+r.pedidos.novos+'</div></div>'
+      +'<div class="stat"><div class="l">No ranking</div><div class="v">'+r.clientes_com_historico+'</div></div>'
+      +'</div>'
+      +'<div class="note">Analisei '+r.pedidos.analisados+' pedido(s) desde '+(r.pedidos.desde||'—')+'. '
+      +'Abra <b>Clientes</b> para ver o ranking com o histórico real.</div>';
+  }catch(err){ msg.innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
+  finally{ b.disabled=false; b.textContent='Ler clientes e histórico'; }
 });
 
 document.getElementById('resetBtn').addEventListener('click', async (e)=>{

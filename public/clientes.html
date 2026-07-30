@@ -23,6 +23,8 @@
   .r-item:nth-child(1) .pos{color:var(--brand-hi)}
   .r-item:nth-child(2) .pos,.r-item:nth-child(3) .pos{color:var(--ink-2)}
   .who .nm{font-weight:600;font-size:13.5px}
+  .selo{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 6px;border-radius:999px;
+    background:rgba(47,210,79,.1);color:var(--brand-hi);vertical-align:middle;margin-left:5px}
   .who .s{font-size:11px;color:var(--ink-3);font-family:var(--font-mono);margin-top:2px}
   .val{text-align:right}
   .val .sp{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:14.5px}
@@ -104,7 +106,8 @@ async function rank(q=''){
   rows.forEach((c,i)=>{
     const el=document.createElement('div');el.className='r-item'+(sel===c.id?' sel':'');el.dataset.id=c.id;
     el.innerHTML=`<div class="pos">${i+1}</div>
-      <div class="who"><div class="nm">${c.name}</div><div class="s">${c.phone||c.email||'—'} · ${D(c.last_purchase)}</div></div>
+      <div class="who"><div class="nm">${c.name}${c.da_loja?' <span class="selo">site</span>':''}</div>
+        <div class="s">${c.phone||c.email||'—'} · ${D(c.last_purchase)}</div></div>
       <div class="val"><div class="sp">${BRL(c.total_spent)}</div>
         ${c.pending>0?`<div class="pd">${BRL(c.pending)} a receber</div>`:''}
         <div class="or">${c.orders} compra(s)</div></div>`;
@@ -117,7 +120,7 @@ async function detalhe(id){
   const c=await api('/api/customers/'+id),d=document.getElementById('det');
   const hist=c.sales.length?c.sales.map(s=>`<div class="h">
       <div><div>${s.code}<span class="bst ${s.payment_status}">${s.payment_status}</span></div>
-      <div class="c">${D(s.created_at)} · ${s.payment_method||'—'}</div></div>
+      <div class="c">${D(s.created_at)} · ${s.code.startsWith('SITE')?'site':'balcão'} · ${s.payment_method||'—'}</div></div>
       <div style="text-align:right"><div class="r">${BRL(s.total)}</div>
       ${s.payment_status==='pendente'?`<button class="btn sm" data-s="${s.id}" type="button" style="margin-top:4px">Receber</button>`:''}</div>
     </div>`).join(''):vazio('recibo','Sem compras','Ainda não comprou nada.');

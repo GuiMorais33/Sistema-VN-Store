@@ -189,3 +189,21 @@ export async function createCustomer(payload) {
   return data;
 }
 
+// Todos os clientes da loja (paginado).
+export async function listAllCustomers(opts = {}) {
+  const all = [];
+  let page = 1;
+  const per = 200;
+  const maxPages = opts.maxPages || 100;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data } = await request('GET', `/customers?per_page=${per}&page=${page}`);
+    if (!Array.isArray(data) || data.length === 0) break;
+    all.push(...data);
+    if (data.length < per) break;
+    page += 1;
+    if (page > maxPages) break;
+  }
+  return all;
+}
+

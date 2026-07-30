@@ -170,6 +170,7 @@ ensureColumn('sales', 'ns_status', 'ns_status TEXT');
 ensureColumn('sales', 'ns_shipping_type', 'ns_shipping_type TEXT'); // envio | retirada
 ensureColumn('sales', 'items_count', 'items_count INTEGER DEFAULT 0');
 ensureColumn('sales', 'fin_posted', 'fin_posted INTEGER NOT NULL DEFAULT 0');
+ensureColumn('sales', 'ns_customer_id', 'ns_customer_id TEXT'); // cliente do pedido na loja
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_order ON sales(nuvemshop_order_id) WHERE nuvemshop_order_id IS NOT NULL'); } catch (_) {}
 
 // ---- Plano de contas padrão (criado uma vez) ----
