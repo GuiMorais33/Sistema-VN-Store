@@ -59,6 +59,17 @@
   .photo .thumb{width:60px;height:60px}
   .photo-side{display:flex;flex-direction:column;gap:5px;align-items:flex-start}
   .vhead,.vrow{display:grid;grid-template-columns:1.05fr .95fr .85fr .85fr .7fr 28px;gap:5px;align-items:center}
+  /* A coluna "Em mãos" só existe quando o produto é sob encomenda. */
+  .col-mao{display:none}
+  .encomenda .vhead,.encomenda .vrow{grid-template-columns:1fr .8fr .8fr .8fr .62fr .62fr 28px}
+  .encomenda .col-mao{display:block}
+  .vrow .vhand{border-color:rgba(232,163,23,.45)}
+  .sw{display:flex;gap:9px;align-items:flex-start;padding:11px 12px;border:1px solid var(--line);
+    border-radius:var(--r);background:var(--bg-elev);font-size:12px;line-height:1.45;color:var(--ink-2);cursor:pointer}
+  .sw input{width:17px;height:17px;flex:none;margin-top:1px;accent-color:var(--brand)}
+  .sw b{color:var(--ink)}
+  .tag.enc{color:var(--warn);background:rgba(232,163,23,.12);border-color:rgba(232,163,23,.3)}
+  .num .site{color:var(--ink-3);font-size:10.5px;display:block;margin-top:1px}
   .vhead{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3);font-weight:700;padding:0 2px}
   .vrow input{padding:7px 9px;font-size:12.5px;border-radius:8px}
   .vrow .del{background:none;border:none;color:var(--ink-3);cursor:pointer;display:grid;place-items:center}
@@ -134,11 +145,23 @@
     </div>
     <div class="field"><label>Descrição</label><textarea id="pDesc" rows="2"></textarea></div>
 
+    <label class="sw">
+      <input type="checkbox" id="pOnDemand">
+      <span><b>Grade sob encomenda</b> — o site fica com a numeração toda, mas aqui na loja
+        existem só os pares que você tem em mãos. É o caso dos tênis.</span>
+    </label>
+
     <div class="field">
       <label>Variações · preço e custo</label>
-      <div class="vhead"><div>Variação</div><div>SKU</div><div>Preço</div><div>Custo</div><div>Estoque</div><div></div></div>
+      <div class="vhead" id="vhead"><div>Variação</div><div>SKU</div><div>Preço</div><div>Custo</div>
+        <div id="thSite">Estoque</div><div class="col-mao">Em mãos</div><div></div></div>
       <div id="vars" class="vars"></div>
       <button class="btn sm ghost" id="addVar" type="button" style="width:fit-content;margin-top:5px">Adicionar variação</button>
+      <div class="hint col-mao" style="margin-top:4px">
+        <b>No site</b> é a grade que fica publicada na Nuvemshop — ela não baixa quando você
+        vende, porque você repõe no fornecedor. <b>Em mãos</b> é o que existe aqui de verdade:
+        é esse que conta no valor do estoque e é esse que baixa na venda. Vendeu uma numeração
+        que não tem? O sistema cria o lembrete de pegar no fornecedor.</div>
     </div>
 
     <div class="hint">Ao salvar, o produto é publicado/atualizado na sua loja Nuvemshop.
@@ -166,7 +189,11 @@ document.getElementById('novo').insertAdjacentHTML('afterbegin',ICO('mais',16));
 async function resumo(){
   const s=await api('/api/catalog/summary');
   document.getElementById('sVal').textContent=BRL(s.totals.value_cost);
-  document.getElementById('sSub').textContent=`${s.totals.units} peças · ${BRL(s.totals.value_price)} a preço de venda`;
+  // Só conta o que está aqui na loja. A grade do site (tênis) não é estoque.
+  const e=s.encomenda||{};
+  const extra=e.products?` · ${e.products} sob encomenda (${e.site_units} numerações no site)`:'';
+  document.getElementById('sSub').textContent=
+    `${s.totals.units} peças em mãos · ${BRL(s.totals.value_price)} a preço de venda${extra}`;
   const chip=(x,tipo)=>`<button type="button" class="chip" data-${tipo}="${x.label}">${x.label} <b>${x.units}</b></button>`;
   document.getElementById('sCats').innerHTML=s.by_category.map(c=>chip(c,'cat')).join('')||'<span class="hint">—</span>';
   document.getElementById('sBrands').innerHTML=s.by_brand.map(b=>chip(b,'brand')).join('')||'<span class="hint">—</span>';
@@ -195,15 +222,18 @@ async function lista(){
     q||cat||br?'Tente limpar os filtros.':'Importe da sua loja em Conectar, ou cadastre um novo.');return;}
   box.innerHTML='';
   for(const p of rows){
-    const low=p.total_stock<=4;
+    // Sob encomenda: "acabando" não se aplica — repor é com o fornecedor.
+    const low=!p.on_demand&&p.total_stock<=4;
     const el=document.createElement('div');el.className='trow';
     const img=p.image_url?`<img src="${p.image_url}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:ICO('estoque',20)}))">`:ICO('estoque',20);
     el.innerHTML=`<span class="thumb">${img}</span>
-      <div><div class="nm">${p.name}</div><div class="meta">${p.min_price===p.max_price?BRL(p.min_price):BRL(p.min_price)+'–'+BRL(p.max_price)}</div></div>
+      <div><div class="nm">${p.name}${p.on_demand?' <span class="tag enc">sob encomenda</span>':''}</div>
+        <div class="meta">${p.min_price===p.max_price?BRL(p.min_price):BRL(p.min_price)+'–'+BRL(p.max_price)}</div></div>
       <div class="cell">${p.brand||'—'}</div>
       <div class="cell">${p.category||'—'}</div>
       <div class="num">${p.variant_count}</div>
-      <div class="num ${low?'low':''}">${p.total_stock} un.</div>
+      <div class="num ${low?'low':''}">${p.total_stock} un.
+        ${p.on_demand?`<span class="site">${p.site_stock} no site</span>`:''}</div>
       <div class="num cost">${BRL(p.stock_value_cost)}</div>
       <div><span class="tag ${p.synced_nuvemshop?'on':'off'}">${p.synced_nuvemshop?'no ar':'pendente'}</span></div>`;
     el.onclick=()=>abrir(p.id);box.appendChild(el);
@@ -220,10 +250,24 @@ function linhaVar(v={}){
     <input class="vprice" type="number" step="0.01" placeholder="0,00" value="${v.price??''}">
     <input class="vcost" type="number" step="0.01" placeholder="0,00" value="${v.cost??''}">
     <input class="vstock" type="number" placeholder="0" value="${v.stock??''}">
+    <input class="vhand col-mao" type="number" min="0" placeholder="0" value="${v.on_hand??''}" title="Pares que você tem aqui">
     <button class="del" type="button" aria-label="remover">${ICO('sair',15)}</button>`;
   d.querySelector('.del').onclick=()=>d.remove();return d;
 }
 document.getElementById('addVar').onclick=()=>document.getElementById('vars').appendChild(linhaVar());
+
+// Liga/desliga a coluna "Em mãos" conforme o produto é sob encomenda.
+const chkEnc=document.getElementById('pOnDemand');
+function modoEncomenda(){
+  const on=chkEnc.checked;
+  dlg.classList.toggle('encomenda',on);
+  document.getElementById('thSite').textContent=on?'No site':'Estoque';
+  // Ao marcar pela primeira vez, o que você tem em mãos costuma ser o
+  // estoque atual — já vem preenchido para não zerar o valor sem querer.
+  if(on)document.querySelectorAll('#vars .vrow').forEach(r=>{
+    const h=r.querySelector('.vhand');if(h.value==='')h.value=r.querySelector('.vstock').value||'0';});
+}
+chkEnc.onchange=modoEncomenda;
 
 function resize(file,max,q){return new Promise((ok,fail)=>{const img=new Image(),u=URL.createObjectURL(file);
   img.onload=()=>{URL.revokeObjectURL(u);let w=img.width,h=img.height;
@@ -250,6 +294,7 @@ function novo(){
   document.getElementById('dlgT').textContent='Novo produto';document.getElementById('pId').value='';
   ['pName','pBrand','pCat','pDesc','pW'].forEach(i=>document.getElementById(i).value='');
   document.getElementById('dup').hidden=true;
+  chkEnc.checked=false;modoEncomenda();
   setFoto('');const v=document.getElementById('vars');v.innerHTML='';v.appendChild(linhaVar({variant_name:'Único'}));
   dlg.showModal();
 }
@@ -263,6 +308,9 @@ async function abrir(id){
   setFoto(p.image_url||'');
   const v=document.getElementById('vars');v.innerHTML='';
   (p.variants.length?p.variants:[{variant_name:'Único'}]).forEach(x=>v.appendChild(linhaVar(x)));
+  // depois das linhas, senão o preenchimento automático não acha os campos
+  chkEnc.checked=!!p.on_demand;dlg.classList.toggle('encomenda',!!p.on_demand);
+  document.getElementById('thSite').textContent=p.on_demand?'No site':'Estoque';
   dlg.showModal();
 }
 document.getElementById('novo').onclick=novo;
@@ -274,10 +322,11 @@ document.getElementById('save').onclick=async e=>{
     id:r.dataset.id||undefined,
     variant_name:r.querySelector('.vn').value.trim()||'Único',sku:r.querySelector('.vsku').value.trim(),
     price:parseFloat(r.querySelector('.vprice').value)||0,cost:parseFloat(r.querySelector('.vcost').value)||0,
-    stock:parseInt(r.querySelector('.vstock').value)||0}));
+    stock:parseInt(r.querySelector('.vstock').value)||0,
+    on_hand:parseInt(r.querySelector('.vhand').value)||0}));
   const body={name,brand:document.getElementById('pBrand').value.trim(),category:document.getElementById('pCat').value.trim(),
     description:document.getElementById('pDesc').value.trim(),image_url:document.getElementById('pImg').value.trim(),
-    weight:parseFloat(document.getElementById('pW').value)||null,variants};
+    weight:parseFloat(document.getElementById('pW').value)||null,on_demand:chkEnc.checked?1:0,variants};
   const id=document.getElementById('pId').value,btn=document.getElementById('save');
   btn.textContent='Salvando…';btn.disabled=true;
   try{const r=await api(id?('/api/catalog/'+id):'/api/catalog',{method:id?'PUT':'POST',

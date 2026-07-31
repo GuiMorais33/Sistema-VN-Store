@@ -196,6 +196,33 @@
 
         <p>Na coluna <b>Loja</b>, "no ar" significa que o produto está publicado na Nuvemshop;
           "pendente" significa que ainda não subiu.</p>
+
+        <h3>Tênis: grade no site, par em mãos</h3>
+        <p>No site você deixa o tênis disponível em <b>várias numerações</b>, mesmo sem ter todas
+          aqui — quando vende, busca no fornecedor no mesmo dia. Só que isso não é estoque: se o
+          sistema contasse a grade inteira, o valor do seu estoque ficaria inflado.</p>
+        <p>Por isso existe a chave <b>Grade sob encomenda</b> no cadastro do produto. Com ela ligada,
+          cada numeração passa a ter <b>dois números</b>:</p>
+        <div class="tw"><table>
+          <tr><th>Campo</th><th>O que é</th><th>Onde aparece</th></tr>
+          <tr><td><b>No site</b></td><td>A grade publicada na Nuvemshop — as numerações que você
+            consegue entregar.</td><td>Só no site. <b>Não baixa na venda</b>, porque você repõe.</td></tr>
+          <tr><td><b>Em mãos</b></td><td>Os pares que existem aqui de verdade. Normalmente 1.</td>
+            <td>É o que conta no <b>valor do estoque</b> e o que <b>baixa na venda</b>.</td></tr>
+        </table></div>
+        <ul>
+          <li>Na lista, o produto ganha a etiqueta <b>sob encomenda</b> e mostra "X un." (em mãos)
+            com "Y no site" embaixo.</li>
+          <li>No <b>PDV</b>, a numeração que está aqui aparece como <b>na loja</b>; a que não está
+            aparece como <b>encomenda</b> — e vende do mesmo jeito, sem travar.</li>
+          <li>Vendeu uma numeração que não tinha? O sistema cria sozinho o lembrete
+            <b>"Pegar no fornecedor"</b> para hoje, com o cliente e o número da venda.</li>
+          <li>Esses produtos ficam fora do alerta de <b>estoque acabando</b> — repor ali é com o
+            fornecedor, não é falta.</li>
+        </ul>
+        <div class="aviso dica"><span class="ico" id="d5"></span>
+          <div>Se o valor do seu estoque parecer alto demais, é quase sempre grade de tênis contada
+          como peça. Marque esses produtos como <b>sob encomenda</b> e o número volta ao real.</div></div>
       </section>
 
       <!-- CLIENTES -->
@@ -371,7 +398,7 @@
 const icones={i1:'conectar',i2:'inicio',i3:'pdv',i4:'estoque',i5:'clientes',i6:'sino',
   i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa'};
 Object.entries(icones).forEach(([id,n])=>{const e=document.getElementById(id);if(e)e.innerHTML=ICO(n,17);});
-['d1','d2','d3','d4'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['d1','d2','d3','d4','d5'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
 ['a1','a2'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
 
 // Marca a seção visível no índice

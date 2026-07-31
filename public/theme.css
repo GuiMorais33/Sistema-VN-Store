@@ -221,8 +221,11 @@ a{color:inherit}
 .btn.sm{padding:7px 11px;font-size:12px;border-radius:9px}
 
 /* ============ Campos ============ */
-.input, input[type="text"], input[type="search"], input[type="number"],
-input[type="email"], input[type="password"], select, textarea{
+/* Sem [type], o navegador trata como texto — o seletor precisa pegar
+   esses também, senão o campo fica branco no meio do tema escuro. */
+.input, input:not([type]), input[type="text"], input[type="search"], input[type="number"],
+input[type="email"], input[type="password"], input[type="tel"], input[type="url"],
+input[type="date"], input[type="time"], select, textarea{
   width:100%;padding:10px 13px;border-radius:10px;font-size:14px;font-family:var(--font-body);
   background:var(--bg-elev);border:1px solid var(--line);color:var(--ink);
   transition:border-color var(--t-fast),box-shadow var(--t-fast);

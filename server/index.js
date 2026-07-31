@@ -63,6 +63,13 @@ const nameOf = (obj) => {
   return obj.pt || obj.es || obj.en || Object.values(obj)[0] || '';
 };
 
+// ---- Estoque real x estoque do site ----
+// Tênis (e afins) ficam no site com a grade toda de numeração, mas aqui
+// existe só o par que temos em mãos. Todo cálculo de "quanto eu tenho" e
+// "quanto vale" usa ESTE número, nunca a grade do site.
+// Exige que a consulta tenha "v" (variants) e "p" (products) no FROM.
+const REAL = `CASE WHEN p.on_demand = 1 THEN COALESCE(v.on_hand,0) ELSE v.stock END`;
+
 if (seedCategories()) console.log('› Plano de contas padrão criado.');
 { const m = migrateOldCategories(); if (m) console.log(`› ${m} categoria(s) antiga(s) traduzida(s) para o plano de contas.`); }
 if (!isLive() && seedDemoIfEmpty()) console.log('› Modo demonstração: catálogo e clientes de exemplo criados.');
@@ -81,7 +88,11 @@ app.get('/api/health', (req, res) => {
 // ==================== PRODUTOS (PDV) ====================
 app.get('/api/products', (req, res) => {
   const q = (req.query.q || '').trim();
-  const base = `SELECT v.*, p.brand, p.category, p.image_url FROM variants v LEFT JOIN products p ON p.id = v.product_id`;
+  // on_demand + on_hand: no PDV o tênis aparece na numeração toda, mas
+  // marcado quando o par tem que ser buscado no fornecedor.
+  const base = `SELECT v.*, p.brand, p.category, p.image_url, p.on_demand,
+      ${REAL} AS real_stock
+    FROM variants v LEFT JOIN products p ON p.id = v.product_id`;
   let rows;
   if (q) {
     const like = `%${q}%`;
@@ -107,8 +118,9 @@ app.get('/api/catalog', (req, res) => {
   const rows = db.prepare(`
     SELECT p.*,
       COUNT(v.id) AS variant_count,
-      COALESCE(SUM(v.stock),0) AS total_stock,
-      COALESCE(SUM(v.stock * v.cost),0) AS stock_value_cost,
+      COALESCE(SUM(${REAL}),0) AS total_stock,
+      COALESCE(SUM(v.stock),0) AS site_stock,
+      COALESCE(SUM(${REAL} * v.cost),0) AS stock_value_cost,
       COALESCE(MIN(v.price),0) AS min_price,
       COALESCE(MAX(v.price),0) AS max_price
     FROM products p LEFT JOIN variants v ON v.product_id = p.id
@@ -121,28 +133,38 @@ app.get('/api/catalog', (req, res) => {
 // Resumo do estoque: valor total a custo, peças, e contagem por categoria/marca.
 app.get('/api/catalog/summary', (req, res) => {
   const totals = db.prepare(`
-    SELECT COALESCE(SUM(v.stock),0) AS units,
-           COALESCE(SUM(v.stock * v.cost),0) AS value_cost,
-           COALESCE(SUM(v.stock * v.price),0) AS value_price
-    FROM variants v WHERE v.stock_management = 1
+    SELECT COALESCE(SUM(${REAL}),0) AS units,
+           COALESCE(SUM(${REAL} * v.cost),0) AS value_cost,
+           COALESCE(SUM(${REAL} * v.price),0) AS value_price,
+           COALESCE(SUM(v.stock),0) AS site_units
+    FROM variants v LEFT JOIN products p ON p.id = v.product_id
+    WHERE v.stock_management = 1
+  `).get();
+  // Quanto da grade do site é encomenda (não está aqui na loja).
+  const encomenda = db.prepare(`
+    SELECT COUNT(DISTINCT p.id) AS products,
+           COALESCE(SUM(v.stock),0) AS site_units,
+           COALESCE(SUM(COALESCE(v.on_hand,0)),0) AS units
+    FROM products p JOIN variants v ON v.product_id = p.id
+    WHERE p.on_demand = 1
   `).get();
   const byCategory = db.prepare(`
     SELECT COALESCE(NULLIF(p.category,''),'(sem categoria)') AS label,
            COUNT(DISTINCT p.id) AS products,
-           COALESCE(SUM(v.stock),0) AS units,
-           COALESCE(SUM(v.stock * v.cost),0) AS value_cost
+           COALESCE(SUM(${REAL}),0) AS units,
+           COALESCE(SUM(${REAL} * v.cost),0) AS value_cost
     FROM products p LEFT JOIN variants v ON v.product_id = p.id
     GROUP BY label ORDER BY units DESC
   `).all();
   const byBrand = db.prepare(`
     SELECT COALESCE(NULLIF(p.brand,''),'(sem marca)') AS label,
            COUNT(DISTINCT p.id) AS products,
-           COALESCE(SUM(v.stock),0) AS units,
-           COALESCE(SUM(v.stock * v.cost),0) AS value_cost
+           COALESCE(SUM(${REAL}),0) AS units,
+           COALESCE(SUM(${REAL} * v.cost),0) AS value_cost
     FROM products p LEFT JOIN variants v ON v.product_id = p.id
     GROUP BY label ORDER BY units DESC
   `).all();
-  res.json({ totals, by_category: byCategory, by_brand: byBrand });
+  res.json({ totals, encomenda, by_category: byCategory, by_brand: byBrand });
 });
 
 app.get('/api/catalog/:id', (req, res) => {
@@ -152,6 +174,13 @@ app.get('/api/catalog/:id', (req, res) => {
   res.json(p);
 });
 
+// Quantos pares/peças existem de verdade nesta variação.
+// Produto normal: é o próprio estoque. Sob encomenda: só o que está aqui.
+const emMaos = (v, sobEncomenda) => {
+  if (!sobEncomenda) return parseInt(v.stock, 10) || 0;
+  return Math.max(0, parseInt(v.on_hand, 10) || 0);
+};
+
 // Cria produto (mestre + variações) no nosso sistema e empurra p/ Nuvemshop.
 app.post('/api/catalog', async (req, res) => {
   const b = req.body || {};
@@ -159,13 +188,15 @@ app.post('/api/catalog', async (req, res) => {
   const variants = Array.isArray(b.variants) && b.variants.length ? b.variants : [{ variant_name: 'Único', sku: '', price: b.price || 0, cost: b.cost || 0, stock: b.stock || 0 }];
   const ts = now();
   const productId = db.transaction(() => {
-    const pid = db.prepare(`INSERT INTO products (name, brand, category, description, image_url, weight, published, synced_nuvemshop, created_at, updated_at)
-      VALUES (?,?,?,?,?,?,?,0,?,?)`).run(String(b.name).trim(), b.brand || '', b.category || '', b.description || '',
-        b.image_url || '', b.weight ? Number(b.weight) : null, b.published === false ? 0 : 1, ts, ts).lastInsertRowid;
-    const insV = db.prepare(`INSERT INTO variants (product_id, product_name, variant_name, sku, price, cost, stock, stock_management, updated_at)
-      VALUES (?,?,?,?,?,?,?,1,?)`);
+    const sobEncomenda = b.on_demand ? 1 : 0;
+    const pid = db.prepare(`INSERT INTO products (name, brand, category, description, image_url, weight, on_demand, published, synced_nuvemshop, created_at, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,0,?,?)`).run(String(b.name).trim(), b.brand || '', b.category || '', b.description || '',
+        b.image_url || '', b.weight ? Number(b.weight) : null, sobEncomenda, b.published === false ? 0 : 1, ts, ts).lastInsertRowid;
+    const insV = db.prepare(`INSERT INTO variants (product_id, product_name, variant_name, sku, price, cost, stock, on_hand, stock_management, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,1,?)`);
     for (const v of variants) {
-      insV.run(pid, String(b.name).trim(), v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost), parseInt(v.stock, 10) || 0, ts);
+      insV.run(pid, String(b.name).trim(), v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost),
+        parseInt(v.stock, 10) || 0, emMaos(v, sobEncomenda), ts);
     }
     return pid;
   })();
@@ -183,21 +214,24 @@ app.put('/api/catalog/:id', async (req, res) => {
   const b = req.body || {};
   const ts = now();
   db.transaction(() => {
-    db.prepare(`UPDATE products SET name=?, brand=?, category=?, description=?, image_url=?, weight=?, published=?, updated_at=? WHERE id=?`)
+    const sobEncomenda = b.on_demand !== undefined ? (b.on_demand ? 1 : 0) : p.on_demand;
+    db.prepare(`UPDATE products SET name=?, brand=?, category=?, description=?, image_url=?, weight=?, on_demand=?, published=?, updated_at=? WHERE id=?`)
       .run(b.name ?? p.name, b.brand ?? p.brand, b.category ?? p.category, b.description ?? p.description,
         b.image_url ?? p.image_url, b.weight !== undefined ? (b.weight ? Number(b.weight) : null) : p.weight,
-        b.published === false ? 0 : 1, ts, p.id);
+        sobEncomenda, b.published === false ? 0 : 1, ts, p.id);
     if (Array.isArray(b.variants)) {
       // A lista recebida é a lista COMPLETA de variações do produto.
-      const upd = db.prepare('UPDATE variants SET variant_name=?, sku=?, price=?, cost=?, stock=?, product_name=?, updated_at=? WHERE id=? AND product_id=?');
-      const insV = db.prepare(`INSERT INTO variants (product_id, product_name, variant_name, sku, price, cost, stock, stock_management, updated_at) VALUES (?,?,?,?,?,?,?,1,?)`);
+      const upd = db.prepare('UPDATE variants SET variant_name=?, sku=?, price=?, cost=?, stock=?, on_hand=?, product_name=?, updated_at=? WHERE id=? AND product_id=?');
+      const insV = db.prepare(`INSERT INTO variants (product_id, product_name, variant_name, sku, price, cost, stock, on_hand, stock_management, updated_at) VALUES (?,?,?,?,?,?,?,?,1,?)`);
       const mantidos = new Set();
       for (const v of b.variants) {
         if (v.id) {
-          upd.run(v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost), parseInt(v.stock, 10) || 0, b.name ?? p.name, ts, v.id, p.id);
+          upd.run(v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost), parseInt(v.stock, 10) || 0,
+            emMaos(v, sobEncomenda), b.name ?? p.name, ts, v.id, p.id);
           mantidos.add(Number(v.id));
         } else {
-          const novo = insV.run(p.id, b.name ?? p.name, v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost), parseInt(v.stock, 10) || 0, ts);
+          const novo = insV.run(p.id, b.name ?? p.name, v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost),
+            parseInt(v.stock, 10) || 0, emMaos(v, sobEncomenda), ts);
           mantidos.add(Number(novo.lastInsertRowid));
         }
       }
@@ -226,12 +260,13 @@ app.post('/api/catalog/:id/duplicate', (req, res) => {
   const variants = db.prepare('SELECT * FROM variants WHERE product_id = ? ORDER BY id').all(p.id);
   const ts = now();
   const novoId = db.transaction(() => {
+    // Leva o "sob encomenda": tênis novo costuma seguir a mesma regra.
     const id = db.prepare(`INSERT INTO products (name, brand, category, categories_all, description,
-        image_url, weight, published, synced_nuvemshop, created_at, updated_at)
-      VALUES (?,?,?,?,?, '', ?, 1, 0, ?, ?)`)
-      .run(`${p.name} (cópia)`, p.brand, p.category, p.categories_all, p.description, p.weight, ts, ts).lastInsertRowid;
-    const ins = db.prepare(`INSERT INTO variants (product_id, product_name, variant_name, sku, price, cost, stock, stock_management, updated_at)
-      VALUES (?,?,?,'',?,?,0,1,?)`);   // sem SKU e com estoque zerado: você preenche o que chegou
+        image_url, weight, on_demand, published, synced_nuvemshop, created_at, updated_at)
+      VALUES (?,?,?,?,?, '', ?, ?, 1, 0, ?, ?)`)
+      .run(`${p.name} (cópia)`, p.brand, p.category, p.categories_all, p.description, p.weight, p.on_demand, ts, ts).lastInsertRowid;
+    const ins = db.prepare(`INSERT INTO variants (product_id, product_name, variant_name, sku, price, cost, stock, on_hand, stock_management, updated_at)
+      VALUES (?,?,?,'',?,?,0,0,1,?)`);   // sem SKU e com estoque zerado: você preenche o que chegou
     const base = variants.length ? variants : [{ variant_name: 'Único', price: 0, cost: 0 }];
     for (const v of base) ins.run(id, `${p.name} (cópia)`, v.variant_name || 'Único', v.price, v.cost, ts);
     return id;
@@ -536,6 +571,56 @@ app.get('/api/debug/clientes', (req, res) => {
     amostra_do_primeiro: amostra });
 });
 
+// Raio-x do estoque: de onde vem o valor e se existe produto repetido.
+app.get('/api/debug/estoque', (req, res) => {
+  const contagem = db.prepare(`SELECT
+      (SELECT COUNT(*) FROM products) produtos,
+      (SELECT COUNT(*) FROM variants) variacoes,
+      (SELECT COUNT(*) FROM products WHERE on_demand=1) produtos_sob_encomenda`).get();
+
+  const valores = db.prepare(`SELECT
+      COALESCE(SUM(v.stock),0) pecas_no_site,
+      COALESCE(SUM(${REAL}),0) pecas_em_maos,
+      ROUND(COALESCE(SUM(v.stock * v.price),0),2) valor_venda_pela_grade_do_site,
+      ROUND(COALESCE(SUM(${REAL} * v.price),0),2) valor_venda_real,
+      ROUND(COALESCE(SUM(${REAL} * v.cost),0),2) valor_custo_real
+    FROM variants v LEFT JOIN products p ON p.id = v.product_id
+    WHERE v.stock_management = 1`).get();
+
+  // Mesmo produto cadastrado duas vezes (nome igual, ids diferentes).
+  const nomesRepetidos = db.prepare(`SELECT lower(trim(name)) nome, COUNT(*) vezes,
+      GROUP_CONCAT(id) ids, GROUP_CONCAT(COALESCE(nuvemshop_product_id,'local')) ids_na_loja
+    FROM products GROUP BY nome HAVING vezes > 1 ORDER BY vezes DESC LIMIT 20`).all();
+
+  // Variação repetida dentro do mesmo produto (ex.: dois "42").
+  const variacoesRepetidas = db.prepare(`SELECT p.id produto_id, p.name produto,
+      lower(trim(v.variant_name)) variacao, COUNT(*) vezes, GROUP_CONCAT(v.id) ids
+    FROM variants v JOIN products p ON p.id = v.product_id
+    GROUP BY p.id, variacao HAVING vezes > 1 ORDER BY vezes DESC LIMIT 20`).all();
+
+  // Variação órfã: sobrou sem produto (entraria no valor sem aparecer na lista).
+  const orfas = db.prepare(`SELECT COUNT(*) n, ROUND(COALESCE(SUM(v.stock*v.price),0),2) valor
+    FROM variants v LEFT JOIN products p ON p.id = v.product_id WHERE p.id IS NULL`).get();
+
+  // Quem mais pesa no valor — é aqui que a grade de tênis aparece.
+  const maiores = db.prepare(`SELECT p.name produto, p.on_demand sob_encomenda,
+      COUNT(v.id) variacoes, COALESCE(SUM(v.stock),0) no_site, COALESCE(SUM(${REAL}),0) em_maos,
+      ROUND(COALESCE(SUM(v.stock * v.price),0),2) valor_pela_grade,
+      ROUND(COALESCE(SUM(${REAL} * v.price),0),2) valor_real
+    FROM products p JOIN variants v ON v.product_id = p.id
+    WHERE v.stock_management = 1
+    GROUP BY p.id ORDER BY valor_pela_grade DESC LIMIT 15`).all();
+
+  res.json({
+    contagem, valores,
+    diferenca_grade_menos_real: money(valores.valor_venda_pela_grade_do_site - valores.valor_venda_real),
+    produtos_com_nome_repetido: nomesRepetidos,
+    variacoes_repetidas: variacoesRepetidas,
+    variacoes_orfas: orfas,
+    maiores_do_estoque: maiores,
+  });
+});
+
 // Limpa os dados LOCAIS (catálogo, vendas, clientes, financeiro).
 // Não toca em nada na Nuvemshop — serve para começar do zero, limpo.
 app.post('/api/reset', (req, res) => {
@@ -560,12 +645,15 @@ app.get('/api/customers', (req, res) => {
     ('não informado','nao informado','não informada','nao informada','sem nome','cliente',
      'cliente do site','consumidor final','consumidor','visitante','guest','n/a','na','-','')`;
 
-  // "Gastou" = o que a pessoa efetivamente pagou. Pedido cancelado não
-  // conta, e o que está em aberto aparece à parte, em "a receber".
+  // "Gastou" = tudo que a pessoa levou, pago ou fiado — as peças já
+  // saíram daqui, então o fiado também conta para a posição no ranking.
+  // Só o que foi cancelado fica de fora. O que ainda não foi pago segue
+  // visível à parte, em "a receber".
   const rows = db.prepare(`
     SELECT c.*,
       COUNT(CASE WHEN s.payment_status <> 'cancelado' THEN s.id END) AS orders,
-      COALESCE(SUM(CASE WHEN s.payment_status='pago' THEN s.total ELSE 0 END),0) AS total_spent,
+      COALESCE(SUM(CASE WHEN s.payment_status IN ('pago','pendente') THEN s.total ELSE 0 END),0) AS total_spent,
+      COALESCE(SUM(CASE WHEN s.payment_status='pago' THEN s.total ELSE 0 END),0) AS paid,
       COALESCE(SUM(CASE WHEN s.payment_status='pendente' THEN s.total ELSE 0 END),0) AS pending,
       MAX(CASE WHEN s.payment_status <> 'cancelado' THEN s.created_at END) AS last_purchase,
       CASE WHEN c.nuvemshop_customer_id IS NOT NULL THEN 1 ELSE 0 END AS da_loja
@@ -582,7 +670,8 @@ app.get('/api/customers/:id', (req, res) => {
   c.sales = db.prepare('SELECT id, code, total, payment_method, payment_status, created_at FROM sales WHERE customer_id = ? ORDER BY id DESC').all(c.id);
   const agg = db.prepare(`SELECT
     COUNT(CASE WHEN payment_status <> 'cancelado' THEN 1 END) AS orders,
-    COALESCE(SUM(CASE WHEN payment_status='pago' THEN total ELSE 0 END),0) AS total_spent,
+    COALESCE(SUM(CASE WHEN payment_status IN ('pago','pendente') THEN total ELSE 0 END),0) AS total_spent,
+    COALESCE(SUM(CASE WHEN payment_status='pago' THEN total ELSE 0 END),0) AS paid,
     COALESCE(SUM(CASE WHEN payment_status='pendente' THEN total ELSE 0 END),0) AS pending
     FROM sales WHERE customer_id = ?`).get(c.id);
   res.json({ ...c, ...agg });
@@ -658,15 +747,23 @@ app.post('/api/sales', async (req, res) => {
     if (c) custName = c.name;
   }
 
-  const getVariant = db.prepare('SELECT * FROM variants WHERE id = ?');
+  const getVariant = db.prepare(`SELECT v.*, COALESCE(p.on_demand,0) AS on_demand
+    FROM variants v LEFT JOIN products p ON p.id = v.product_id WHERE v.id = ?`);
   const lines = [];
   for (const it of items) {
     const v = getVariant.get(it.variant_id);
     if (!v) return res.status(400).json({ error: `Produto não encontrado (id ${it.variant_id}).` });
     const qty = Math.max(1, parseInt(it.qty, 10) || 1);
-    if (v.stock_management && v.stock < qty) return res.status(409).json({ error: `Estoque insuficiente de "${v.product_name} ${v.variant_name}" (tem ${v.stock}, pediu ${qty}).` });
+    // Sob encomenda a grade do site não é estoque: é a lista de numerações
+    // que você consegue entregar. Vender uma que não está aqui é o normal
+    // (o par vem do fornecedor no mesmo dia), então nunca trava a venda.
+    if (!v.on_demand && v.stock_management && v.stock < qty) {
+      return res.status(409).json({ error: `Estoque insuficiente de "${v.product_name} ${v.variant_name}" (tem ${v.stock}, pediu ${qty}).` });
+    }
     const unitPrice = it.unit_price != null ? parseFloat(it.unit_price) : v.price;
-    lines.push({ v, qty, unitPrice, lineTotal: money(unitPrice * qty), unitCost: v.cost });
+    // Faltou par em mãos? Então essa venda gera encomenda no fornecedor.
+    const encomendar = v.on_demand ? Math.max(0, qty - (v.on_hand || 0)) : 0;
+    lines.push({ v, qty, unitPrice, lineTotal: money(unitPrice * qty), unitCost: v.cost, encomendar });
   }
 
   const subtotal = money(lines.reduce((s, l) => s + l.lineTotal, 0));
@@ -683,11 +780,31 @@ app.post('/api/sales', async (req, res) => {
       VALUES (?, 'pdv', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`)
       .run(code, custId, custName, payment_method, status, status === 'pago' ? ts : null, subtotal, disc, total, costTotal, margin, ts).lastInsertRowid;
     const insItem = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, name, qty, unit_price, unit_cost, line_total) VALUES (?,?,?,?,?,?,?)`);
+    // Grade do site e par em mãos baixam separados: o site perde a
+    // numeração vendida, o estoque real só perde se o par estava aqui.
     const updStock = db.prepare('UPDATE variants SET stock = stock - ?, updated_at = ? WHERE id = ?');
+    const updHand = db.prepare('UPDATE variants SET on_hand = MAX(0, COALESCE(on_hand,0) - ?), updated_at = ? WHERE id = ?');
     const insMove = db.prepare('INSERT INTO stock_movements (variant_id, delta, reason, ref, created_at) VALUES (?,?,?,?,?)');
+    const insRem = db.prepare(`INSERT INTO reminders (title, notes, due_date, kind, customer_id, created_at)
+      VALUES (?,?,?, 'encomenda', ?, ?)`);
     for (const l of lines) {
       insItem.run(id, l.v.id, `${l.v.product_name} ${l.v.variant_name}`, l.qty, l.unitPrice, l.unitCost, l.lineTotal);
-      if (l.v.stock_management) { updStock.run(l.qty, ts, l.v.id); insMove.run(l.v.id, -l.qty, 'venda_pdv', code, ts); }
+      if (l.v.on_demand) {
+        // A grade do site continua inteira — a numeração segue à venda,
+        // porque você consegue repor no fornecedor. Só o par sai daqui.
+        updHand.run(l.qty, ts, l.v.id);
+        insMove.run(l.v.id, -l.qty, 'venda_pdv', code, ts);
+      } else if (l.v.stock_management) {
+        updStock.run(l.qty, ts, l.v.id); insMove.run(l.v.id, -l.qty, 'venda_pdv', code, ts);
+      }
+      // Vendeu numeração que não tinha: vira lembrete de buscar hoje.
+      if (l.encomendar > 0) {
+        insRem.run(
+          `Pegar no fornecedor: ${l.v.product_name} ${l.v.variant_name}`,
+          `${l.encomendar} par(es) · venda ${code}${custName ? ' · ' + custName : ''}`,
+          ts.slice(0, 10), custId, ts,
+        );
+      }
     }
     // Caixa: só entra quando PAGO. Fiado vira conta a receber (a própria venda pendente).
     if (status === 'pago') {
@@ -703,6 +820,7 @@ app.post('/api/sales', async (req, res) => {
   if (isLive()) {
     for (const l of lines) {
       if (!l.v.stock_management || !l.v.nuvemshop_product_id || !l.v.nuvemshop_variant_id) continue;
+      if (l.v.on_demand) continue;   // a grade do site fica como está
       try { await nuvem.setVariantStock(l.v.nuvemshop_product_id, l.v.nuvemshop_variant_id, Math.max(0, l.v.stock - l.qty)); }
       catch (err) { syncedAll = false; syncNotes.push(`${l.v.product_name} ${l.v.variant_name}: ${err.message}`); }
     }
@@ -710,7 +828,13 @@ app.post('/api/sales', async (req, res) => {
   const live = isLive();
   db.prepare('UPDATE sales SET synced_nuvemshop=?, sync_note=? WHERE id=?').run(syncedAll && live ? 1 : 0, syncNotes.join(' | ') || null, saleId);
 
-  res.json({ ok: true, code, total, margin, payment_status: status, customer_name: custName, mode: live ? 'live' : 'demo', stock_synced: syncedAll && live, notes: syncNotes });
+  const encomendas = lines.filter((l) => l.encomendar > 0)
+    .map((l) => `${l.v.product_name} ${l.v.variant_name}`);
+  res.json({
+    ok: true, code, total, margin, payment_status: status, customer_name: custName,
+    mode: live ? 'live' : 'demo', stock_synced: syncedAll && live, notes: syncNotes,
+    encomendas,   // o PDV avisa na tela e o lembrete já foi criado
+  });
 });
 
 // ==================== CONTAS A RECEBER (fiado) ====================
@@ -744,11 +868,16 @@ app.get('/api/dashboard', (req, res) => {
     FROM sales WHERE created_at >= ? AND payment_status='pago'`).get(iso);
   const ticket = today.orders > 0 ? money(today.revenue / today.orders) : 0;
   const marginPct = today.revenue > 0 ? Math.round((today.margin / today.revenue) * 100) : 0;
-  const lowStock = db.prepare('SELECT COUNT(*) AS n FROM variants WHERE stock_management = 1 AND stock <= 4').get().n;
+  // "Acabando" olha o que existe de verdade. Produto sob encomenda fica
+  // de fora: a grade do site não é estoque, e repor é com o fornecedor.
+  const BAIXO = `FROM variants v JOIN products p ON p.id = v.product_id
+    WHERE v.stock_management = 1 AND p.on_demand = 0 AND v.stock <= 4`;
+  const lowStock = db.prepare(`SELECT COUNT(*) AS n ${BAIXO}`).get().n;
   const recv = db.prepare(`SELECT COALESCE(SUM(total),0) AS total, COUNT(*) AS n FROM sales WHERE payment_status='pendente'`).get();
-  const stockVal = db.prepare('SELECT COALESCE(SUM(stock*cost),0) AS v FROM variants WHERE stock_management = 1').get().v;
+  const stockVal = db.prepare(`SELECT COALESCE(SUM(${REAL} * v.cost),0) AS v
+    FROM variants v LEFT JOIN products p ON p.id = v.product_id WHERE v.stock_management = 1`).get().v;
   const recent = db.prepare('SELECT code, customer_name, payment_method, payment_status, total, created_at, synced_nuvemshop FROM sales ORDER BY id DESC LIMIT 8').all();
-  const lowList = db.prepare('SELECT product_name, variant_name, stock FROM variants WHERE stock_management = 1 AND stock <= 4 ORDER BY stock ASC LIMIT 8').all();
+  const lowList = db.prepare(`SELECT v.product_name, v.variant_name, v.stock ${BAIXO} ORDER BY v.stock ASC LIMIT 8`).all();
   const pendingList = db.prepare(`SELECT id, code, customer_name, total, created_at FROM sales WHERE payment_status='pendente' ORDER BY created_at ASC LIMIT 8`).all();
   // Lembretes: o que vence hoje ou já passou
   const hojeStr = new Date().toISOString().slice(0, 10);

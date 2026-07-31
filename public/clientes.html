@@ -44,6 +44,7 @@
   .stat .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-3);font-weight:700}
   .stat .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:16px;margin-top:3px}
   .stat .v.g{color:var(--brand-hi)} .stat .v.w{color:var(--warn)}
+  .stat .sub{font-size:10px;color:var(--ink-3);font-family:var(--font-mono);margin-top:2px}
   .hist{display:flex;flex-direction:column;gap:5px;margin-top:6px;max-height:44vh;overflow-y:auto}
   .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 10px;
     background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:10px;font-size:12.5px}
@@ -61,7 +62,7 @@
 <body>
 <div class="app">
   <div class="pagehead">
-    <div><h1>Clientes</h1><div class="ph-sub">Ranking · histórico de compras</div></div>
+    <div><h1>Clientes</h1><div class="ph-sub">Ranking por tudo que levaram · pago e fiado</div></div>
     <div class="ph-actions"><button class="btn primary" id="novo" type="button">Novo cliente</button></div>
   </div>
 
@@ -71,7 +72,7 @@
 
   <div class="layout">
     <div>
-      <div class="sec" style="margin-top:0"><h2>Quem mais gastou</h2><span class="rule"></span><span class="meta" id="tot"></span></div>
+      <div class="sec" style="margin-top:0"><h2>Quem mais levou</h2><span class="rule"></span><span class="meta" id="tot"></span></div>
       <div class="rank" id="rank"></div>
     </div>
     <aside class="card det" id="det"></aside>
@@ -125,6 +126,7 @@ async function rank(q=''){
       <div class="val"><div class="sp">${BRL(c.total_spent)}</div>
         ${c.pending>0?`<div class="pd">${BRL(c.pending)} a receber</div>`:''}
         <div class="or">${c.orders} compra(s)</div></div>`;
+    // O fiado já conta na posição: a peça saiu daqui.
     el.onclick=()=>detalhe(c.id);box.appendChild(el);
   });
 }
@@ -148,7 +150,8 @@ async function detalhe(id){
       <button class="btn sm" id="edt" type="button">Editar</button>
     </div>
     <div class="stats">
-      <div class="stat"><div class="l">Total gasto</div><div class="v g">${BRL(c.total_spent)}</div></div>
+      <div class="stat"><div class="l">Total levado</div><div class="v g">${BRL(c.total_spent)}</div>
+        <div class="sub">${BRL(c.paid)} já pago</div></div>
       <div class="stat"><div class="l">Compras</div><div class="v">${c.orders}</div></div>
       <div class="stat"><div class="l">A receber</div><div class="v w">${BRL(c.pending)}</div></div>
       <div class="stat"><div class="l">Ticket médio</div><div class="v">${BRL(c.orders?c.total_spent/c.orders:0)}</div></div>

@@ -29,6 +29,9 @@
   .prod .pr{font-family:var(--font-mono);font-weight:700;font-size:13.5px}
   .prod .st{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
   .st.ok{color:var(--ok)} .st.low{color:var(--warn)} .st.out{color:var(--crit)}
+  /* Sob encomenda: vende normal, mas o par é buscado no fornecedor. */
+  .st.enc{color:var(--info,#6aa9ff)}
+  .line .meta .enc{color:var(--warn);font-weight:700}
 
   /* Carrinho */
   .cart{position:sticky;top:var(--s4);padding:var(--s4);display:flex;flex-direction:column;gap:var(--s3)}
@@ -153,7 +156,16 @@ const vazio=(ico,t,d)=>`<div class="empty">${ICO(ico,28)}<div class="t">${t}</di
 document.querySelector('.search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
 
 /* catálogo */
-function estado(v){if(!v.stock_management)return['ok','disponível'];if(v.stock<=0)return['out','esgotado'];if(v.stock<=4)return['low',v.stock+' un.'];return['ok',v.stock+' un.'];}
+function estado(v){
+  // Sob encomenda: a numeração nunca esgota no site — o que muda é se o
+  // par está aqui ou se você busca no fornecedor.
+  if(v.on_demand)return v.real_stock>0?['ok','na loja']:['enc','encomenda'];
+  if(!v.stock_management)return['ok','disponível'];
+  if(v.stock<=0)return['out','esgotado'];
+  if(v.stock<=4)return['low',v.stock+' un.'];
+  return['ok',v.stock+' un.'];
+}
+const sobEnc=(v)=>v.on_demand&&(v.real_stock||0)<=0;
 async function carregar(q=''){
   document.getElementById('grid').innerHTML='<div class="empty" style="grid-column:1/-1">'+ICO('sync',26)+'<div class="t">Carregando…</div></div>';
   S.prods=await api('/api/products?q='+encodeURIComponent(q));
@@ -161,7 +173,7 @@ async function carregar(q=''){
   if(!S.prods.length){g.innerHTML='<div style="grid-column:1/-1">'+vazio('busca','Nada encontrado','Tente outro nome, marca ou variação.')+'</div>';return;}
   g.innerHTML='';
   for(const v of S.prods){
-    const [cls,txt]=estado(v), out=v.stock_management&&v.stock<=0;
+    const [cls,txt]=estado(v), out=!v.on_demand&&v.stock_management&&v.stock<=0;
     const b=document.createElement('button');b.className='prod';b.type='button';b.disabled=out;
     const img=v.image_url?`<img src="${v.image_url}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:ICO('estoque',22)}))">`:ICO('estoque',22);
     b.innerHTML=`<span class="thumb">${img}</span><span class="nm">${v.product_name}</span>
@@ -171,11 +183,13 @@ async function carregar(q=''){
   }
 }
 function add(v){const c=S.cart.get(v.id)||{v,qty:0};
-  if(v.stock_management&&c.qty>=v.stock)return toast('Estoque no limite',`Só há ${v.stock} un. deste item.`,true);
-  c.qty++;S.cart.set(v.id,c);renderCart();}
+  // Sob encomenda não tem limite: o que faltar é buscado no fornecedor.
+  if(!v.on_demand&&v.stock_management&&c.qty>=v.stock)return toast('Estoque no limite',`Só há ${v.stock} un. deste item.`,true);
+  c.qty++;S.cart.set(v.id,c);renderCart();
+  if(sobEnc(v))toast('Vai por encomenda',`${v.product_name} ${v.variant_name} não está na loja — o sistema cria o lembrete de pegar no fornecedor.`);}
 function qty(id,d){const it=S.cart.get(id);if(!it)return;it.qty+=d;
   if(it.qty<=0)S.cart.delete(id);
-  else if(it.v.stock_management&&it.qty>it.v.stock){it.qty=it.v.stock;toast('Estoque no limite',`Máximo ${it.v.stock} un.`,true);}
+  else if(!it.v.on_demand&&it.v.stock_management&&it.qty>it.v.stock){it.qty=it.v.stock;toast('Estoque no limite',`Máximo ${it.v.stock} un.`,true);}
   renderCart();}
 function renderCart(){
   const box=document.getElementById('lines');
@@ -186,7 +200,7 @@ function renderCart(){
     for(const [id,it] of S.cart){
       const el=document.createElement('div');el.className='line';
       el.innerHTML=`<div><div class="nm">${it.v.product_name}</div>
-        <div class="meta">${it.v.variant_name||''} · ${BRL(it.v.price)}</div>
+        <div class="meta">${it.v.variant_name||''} · ${BRL(it.v.price)}${sobEnc(it.v)?' · <b class="enc">encomenda</b>':''}</div>
         <button class="rm" type="button">remover</button></div>
         <div><div class="qty"><button type="button" aria-label="menos">−</button><span>${it.qty}</span><button type="button" aria-label="mais">+</button></div>
         <div class="lt">${BRL(it.v.price*it.qty)}</div></div>`;
@@ -263,7 +277,9 @@ async function finalizar(){
       discount:parseFloat(document.getElementById('disc').value)||0})});
     const sit=r.payment_status==='pendente'?'Fiado — foi para Contas a receber':'Pago';
     const sinc=r.stock_synced?' · estoque atualizado na loja':(r.mode==='demo'?'':' · estoque não sincronizou');
-    toast(`${r.code} · ${BRL(r.total)}`,`${r.customer_name||'Sem cliente'} · ${sit}${sinc}`);
+    const enc=(r.encomendas&&r.encomendas.length)
+      ? `<br><b style="color:var(--warn)">Pegar no fornecedor hoje:</b> ${r.encomendas.join(', ')}` : '';
+    toast(`${r.code} · ${BRL(r.total)}`,`${r.customer_name||'Sem cliente'} · ${sit}${sinc}${enc}`);
     S.cart.clear();S.pay='';limparCliente();
     document.querySelectorAll('.pay').forEach(p=>p.classList.remove('sel'));
     document.getElementById('disc').value='';renderCart();
