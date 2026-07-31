@@ -60,6 +60,7 @@
   .chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;width:fit-content;
     background:rgba(47,210,79,.09);border:1px solid rgba(47,210,79,.3);color:var(--brand-hi);font-size:12.5px;font-weight:700}
   .chip[hidden]{display:none}
+  .chip .ig{font-family:var(--font-mono);font-weight:500;opacity:.75;font-size:11.5px}
   .chip button{background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1}
   .chip button:hover{color:var(--crit)}
 
@@ -102,7 +103,7 @@
 
       <div class="field cust-wrap">
         <label for="cust">Cliente</label>
-        <input id="cust" type="text" placeholder="Buscar ou criar…" autocomplete="off">
+        <input id="cust" type="text" placeholder="Nome ou @instagram…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
         <div id="custList" class="cust-list"></div>
         <div id="chip" class="chip" hidden></div>
       </div>
@@ -212,21 +213,32 @@ async function buscarCliente(q){
   if(!q){cl.classList.remove('show');return;}
   const rows=await api('/api/customers?q='+encodeURIComponent(q));
   cl.innerHTML='';
-  rows.slice(0,5).forEach(c=>{const b=document.createElement('button');b.type='button';
-    b.innerHTML=`<span>${c.name}</span><span class="num" style="color:var(--ink-3);font-size:11px">${c.phone||''}</span>`;
+  rows.slice(0,6).forEach(c=>{const b=document.createElement('button');b.type='button';
+    // O @ é como a loja identifica a pessoa — aparece sempre que existe.
+    const ig=c.instagram||'',ap=igual(c.name,ig)?'':ig;
+    b.innerHTML=`<span>${esc(rotulo(c))}</span>
+      <span class="num" style="color:var(--ink-3);font-size:11px">${esc(ap||c.phone||'')}</span>`;
     b.onclick=()=>selCliente(c);cl.appendChild(b);});
   const nb=document.createElement('button');nb.type='button';nb.className='new';
-  nb.innerHTML=ICO('mais',15)+`<span style="flex:1;text-align:left">Criar “${q}”</span>`;
+  nb.innerHTML=ICO('mais',15)+`<span style="flex:1;text-align:left">Criar “${esc(q)}”</span>`;
   nb.style.gap='7px';nb.onclick=()=>criarCliente(q);cl.appendChild(nb);
   cl.classList.add('show');
 }
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const nrm=(s)=>String(s||'').trim().toLowerCase().replace(/^@+/,'');
+const igual=(a,b)=>Boolean(b)&&nrm(a)===nrm(b);
+// Se o cadastro é só o @, mostra o @; senão o nome.
+const rotulo=(c)=>igual(c.name,c.instagram)?c.instagram:c.name;
 function selCliente(c){S.cliente=c;ch.hidden=false;
-  ch.innerHTML=ICO('clientes',15)+`<span>${c.name}</span><button type="button" aria-label="remover">✕</button>`;
+  const ig=c.instagram&&!igual(c.name,c.instagram)?` <span class="ig">${esc(c.instagram)}</span>`:'';
+  ch.innerHTML=ICO('clientes',15)+`<span>${esc(rotulo(c))}${ig}</span><button type="button" aria-label="remover">✕</button>`;
   ch.querySelector('button').onclick=limparCliente;cl.classList.remove('show');ci.value='';}
 function limparCliente(){S.cliente=null;ch.hidden=true;ch.innerHTML='';}
 async function criarCliente(nome){
-  try{const r=await api('/api/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:nome})});
-    selCliente(r.customer);toast('Cliente criado',r.customer.name);}catch(e){toast('Erro',e.message,true);}
+  // Digitou "@fulano"? Já entra como Instagram também.
+  try{const r=await api('/api/customers',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:nome,instagram:nome.trim().startsWith('@')?nome.trim():''})});
+    selCliente(r.customer);toast('Cliente criado',rotulo(r.customer));}catch(e){toast('Erro',e.message,true);}
 }
 document.addEventListener('click',e=>{if(!e.target.closest('#cust')&&!e.target.closest('#custList'))cl.classList.remove('show');});
 

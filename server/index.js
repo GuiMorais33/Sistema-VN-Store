@@ -570,9 +570,9 @@ app.get('/api/customers', (req, res) => {
       MAX(CASE WHEN s.payment_status <> 'cancelado' THEN s.created_at END) AS last_purchase,
       CASE WHEN c.nuvemshop_customer_id IS NOT NULL THEN 1 ELSE 0 END AS da_loja
     FROM customers c LEFT JOIN sales s ON s.customer_id = c.id
-    WHERE ${SEM_NOME} ${q ? 'AND (c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)' : ''}
+    WHERE ${SEM_NOME} ${q ? 'AND (c.name LIKE ? OR c.instagram LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)' : ''}
     GROUP BY c.id ORDER BY total_spent DESC, c.name
-  `).all(...(q ? [like, like, like] : []));
+  `).all(...(q ? [like, like, like, like] : []));
   res.json(rows);
 });
 
@@ -588,12 +588,55 @@ app.get('/api/customers/:id', (req, res) => {
   res.json({ ...c, ...agg });
 });
 
+// Normaliza o @: aceita "@fulano", "fulano" ou a URL do perfil.
+const limpaInsta = (v) => {
+  const s = String(v || '').trim();
+  if (!s) return '';
+  const m = /instagram\.com\/([A-Za-z0-9._]+)/i.exec(s);
+  const handle = (m ? m[1] : s).replace(/^@+/, '').trim();
+  return handle ? '@' + handle.replace(/\/+$/, '') : '';
+};
+
 app.post('/api/customers', async (req, res) => {
   const b = req.body || {};
-  if (!b.name || !String(b.name).trim()) return res.status(400).json({ error: 'Informe o nome do cliente.' });
-  const id = db.prepare('INSERT INTO customers (name, phone, email, note, created_at) VALUES (?,?,?,?,?)')
-    .run(String(b.name).trim(), b.phone || '', b.email || '', b.note || '', now()).lastInsertRowid;
+  const nome = String(b.name || '').trim();
+  if (!nome) return res.status(400).json({ error: 'Informe o nome do cliente.' });
+  // Se digitaram só o @ no nome, ele também vira o Instagram.
+  const insta = limpaInsta(b.instagram || (nome.startsWith('@') ? nome : ''));
+  const id = db.prepare('INSERT INTO customers (name, instagram, phone, email, note, created_at) VALUES (?,?,?,?,?,?)')
+    .run(nome, insta, b.phone || '', b.email || '', b.note || '', now()).lastInsertRowid;
   res.json({ ok: true, customer: db.prepare('SELECT * FROM customers WHERE id = ?').get(id) });
+});
+
+// Editar cliente
+app.put('/api/customers/:id', (req, res) => {
+  const c = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Cliente não encontrado.' });
+  const b = req.body || {};
+  const nome = b.name !== undefined ? String(b.name).trim() : c.name;
+  if (!nome) return res.status(400).json({ error: 'O nome não pode ficar vazio.' });
+  db.prepare('UPDATE customers SET name=?, instagram=?, phone=?, email=?, note=? WHERE id=?')
+    .run(nome,
+      b.instagram !== undefined ? limpaInsta(b.instagram) : (c.instagram || ''),
+      b.phone !== undefined ? String(b.phone).trim() : c.phone,
+      b.email !== undefined ? String(b.email).trim() : c.email,
+      b.note !== undefined ? String(b.note).trim() : c.note,
+      c.id);
+  // O nome também aparece nas vendas antigas — mantém coerente.
+  db.prepare('UPDATE sales SET customer_name = ? WHERE customer_id = ?').run(nome, c.id);
+  res.json({ ok: true, customer: db.prepare('SELECT * FROM customers WHERE id = ?').get(c.id) });
+});
+
+// Preenche o Instagram a partir dos nomes que já são um @.
+function detectarInstagram() {
+  const alvo = db.prepare("SELECT id, name FROM customers WHERE COALESCE(instagram,'') = '' AND name LIKE '@%'").all();
+  const upd = db.prepare('UPDATE customers SET instagram = ? WHERE id = ?');
+  let n = 0;
+  db.transaction(() => { for (const c of alvo) { const i = limpaInsta(c.name); if (i) { upd.run(i, c.id); n += 1; } } })();
+  return n;
+}
+app.post('/api/customers/detectar-instagram', (req, res) => {
+  res.json({ ok: true, atualizados: detectarInstagram() });
 });
 
 // ==================== VENDA (PDV) ====================
@@ -605,8 +648,11 @@ app.post('/api/sales', async (req, res) => {
   let custId = customer_id || null;
   let custName = customer_name || '';
   if (!custId && new_customer && new_customer.name) {
-    custId = db.prepare('INSERT INTO customers (name, phone, created_at) VALUES (?,?,?)').run(new_customer.name.trim(), new_customer.phone || '', now()).lastInsertRowid;
-    custName = new_customer.name.trim();
+    const nn = new_customer.name.trim();
+    const ni = limpaInsta(new_customer.instagram || (nn.startsWith('@') ? nn : ''));
+    custId = db.prepare('INSERT INTO customers (name, instagram, phone, created_at) VALUES (?,?,?,?)')
+      .run(nn, ni, new_customer.phone || '', now()).lastInsertRowid;
+    custName = nn;
   } else if (custId) {
     const c = db.prepare('SELECT name FROM customers WHERE id = ?').get(custId);
     if (c) custName = c.name;
@@ -858,8 +904,9 @@ async function importarClientes() {
   const porNs = db.prepare('SELECT id FROM customers WHERE nuvemshop_customer_id = ?');
   const porEmail = db.prepare("SELECT id FROM customers WHERE email <> '' AND lower(email) = lower(?)");
   const porNome = db.prepare('SELECT id FROM customers WHERE lower(name) = lower(?) AND nuvemshop_customer_id IS NULL');
-  const ins = db.prepare(`INSERT INTO customers (nuvemshop_customer_id, name, phone, email, created_at) VALUES (?,?,?,?,?)`);
-  const upd = db.prepare('UPDATE customers SET nuvemshop_customer_id=?, phone=COALESCE(NULLIF(phone,\'\'),?), email=COALESCE(NULLIF(email,\'\'),?) WHERE id=?');
+  const ins = db.prepare(`INSERT INTO customers (nuvemshop_customer_id, name, instagram, phone, email, created_at) VALUES (?,?,?,?,?,?)`);
+  const upd = db.prepare(`UPDATE customers SET nuvemshop_customer_id=?, phone=COALESCE(NULLIF(phone,''),?),
+    email=COALESCE(NULLIF(email,''),?), instagram=COALESCE(NULLIF(instagram,''),?) WHERE id=?`);
 
   let novos = 0, vinculados = 0;
   db.transaction(() => {
@@ -868,12 +915,14 @@ async function importarClientes() {
       const nome = (c.name || c.email || 'Cliente').trim();
       const email = (c.email || '').trim();
       const fone = (c.phone || (c.default_address && c.default_address.phone) || '').trim();
+      // Muita gente se cadastra com o próprio @ no nome — vira o Instagram.
+      const insta = nome.startsWith('@') ? limpaInsta(nome) : '';
       if (porNs.get(nsId)) continue;
       // Já existe aqui (cadastrado no PDV)? Então só liga os dois.
       // O nome só serve para casar se identificar mesmo a pessoa.
       const existente = (email && porEmail.get(email)) || (nomeUtil(nome) ? porNome.get(nome) : null);
-      if (existente) { upd.run(nsId, fone, email, existente.id); vinculados += 1; continue; }
-      ins.run(nsId, nome, fone, email, c.created_at ? new Date(c.created_at).toISOString() : now());
+      if (existente) { upd.run(nsId, fone, email, insta, existente.id); vinculados += 1; continue; }
+      ins.run(nsId, nome, insta, fone, email, c.created_at ? new Date(c.created_at).toISOString() : now());
       novos += 1;
     }
   })();
@@ -935,7 +984,7 @@ async function sincronizarPedidos(dias = 45) {
     VALUES (?, 'site', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, 1, ?, ?, ?, ?, ?, ?, ?)`);
   const acharCliente = db.prepare('SELECT id FROM customers WHERE nuvemshop_customer_id = ?');
   const acharPorNome = db.prepare('SELECT id FROM customers WHERE lower(name) = lower(?) LIMIT 1');
-  const criarCliente = db.prepare('INSERT INTO customers (nuvemshop_customer_id, name, phone, email, created_at) VALUES (?,?,?,?,?)');
+  const criarCliente = db.prepare('INSERT INTO customers (nuvemshop_customer_id, name, instagram, phone, email, created_at) VALUES (?,?,?,?,?,?)');
   const updSale = db.prepare(`UPDATE sales SET payment_status=?, paid_at=COALESCE(paid_at,?), total=?, subtotal=?, margin=?,
       ns_payment_status=?, ns_shipping_status=?, ns_status=?, ns_shipping_type=?, items_count=?, payment_method=?
     WHERE id=?`);
@@ -978,6 +1027,7 @@ async function sincronizarPedidos(dias = 45) {
           const local = nomeUtil(cliente) ? acharPorNome.get(cliente) : null;
           if (local) { db.prepare('UPDATE customers SET nuvemshop_customer_id = ? WHERE id = ?').run(nsCli, local.id); cliId = local.id; }
           else cliId = criarCliente.run(nsCli, nomeUtil(cliente) ? cliente : 'Cliente do site',
+            String(cliente || '').trim().startsWith('@') ? limpaInsta(cliente) : '',
             (o.customer.phone || ''), (o.customer.email || ''), quando).lastInsertRowid;
         }
       }
@@ -1037,6 +1087,7 @@ app.post('/api/import-customers', async (req, res) => {
     const ped = await sincronizarPedidos(dias);
     const ligados = vincularPedidos();
     const limpeza = limparClientesGenericos();
+    const insta = detectarInstagram();
     const rank = db.prepare(`SELECT COUNT(*) n FROM (
       SELECT customer_id FROM sales WHERE customer_id IS NOT NULL GROUP BY customer_id)`).get().n;
     res.json({
@@ -1045,6 +1096,7 @@ app.post('/api/import-customers', async (req, res) => {
       pedidos: { novos: ped.novos || 0, atualizados: ped.atualizados || 0, analisados: ped.analisados || 0, desde: ped.desde },
       pedidos_vinculados: ligados,
       corrigidos: limpeza,
+      instagram: insta,
       clientes_com_historico: rank,
     });
   } catch (err) {

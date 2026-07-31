@@ -171,6 +171,7 @@ ensureColumn('sales', 'ns_shipping_type', 'ns_shipping_type TEXT'); // envio | r
 ensureColumn('sales', 'items_count', 'items_count INTEGER DEFAULT 0');
 ensureColumn('sales', 'fin_posted', 'fin_posted INTEGER NOT NULL DEFAULT 0');
 ensureColumn('sales', 'ns_customer_id', 'ns_customer_id TEXT'); // cliente do pedido na loja
+ensureColumn('customers', 'instagram', 'instagram TEXT');       // @ do cliente (como a loja identifica)
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_order ON sales(nuvemshop_order_id) WHERE nuvemshop_order_id IS NOT NULL'); } catch (_) {}
 
 // ---- Plano de contas padrão (criado uma vez) ----
@@ -240,7 +241,7 @@ export function seedDemoIfEmpty() {
     INSERT INTO variants (product_id, nuvemshop_product_id, nuvemshop_variant_id, product_name, variant_name, sku, price, cost, stock, stock_management, updated_at)
     VALUES (@product_id, @pid, @vid, @product_name, @variant_name, @sku, @price, @cost, @stock, 1, @now)
   `);
-  const insCustomer = db.prepare(`INSERT INTO customers (name, phone, email, created_at) VALUES (?,?,?,?)`);
+  const insCustomer = db.prepare(`INSERT INTO customers (name, instagram, phone, email, created_at) VALUES (?,?,?,?,?)`);
 
   const catalog = [
     { name: 'Camiseta Quebrada Verde', brand: 'VN Store', category: 'Camisetas', description: 'Camiseta streetwear algodão premium.', image_url: '',
@@ -265,9 +266,10 @@ export function seedDemoIfEmpty() {
         insVariant.run({ product_id: productId, pid, vid: `demo-var-${vseq++}`, product_name: p.name, variant_name: vn, sku, price, cost, stock, now });
       }
     });
-    insCustomer.run('Bianca Souza', '(11) 90000-0001', 'bianca@email.com', now);
-    insCustomer.run('Rafael Lima', '(11) 90000-0002', 'rafael@email.com', now);
-    insCustomer.run('Diego Alves', '(11) 90000-0003', '', now);
+    // Muitos clientes da loja são conhecidos pelo @ — o exemplo reflete isso.
+    insCustomer.run('Bianca Souza', '@bi.souza', '(11) 90000-0001', 'bianca@email.com', now);
+    insCustomer.run('Rafael Lima', '', '(11) 90000-0002', 'rafael@email.com', now);
+    insCustomer.run('@diego.alves', '@diego.alves', '(11) 90000-0003', '', now);
   });
   tx();
   return true;

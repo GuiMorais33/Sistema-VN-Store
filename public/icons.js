@@ -34,6 +34,8 @@
     calendario: '<rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3.5v4M16 3.5v4"/>',
     baixar: '<path d="M12 3.5v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4.5 19.5h15"/>',
     caixa_vazia: '<path d="M3.5 8.5h17v10a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M2.5 8.5 5 4h14l2.5 4.5"/><path d="M12 4v4.5"/><path d="M9.5 13h5"/>',
+    instagram: '<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17" cy="7" r="1" fill="currentColor" stroke="none"/>',
+    editar: '<path d="M4 20h4l10-10a2.1 2.1 0 0 0-3-3L5 17z"/><path d="m14.5 6.5 3 3"/>',
   };
   window.ICO = function (name, size) {
     const d = P[name];

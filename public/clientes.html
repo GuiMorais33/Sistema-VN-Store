@@ -23,6 +23,8 @@
   .r-item:nth-child(1) .pos{color:var(--brand-hi)}
   .r-item:nth-child(2) .pos,.r-item:nth-child(3) .pos{color:var(--ink-2)}
   .who .nm{font-weight:600;font-size:13.5px}
+  .ig{font-family:var(--font-mono);font-size:11.5px;color:var(--brand-hi);display:inline-flex;align-items:center;gap:3px}
+  .ig svg{opacity:.8}
   .selo{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 6px;border-radius:999px;
     background:rgba(47,210,79,.1);color:var(--brand-hi);vertical-align:middle;margin-left:5px}
   .who .s{font-size:11px;color:var(--ink-3);font-family:var(--font-mono);margin-top:2px}
@@ -32,8 +34,11 @@
   .val .or{font-size:10.5px;color:var(--ink-3);margin-top:2px}
 
   .det{position:sticky;top:var(--s4);padding:var(--s4)}
-  .det h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;letter-spacing:.5px;font-size:18px;transform:skewX(-5deg)}
-  .det .contact{font-family:var(--font-mono);color:var(--ink-3);font-size:11.5px;margin-top:4px}
+  .det h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;letter-spacing:.5px;font-size:18px;transform:skewX(-5deg);
+    overflow-wrap:anywhere}
+  .det .contact{font-family:var(--font-mono);color:var(--ink-3);font-size:11.5px;margin-top:4px;overflow-wrap:anywhere}
+  .det-top{display:flex;gap:var(--s2);align-items:flex-start;justify-content:space-between}
+  .det-top .btn{flex:none}
   .stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:var(--s3) 0}
   .stat{background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:10px;padding:10px}
   .stat .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-3);font-weight:700}
@@ -61,7 +66,7 @@
   </div>
 
   <div class="bar">
-    <div class="search-wrap"><input id="q" type="search" placeholder="Buscar por nome, telefone ou e-mail…"></div>
+    <div class="search-wrap"><input id="q" type="search" placeholder="Buscar por nome, @instagram, telefone ou e-mail…"></div>
   </div>
 
   <div class="layout">
@@ -75,10 +80,13 @@
 
 <dialog id="dlg">
   <form class="dlg" method="dialog">
-    <h3>Novo cliente</h3>
-    <div class="field"><label>Nome *</label><input id="nName" required></div>
-    <div class="field"><label>Telefone / WhatsApp</label><input id="nPhone"></div>
+    <h3 id="dlgTitle">Novo cliente</h3>
+    <div class="field"><label>Nome *</label><input id="nName" required placeholder="Nome ou @ do Instagram"></div>
+    <div class="field"><label>Instagram</label><input id="nInsta" placeholder="@fulano" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <div class="hint">É como a loja reconhece o cliente. Pode colar o link do perfil.</div></div>
+    <div class="field"><label>Telefone / WhatsApp</label><input id="nPhone" inputmode="tel"></div>
     <div class="field"><label>E-mail</label><input id="nMail" type="email"></div>
+    <div class="field"><label>Observação</label><input id="nNote" placeholder="Ex.: prefere retirar na loja"></div>
     <div class="dlg-foot">
       <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
       <button class="btn primary" id="save" value="ok" type="submit">Salvar</button>
@@ -93,6 +101,8 @@ const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigit
 const D=(s)=>s?new Date(s).toLocaleDateString('pt-BR'):'—';
 async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
 const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const nrm=(s)=>String(s||'').trim().toLowerCase().replace(/^@+/,'');
 document.querySelector('.search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
 document.getElementById('novo').insertAdjacentHTML('afterbegin',ICO('mais',16));
 let sel=null;
@@ -105,9 +115,13 @@ async function rank(q=''){
   box.innerHTML='';
   rows.forEach((c,i)=>{
     const el=document.createElement('div');el.className='r-item'+(sel===c.id?' sel':'');el.dataset.id=c.id;
+    // Quando o nome já é o @, não repete: mostra o @ como identificação.
+    const insta=c.instagram||'';
+    const nome=insta&&nrm(c.name)===nrm(insta)?insta:c.name;
+    const mostraIg=insta&&nrm(nome)!==nrm(insta);
     el.innerHTML=`<div class="pos">${i+1}</div>
-      <div class="who"><div class="nm">${c.name}${c.da_loja?' <span class="selo">site</span>':''}</div>
-        <div class="s">${c.phone||c.email||'—'} · ${D(c.last_purchase)}</div></div>
+      <div class="who"><div class="nm">${esc(nome)}${c.da_loja?' <span class="selo">site</span>':''}</div>
+        <div class="s">${mostraIg?`<span class="ig">${ICO('instagram',12)}${esc(insta)}</span> · `:''}${esc(c.phone||c.email||'—')} · ${D(c.last_purchase)}</div></div>
       <div class="val"><div class="sp">${BRL(c.total_spent)}</div>
         ${c.pending>0?`<div class="pd">${BRL(c.pending)} a receber</div>`:''}
         <div class="or">${c.orders} compra(s)</div></div>`;
@@ -124,8 +138,15 @@ async function detalhe(id){
       <div style="text-align:right"><div class="r">${BRL(s.total)}</div>
       ${s.payment_status==='pendente'?`<button class="btn sm" data-s="${s.id}" type="button" style="margin-top:4px">Receber</button>`:''}</div>
     </div>`).join(''):vazio('recibo','Sem compras','Ainda não comprou nada.');
-  d.innerHTML=`<h3>${c.name}</h3>
-    <div class="contact">${c.phone||''}${c.email?' · '+c.email:''}</div>
+  const insta=c.instagram||'';
+  const nome=insta&&nrm(c.name)===nrm(insta)?insta:c.name;
+  const contato=[c.phone,c.email].filter(Boolean).map(esc).join(' · ');
+  d.innerHTML=`<div class="det-top">
+      <div><h3>${esc(nome)}</h3>
+        ${insta&&nrm(nome)!==nrm(insta)?`<div class="ig" style="margin-top:3px">${ICO('instagram',13)}${esc(insta)}</div>`:''}
+        <div class="contact">${contato||'sem contato cadastrado'}</div></div>
+      <button class="btn sm" id="edt" type="button">Editar</button>
+    </div>
     <div class="stats">
       <div class="stat"><div class="l">Total gasto</div><div class="v g">${BRL(c.total_spent)}</div></div>
       <div class="stat"><div class="l">Compras</div><div class="v">${c.orders}</div></div>
@@ -133,6 +154,9 @@ async function detalhe(id){
       <div class="stat"><div class="l">Ticket médio</div><div class="v">${BRL(c.orders?c.total_spent/c.orders:0)}</div></div>
     </div>
     <span class="label">Histórico</span><div class="hist">${hist}</div>`;
+  const be=d.querySelector('#edt');
+  be.insertAdjacentHTML('afterbegin',ICO('editar',14));
+  be.onclick=()=>abrirDlg(c);
   d.querySelectorAll('[data-s]').forEach(b=>b.onclick=async()=>{
     b.disabled=true;
     try{await api('/api/sales/'+b.dataset.s+'/settle',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
@@ -142,13 +166,27 @@ async function detalhe(id){
 function semSelecao(){document.getElementById('det').innerHTML=vazio('clientes','Escolha um cliente','Clique em alguém da lista para ver o histórico completo.');}
 
 const dlg=document.getElementById('dlg');
-document.getElementById('novo').onclick=()=>{['nName','nPhone','nMail'].forEach(i=>document.getElementById(i).value='');dlg.showModal();};
+let editando=null;   // null = novo cliente
+const V=(id,v)=>{const e=document.getElementById(id);if(v!==undefined)e.value=v;return e.value.trim();};
+
+function abrirDlg(c){
+  editando=c?c.id:null;
+  document.getElementById('dlgTitle').textContent=c?'Editar cliente':'Novo cliente';
+  V('nName',c?c.name:'');V('nInsta',c?(c.instagram||''):'');
+  V('nPhone',c?(c.phone||''):'');V('nMail',c?(c.email||''):'');V('nNote',c?(c.note||''):'');
+  dlg.showModal();
+}
+document.getElementById('novo').onclick=()=>abrirDlg(null);
 document.getElementById('save').onclick=async e=>{
-  const name=document.getElementById('nName').value.trim();if(!name)return;
+  const name=V('nName');if(!name)return;
   e.preventDefault();
-  try{await api('/api/customers',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name,phone:document.getElementById('nPhone').value.trim(),email:document.getElementById('nMail').value.trim()})});
-    dlg.close();await rank();}catch(err){alert(err.message);}
+  const dados={name,instagram:V('nInsta'),phone:V('nPhone'),email:V('nMail'),note:V('nNote')};
+  const rota=editando?'/api/customers/'+editando:'/api/customers';
+  try{await api(rota,{method:editando?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)});
+    dlg.close();
+    await rank(document.getElementById('q').value.trim());
+    if(editando)await detalhe(editando);
+  }catch(err){alert(err.message);}
 };
 let t;document.getElementById('q').oninput=e=>{clearTimeout(t);t=setTimeout(()=>rank(e.target.value.trim()),220);};
 semSelecao();rank();

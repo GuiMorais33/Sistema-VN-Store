@@ -231,8 +231,17 @@ input[type="email"], input[type="password"], select, textarea{
   outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(47,210,79,.12);
 }
 ::placeholder{color:var(--ink-3)}
+/* O autopreenchimento do navegador pinta o campo de branco — mantém o tema escuro. */
+input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus,
+textarea:-webkit-autofill, select:-webkit-autofill{
+  -webkit-text-fill-color:var(--ink);
+  -webkit-box-shadow:0 0 0 40px var(--bg-elev) inset;
+  caret-color:var(--ink);
+  transition:background-color 9999s ease-in-out 0s;
+}
 .field{display:flex;flex-direction:column;gap:6px}
 .field>label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--ink-3)}
+.field .hint{font-size:11px;color:var(--ink-3);line-height:1.4}
 .search-wrap{position:relative;display:flex;align-items:center}
 .search-wrap .ico{position:absolute;left:12px;color:var(--ink-3);pointer-events:none}
 .search-wrap input{padding-left:38px}
