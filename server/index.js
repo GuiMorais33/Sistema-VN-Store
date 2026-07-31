@@ -115,11 +115,16 @@ app.get('/api/catalog', (req, res) => {
   // Categoria: o produto pode estar em várias (como no site) — busca em todas.
   if (cat) { where.push('(p.category = ? OR p.categories_all LIKE ?)'); args.push(cat, `%${cat}%`); }
   if (brand) { where.push('p.brand = ?'); args.push(brand); }
+  // modo: proprio = só o que é meu | encomenda = só o que vem do fornecedor
+  const modo = (req.query.modo || '').trim();
+  if (modo === 'proprio') where.push('p.on_demand = 0');
+  if (modo === 'encomenda') where.push('p.on_demand = 1');
   const rows = db.prepare(`
     SELECT p.*,
       COUNT(v.id) AS variant_count,
       COALESCE(SUM(${REAL}),0) AS total_stock,
       COALESCE(SUM(v.stock),0) AS site_stock,
+      COALESCE(SUM(CASE WHEN p.on_demand = 1 THEN MAX(v.stock - COALESCE(v.on_hand,0), 0) ELSE 0 END),0) AS enc_stock,
       COALESCE(SUM(${REAL} * v.cost),0) AS stock_value_cost,
       COALESCE(MIN(v.price),0) AS min_price,
       COALESCE(MAX(v.price),0) AS max_price
@@ -140,14 +145,35 @@ app.get('/api/catalog/summary', (req, res) => {
     FROM variants v LEFT JOIN products p ON p.id = v.product_id
     WHERE v.stock_management = 1
   `).get();
-  // Quanto da grade do site é encomenda (não está aqui na loja).
+  // O que está aqui (real) x o que está à venda sem estar aqui (encomenda).
+  // Encomenda não tem dinheiro parado: o custo só existe quando vende.
+  const real = db.prepare(`
+    SELECT COUNT(DISTINCT p.id) AS products,
+           COALESCE(SUM(${REAL}),0) AS units,
+           COALESCE(SUM(${REAL} * v.cost),0) AS value_cost,
+           COALESCE(SUM(${REAL} * v.price),0) AS value_price
+    FROM products p JOIN variants v ON v.product_id = p.id
+    WHERE v.stock_management = 1
+  `).get();
   const encomenda = db.prepare(`
     SELECT COUNT(DISTINCT p.id) AS products,
-           COALESCE(SUM(v.stock),0) AS site_units,
-           COALESCE(SUM(COALESCE(v.on_hand,0)),0) AS units
+           COALESCE(SUM(MAX(v.stock - COALESCE(v.on_hand,0), 0)),0) AS units,
+           COALESCE(SUM(MAX(v.stock - COALESCE(v.on_hand,0), 0) * v.price),0) AS value_price,
+           COALESCE(SUM(MAX(v.stock - COALESCE(v.on_hand,0), 0) * v.cost),0) AS value_cost
     FROM products p JOIN variants v ON v.product_id = p.id
-    WHERE p.on_demand = 1
+    WHERE p.on_demand = 1 AND v.stock_management = 1
   `).get();
+  // Encomendas ainda por buscar no fornecedor.
+  encomenda.a_pegar = db.prepare(`SELECT COUNT(*) n FROM reminders WHERE kind='encomenda' AND done=0`).get().n;
+  // Como foi a venda dos últimos 30 dias: peça que estava aqui x encomendada.
+  const desde = new Date(Date.now() - 30 * 864e5).toISOString();
+  const vendas = db.prepare(`SELECT
+      COALESCE(SUM(i.qty - i.encomenda),0) AS pecas_real,
+      COALESCE(SUM(i.encomenda),0) AS pecas_encomenda,
+      COALESCE(SUM((i.qty - i.encomenda) * i.unit_price),0) AS valor_real,
+      COALESCE(SUM(i.encomenda * i.unit_price),0) AS valor_encomenda
+    FROM sale_items i JOIN sales s ON s.id = i.sale_id
+    WHERE s.created_at >= ? AND s.payment_status <> 'cancelado'`).get(desde);
   const byCategory = db.prepare(`
     SELECT COALESCE(NULLIF(p.category,''),'(sem categoria)') AS label,
            COUNT(DISTINCT p.id) AS products,
@@ -164,7 +190,7 @@ app.get('/api/catalog/summary', (req, res) => {
     FROM products p LEFT JOIN variants v ON v.product_id = p.id
     GROUP BY label ORDER BY units DESC
   `).all();
-  res.json({ totals, encomenda, by_category: byCategory, by_brand: byBrand });
+  res.json({ totals, real, encomenda, vendas_30d: vendas, by_category: byCategory, by_brand: byBrand });
 });
 
 app.get('/api/catalog/:id', (req, res) => {
@@ -779,7 +805,7 @@ app.post('/api/sales', async (req, res) => {
     const id = db.prepare(`INSERT INTO sales (code, channel, customer_id, customer_name, payment_method, payment_status, paid_at, subtotal, discount, total, cost_total, margin, synced_nuvemshop, created_at)
       VALUES (?, 'pdv', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`)
       .run(code, custId, custName, payment_method, status, status === 'pago' ? ts : null, subtotal, disc, total, costTotal, margin, ts).lastInsertRowid;
-    const insItem = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, name, qty, unit_price, unit_cost, line_total) VALUES (?,?,?,?,?,?,?)`);
+    const insItem = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, name, qty, unit_price, unit_cost, line_total, encomenda) VALUES (?,?,?,?,?,?,?,?)`);
     // Grade do site e par em mãos baixam separados: o site perde a
     // numeração vendida, o estoque real só perde se o par estava aqui.
     const updStock = db.prepare('UPDATE variants SET stock = stock - ?, updated_at = ? WHERE id = ?');
@@ -788,7 +814,7 @@ app.post('/api/sales', async (req, res) => {
     const insRem = db.prepare(`INSERT INTO reminders (title, notes, due_date, kind, customer_id, created_at)
       VALUES (?,?,?, 'encomenda', ?, ?)`);
     for (const l of lines) {
-      insItem.run(id, l.v.id, `${l.v.product_name} ${l.v.variant_name}`, l.qty, l.unitPrice, l.unitCost, l.lineTotal);
+      insItem.run(id, l.v.id, `${l.v.product_name} ${l.v.variant_name}`, l.qty, l.unitPrice, l.unitCost, l.lineTotal, l.encomendar);
       if (l.v.on_demand) {
         // A grade do site continua inteira — a numeração segue à venda,
         // porque você consegue repor no fornecedor. Só o par sai daqui.
@@ -801,7 +827,7 @@ app.post('/api/sales', async (req, res) => {
       if (l.encomendar > 0) {
         insRem.run(
           `Pegar no fornecedor: ${l.v.product_name} ${l.v.variant_name}`,
-          `${l.encomendar} par(es) · venda ${code}${custName ? ' · ' + custName : ''}`,
+          `${l.encomendar} peça(s) · venda ${code}${custName ? ' · ' + custName : ''}`,
           ts.slice(0, 10), custId, ts,
         );
       }

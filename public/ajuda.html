@@ -197,32 +197,53 @@
         <p>Na coluna <b>Loja</b>, "no ar" significa que o produto está publicado na Nuvemshop;
           "pendente" significa que ainda não subiu.</p>
 
-        <h3>Tênis: grade no site, par em mãos</h3>
-        <p>No site você deixa o tênis disponível em <b>várias numerações</b>, mesmo sem ter todas
-          aqui — quando vende, busca no fornecedor no mesmo dia. Só que isso não é estoque: se o
-          sistema contasse a grade inteira, o valor do seu estoque ficaria inflado.</p>
-        <p>Por isso existe a chave <b>Grade sob encomenda</b> no cadastro do produto. Com ela ligada,
-          cada numeração passa a ter <b>dois números</b>:</p>
+        <h3>Estoque próprio ou sob encomenda</h3>
+        <p>Nem tudo que está à venda no site precisa estar aqui na loja. Tem produto — e tem
+          tamanho — que fica anunciado porque você <b>pega no fornecedor e não perde a venda</b>.
+          Isso é ótimo para vender, mas não é estoque: se o sistema contasse tudo como peça sua,
+          o valor do estoque ficaria inflado e você não saberia o que é seu de verdade.</p>
+        <p>Por isso, ao cadastrar, você escolhe <b>como o produto entra</b>:</p>
         <div class="tw"><table>
-          <tr><th>Campo</th><th>O que é</th><th>Onde aparece</th></tr>
-          <tr><td><b>No site</b></td><td>A grade publicada na Nuvemshop — as numerações que você
-            consegue entregar.</td><td>Só no site. <b>Não baixa na venda</b>, porque você repõe.</td></tr>
-          <tr><td><b>Em mãos</b></td><td>Os pares que existem aqui de verdade. Normalmente 1.</td>
-            <td>É o que conta no <b>valor do estoque</b> e o que <b>baixa na venda</b>.</td></tr>
+          <tr><th>Modo</th><th>Quando usar</th><th>O que acontece</th></tr>
+          <tr><td><b>Estoque próprio</b></td><td>As peças estão aqui na loja.</td>
+            <td>Vender baixa do estoque <b>e</b> do site, como sempre. Se acabar, trava a venda.</td></tr>
+          <tr><td><b>Sob encomenda</b></td><td>Fica anunciado sem você ter tudo (ou nada) aqui.</td>
+            <td>Aparecem <b>dois números</b> por variação e a venda nunca trava.</td></tr>
         </table></div>
+
+        <p>No modo sob encomenda, cada tamanho tem:</p>
+        <div class="tw"><table>
+          <tr><th>Campo</th><th>O que é</th><th>Comportamento</th></tr>
+          <tr><td><b>No site</b></td><td>O que fica anunciado na Nuvemshop — quantas você se
+            compromete a entregar.</td><td><b>Não baixa na venda</b>, porque você repõe no fornecedor.</td></tr>
+          <tr><td><b>Em mãos</b></td><td>O que existe aqui de verdade. Pode ser 0.</td>
+            <td>É o que vale no <b>estoque</b> e é o que <b>baixa na venda</b>.</td></tr>
+        </table></div>
+
+        <p><b>Dá para misturar dentro do mesmo produto.</b> Exemplo de uma camiseta: P e M você
+          tem (Em mãos 2 e 3), G e GG ficam anunciados com Em mãos 0. Quem comprar P leva na
+          hora; quem comprar G vira encomenda — e o sistema já sabe a diferença.</p>
+
+        <h3>Vendo a diferença entre o real e o encomenda</h3>
         <ul>
-          <li>Na lista, o produto ganha a etiqueta <b>sob encomenda</b> e mostra "X un." (em mãos)
-            com "Y no site" embaixo.</li>
-          <li>No <b>PDV</b>, a numeração que está aqui aparece como <b>na loja</b>; a que não está
-            aparece como <b>encomenda</b> — e vende do mesmo jeito, sem travar.</li>
-          <li>Vendeu uma numeração que não tinha? O sistema cria sozinho o lembrete
-            <b>"Pegar no fornecedor"</b> para hoje, com o cliente e o número da venda.</li>
-          <li>Esses produtos ficam fora do alerta de <b>estoque acabando</b> — repor ali é com o
-            fornecedor, não é falta.</li>
+          <li>No topo do Estoque, dois quadros: <b>Aqui na loja</b> (o que é seu, a custo) e
+            <b>Sob encomenda</b> (o que está anunciado sem estar aqui, a preço de venda). O
+            segundo <b>não é dinheiro parado</b> — o custo só existe quando vende.</li>
+          <li>O terceiro quadro mostra as <b>vendas dos últimos 30 dias</b> divididas entre o que
+            saiu do estoque e o que veio por encomenda.</li>
+          <li>Os botões <b>Tudo · Estoque próprio · Sob encomenda</b> filtram a lista.</li>
+          <li>Na linha do produto: "X un." é o que está aqui, e "+Y por encomenda" é o que está
+            anunciado além disso.</li>
+          <li>No <b>PDV</b>, o tamanho que está aqui aparece como <b>na loja</b>; o que não está
+            aparece como <b>encomenda</b> — e vende do mesmo jeito.</li>
+          <li>Vendeu algo que não tinha? Vira o lembrete <b>"Pegar no fornecedor"</b> para hoje,
+            com o cliente e o código da venda.</li>
+          <li>Produto sob encomenda fica fora do alerta de <b>estoque acabando</b> — ali não é falta.</li>
         </ul>
         <div class="aviso dica"><span class="ico" id="d5"></span>
-          <div>Se o valor do seu estoque parecer alto demais, é quase sempre grade de tênis contada
-          como peça. Marque esses produtos como <b>sob encomenda</b> e o número volta ao real.</div></div>
+          <div>Se o valor do seu estoque parecer alto demais, quase sempre é produto anunciado
+          sendo contado como peça sua. Passe esses produtos para <b>sob encomenda</b> e deixe
+          <b>Em mãos</b> só com o que existe aqui — o número volta ao real na hora.</div></div>
       </section>
 
       <!-- CLIENTES -->

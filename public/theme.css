@@ -318,6 +318,13 @@ dialog{
   background:linear-gradient(180deg,var(--surface-2),var(--surface));box-shadow:var(--sh-3);
   max-height:92vh;
 }
+/* Só quando aberto: fechado, o display do navegador é que manda.
+   Assim o formulário vira o rolador e nada fica escondido atrás do rodapé. */
+dialog[open]{display:flex;flex-direction:column}
+dialog[open]>form{min-height:0}
+/* Sem encolher: assim o conteúdo estoura de verdade e o form rola,
+   em vez de o texto vazar por baixo do rodapé fixo. */
+dialog[open]>form>*{flex:0 0 auto}
 dialog::backdrop{background:rgba(0,0,0,.72);backdrop-filter:blur(3px)}
 
 /* ============ Celular ============ */

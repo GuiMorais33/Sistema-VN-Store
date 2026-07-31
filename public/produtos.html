@@ -8,13 +8,34 @@
 <link rel="icon" href="/logo.webp">
 <link rel="stylesheet" href="/theme.css">
 <style>
-  .top{display:grid;grid-template-columns:1.15fr 1fr 1fr;gap:var(--s3);margin-bottom:var(--s4)}
-  @media (max-width:860px){.top{grid-template-columns:1fr}}
+  .top{display:grid;grid-template-columns:1fr 1fr 1.05fr;gap:var(--s3);margin-bottom:var(--s3)}
+  .top.t2{grid-template-columns:1fr 1fr;margin-bottom:var(--s4)}
+  @media (max-width:860px){.top,.top.t2{grid-template-columns:1fr}}
   .box{padding:var(--s4)}
   .box .big{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;
-    font-size:clamp(24px,2.8vw,30px);color:var(--brand-hi);text-shadow:0 0 20px rgba(47,210,79,.22);
+    font-size:clamp(22px,2.5vw,28px);color:var(--brand-hi);text-shadow:0 0 20px rgba(47,210,79,.22);
     letter-spacing:-.8px;margin-top:8px}
-  .box .sub{font-size:12px;color:var(--ink-3);margin-top:5px}
+  .box .big.amber{color:var(--warn);text-shadow:0 0 20px rgba(232,163,23,.2)}
+  .box .sub{font-size:12px;color:var(--ink-3);margin-top:5px;line-height:1.45}
+  /* Filete lateral: verde = está aqui, âmbar = vem do fornecedor. */
+  .bx-real{border-left:2px solid rgba(47,210,79,.5)}
+  .bx-enc{border-left:2px solid rgba(232,163,23,.5)}
+
+  /* Real x encomenda nas vendas */
+  .split{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+  .split .l{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px}
+  .split .l .k{color:var(--ink-2)}
+  .split .l .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:13.5px}
+  .split .l .v.g{color:var(--brand-hi)} .split .l .v.a{color:var(--warn)}
+  .split .bar2{height:6px;border-radius:999px;background:var(--bg-elev);overflow:hidden;display:flex}
+  .split .bar2 i{display:block;height:100%}
+  .split .bar2 .g{background:var(--brand)} .split .bar2 .a{background:var(--warn)}
+
+  .seg{display:inline-flex;gap:3px;padding:3px;border:1px solid var(--line);border-radius:11px;background:var(--bg-elev)}
+  .seg-b{padding:7px 12px;border:none;background:none;color:var(--ink-3);font-size:12px;font-weight:600;
+    border-radius:8px;cursor:pointer;white-space:nowrap;transition:var(--t-fast)}
+  .seg-b:hover{color:var(--ink)}
+  .seg-b.sel{background:var(--surface-2);color:var(--ink);box-shadow:var(--sh-1)}
   .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:11px;max-height:96px;overflow-y:auto}
   .chip{font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;cursor:pointer;
     background:var(--bg-elev);border:1px solid var(--line);color:var(--ink-2);transition:var(--t-fast);white-space:nowrap}
@@ -27,7 +48,7 @@
   .bar .search-wrap{flex:1;min-width:200px}
   .bar select{width:auto;min-width:150px}
 
-  .thead,.trow{display:grid;grid-template-columns:52px minmax(0,2.3fr) 1fr 1fr 62px 82px 96px 84px;gap:var(--s3);align-items:center}
+  .thead,.trow{display:grid;grid-template-columns:52px minmax(0,2.2fr) 1fr 1fr 54px 104px 96px 84px;gap:var(--s3);align-items:center}
   .thead{padding:0 var(--s4) var(--s2);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-3);font-weight:700}
   .rowsw{display:flex;flex-direction:column;gap:6px}
   .trow{padding:10px var(--s4);border:1px solid var(--line);border-radius:var(--r);cursor:pointer;
@@ -64,10 +85,19 @@
   .encomenda .vhead,.encomenda .vrow{grid-template-columns:1fr .8fr .8fr .8fr .62fr .62fr 28px}
   .encomenda .col-mao{display:block}
   .vrow .vhand{border-color:rgba(232,163,23,.45)}
-  .sw{display:flex;gap:9px;align-items:flex-start;padding:11px 12px;border:1px solid var(--line);
-    border-radius:var(--r);background:var(--bg-elev);font-size:12px;line-height:1.45;color:var(--ink-2);cursor:pointer}
-  .sw input{width:17px;height:17px;flex:none;margin-top:1px;accent-color:var(--brand)}
-  .sw b{color:var(--ink)}
+  /* Escolha do modo no lançamento */
+  .modos{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  @media (max-width:620px){.modos{grid-template-columns:1fr}}
+  .modo{display:flex;flex-direction:column;gap:4px;text-align:left;padding:12px;cursor:pointer;
+    border:1px solid var(--line);border-radius:var(--r);background:var(--bg-elev);
+    color:var(--ink-3);font-family:inherit;transition:var(--t-fast)}
+  .modo:hover{border-color:var(--line-str)}
+  .modo b{font-size:13px;color:var(--ink-2)}
+  .modo span{font-size:11px;line-height:1.45}
+  .modo.sel{border-color:var(--brand);background:rgba(47,210,79,.07)}
+  .modo.sel b{color:var(--brand-hi)}
+  .modo[data-od="1"].sel{border-color:var(--warn);background:rgba(232,163,23,.07)}
+  .modo[data-od="1"].sel b{color:var(--warn)}
   .tag.enc{color:var(--warn);background:rgba(232,163,23,.12);border-color:rgba(232,163,23,.3)}
   .num .site{color:var(--ink-3);font-size:10.5px;display:block;margin-top:1px}
   .vhead{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3);font-weight:700;padding:0 2px}
@@ -75,7 +105,9 @@
   .vrow .del{background:none;border:none;color:var(--ink-3);cursor:pointer;display:grid;place-items:center}
   .vrow .del:hover{color:var(--crit)}
   .vars{display:flex;flex-direction:column;gap:5px}
-  .dlg-foot{display:flex;gap:var(--s2);justify-content:flex-end;position:sticky;bottom:0;
+  /* bottom negativo casa com a margem negativa: sem isso o sticky gruda
+     na borda do padding e cobre a última linha do formulário. */
+  .dlg-foot{display:flex;gap:var(--s2);justify-content:flex-end;position:sticky;bottom:calc(var(--s5)*-1);
     background:var(--surface);padding-top:var(--s3);margin:0 calc(var(--s5)*-1) calc(var(--s5)*-1);
     padding:var(--s3) var(--s5) var(--s5);border-top:1px solid var(--line-soft)}
   .hint{font-size:11.5px;color:var(--ink-3);line-height:1.5}
@@ -89,11 +121,23 @@
   </div>
 
   <div class="top">
-    <div class="card box">
-      <span class="label">Valor de estoque · a custo</span>
+    <div class="card box bx-real">
+      <span class="label">Aqui na loja · a custo</span>
       <div class="big" id="sVal">—</div>
       <div class="sub" id="sSub">—</div>
     </div>
+    <div class="card box bx-enc">
+      <span class="label">Sob encomenda · anunciado</span>
+      <div class="big amber" id="eVal">—</div>
+      <div class="sub" id="eSub">—</div>
+    </div>
+    <div class="card box">
+      <span class="label">Vendas dos últimos 30 dias</span>
+      <div class="split" id="vSplit"><div class="sk" style="height:52px"></div></div>
+    </div>
+  </div>
+
+  <div class="top t2">
     <div class="card box">
       <span class="label">Por categoria</span>
       <div class="chips" id="sCats"></div>
@@ -106,6 +150,11 @@
 
   <div class="bar">
     <div class="search-wrap"><input id="q" type="search" placeholder="Buscar produto ou marca…"></div>
+    <div class="seg" id="fModo">
+      <button type="button" class="seg-b sel" data-modo="">Tudo</button>
+      <button type="button" class="seg-b" data-modo="proprio">Estoque próprio</button>
+      <button type="button" class="seg-b" data-modo="encomenda">Sob encomenda</button>
+    </div>
     <select id="fCat"><option value="">Todas as categorias</option></select>
     <select id="fBrand"><option value="">Todas as marcas</option></select>
   </div>
@@ -145,11 +194,21 @@
     </div>
     <div class="field"><label>Descrição</label><textarea id="pDesc" rows="2"></textarea></div>
 
-    <label class="sw">
-      <input type="checkbox" id="pOnDemand">
-      <span><b>Grade sob encomenda</b> — o site fica com a numeração toda, mas aqui na loja
-        existem só os pares que você tem em mãos. É o caso dos tênis.</span>
-    </label>
+    <div class="field">
+      <label>Como este produto entra</label>
+      <div class="modos" id="pModo">
+        <button type="button" class="modo sel" data-od="0">
+          <b>Estoque próprio</b>
+          <span>As peças estão aqui na loja. O que você vende baixa do estoque e do site.</span>
+        </button>
+        <button type="button" class="modo" data-od="1">
+          <b>Sob encomenda</b>
+          <span>Fica anunciado mesmo sem ter tudo aqui — você pega no fornecedor e não perde
+            a venda. Dá para ter algumas peças e o resto por encomenda.</span>
+        </button>
+      </div>
+      <input type="hidden" id="pOnDemand" value="0">
+    </div>
 
     <div class="field">
       <label>Variações · preço e custo</label>
@@ -158,10 +217,10 @@
       <div id="vars" class="vars"></div>
       <button class="btn sm ghost" id="addVar" type="button" style="width:fit-content;margin-top:5px">Adicionar variação</button>
       <div class="hint col-mao" style="margin-top:4px">
-        <b>No site</b> é a grade que fica publicada na Nuvemshop — ela não baixa quando você
-        vende, porque você repõe no fornecedor. <b>Em mãos</b> é o que existe aqui de verdade:
-        é esse que conta no valor do estoque e é esse que baixa na venda. Vendeu uma numeração
-        que não tem? O sistema cria o lembrete de pegar no fornecedor.</div>
+        <b>No site</b> é o que fica anunciado na Nuvemshop — não baixa quando você vende,
+        porque você repõe no fornecedor. <b>Em mãos</b> é o que existe aqui de verdade: é esse
+        que conta no valor do estoque e é esse que baixa na venda. Deixe <b>0</b> no tamanho
+        que você não tem — na venda o sistema cria sozinho o lembrete de pegar no fornecedor.</div>
     </div>
 
     <div class="hint">Ao salvar, o produto é publicado/atualizado na sua loja Nuvemshop.
@@ -188,12 +247,30 @@ document.getElementById('novo').insertAdjacentHTML('afterbegin',ICO('mais',16));
 
 async function resumo(){
   const s=await api('/api/catalog/summary');
+  // Dois números diferentes, de propósito: o que é seu e o que é anúncio.
   document.getElementById('sVal').textContent=BRL(s.totals.value_cost);
-  // Só conta o que está aqui na loja. A grade do site (tênis) não é estoque.
-  const e=s.encomenda||{};
-  const extra=e.products?` · ${e.products} sob encomenda (${e.site_units} numerações no site)`:'';
   document.getElementById('sSub').textContent=
-    `${s.totals.units} peças em mãos · ${BRL(s.totals.value_price)} a preço de venda${extra}`;
+    `${s.totals.units} peça(s) em mãos · ${BRL(s.totals.value_price)} a preço de venda`;
+
+  const e=s.encomenda||{units:0,products:0,value_price:0,a_pegar:0};
+  document.getElementById('eVal').textContent=BRL(e.value_price);
+  document.getElementById('eSub').innerHTML=e.units
+    ? `${e.units} peça(s) à venda sem estar aqui · ${e.products} produto(s)`
+      +`<br>Sem dinheiro parado — o custo só existe quando vende.`
+      +(e.a_pegar?`<br><b style="color:var(--warn)">${e.a_pegar} a pegar no fornecedor</b>`:'')
+    : 'Nenhum produto sob encomenda no momento.';
+
+  // Como foi a venda: peça que estava aqui x peça que veio do fornecedor.
+  const v=s.vendas_30d||{};
+  const tot=(v.valor_real||0)+(v.valor_encomenda||0);
+  const pct=tot?Math.round((v.valor_real/tot)*100):100;
+  document.getElementById('vSplit').innerHTML=tot?`
+    <div class="l"><span class="k">Tinha aqui</span><span class="v g">${BRL(v.valor_real)}</span></div>
+    <div class="bar2"><i class="g" style="width:${pct}%"></i><i class="a" style="width:${100-pct}%"></i></div>
+    <div class="l"><span class="k">Veio por encomenda</span><span class="v a">${BRL(v.valor_encomenda)}</span></div>
+    <div class="l"><span class="k" style="color:var(--ink-3);font-size:11px">
+      ${v.pecas_real} peça(s) do estoque · ${v.pecas_encomenda} encomendada(s)</span></div>`
+    : '<div class="sub">Nenhuma venda nos últimos 30 dias.</div>';
   const chip=(x,tipo)=>`<button type="button" class="chip" data-${tipo}="${x.label}">${x.label} <b>${x.units}</b></button>`;
   document.getElementById('sCats').innerHTML=s.by_category.map(c=>chip(c,'cat')).join('')||'<span class="hint">—</span>';
   document.getElementById('sBrands').innerHTML=s.by_brand.map(b=>chip(b,'brand')).join('')||'<span class="hint">—</span>';
@@ -213,13 +290,19 @@ async function resumo(){
     if(c.dataset.brand&&c.dataset.brand===fb.value)c.classList.add('on');});
 }
 
+let modoAtual='';
+document.getElementById('fModo').onclick=e=>{
+  const b=e.target.closest('.seg-b');if(!b)return;
+  document.querySelectorAll('#fModo .seg-b').forEach(x=>x.classList.remove('sel'));
+  b.classList.add('sel');modoAtual=b.dataset.modo;lista();
+};
 async function lista(){
   const q=document.getElementById('q').value.trim();
   const cat=document.getElementById('fCat').value,br=document.getElementById('fBrand').value;
   const box=document.getElementById('rows');
-  const rows=await api(`/api/catalog?q=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&brand=${encodeURIComponent(br)}`);
+  const rows=await api(`/api/catalog?q=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&brand=${encodeURIComponent(br)}&modo=${modoAtual}`);
   if(!rows.length){box.innerHTML=vazio('caixa_vazia','Nenhum produto aqui',
-    q||cat||br?'Tente limpar os filtros.':'Importe da sua loja em Conectar, ou cadastre um novo.');return;}
+    q||cat||br||modoAtual?'Tente limpar os filtros.':'Importe da sua loja em Conectar, ou cadastre um novo.');return;}
   box.innerHTML='';
   for(const p of rows){
     // Sob encomenda: "acabando" não se aplica — repor é com o fornecedor.
@@ -233,7 +316,7 @@ async function lista(){
       <div class="cell">${p.category||'—'}</div>
       <div class="num">${p.variant_count}</div>
       <div class="num ${low?'low':''}">${p.total_stock} un.
-        ${p.on_demand?`<span class="site">${p.site_stock} no site</span>`:''}</div>
+        ${p.on_demand?`<span class="site">+${p.enc_stock} encomenda</span>`:''}</div>
       <div class="num cost">${BRL(p.stock_value_cost)}</div>
       <div><span class="tag ${p.synced_nuvemshop?'on':'off'}">${p.synced_nuvemshop?'no ar':'pendente'}</span></div>`;
     el.onclick=()=>abrir(p.id);box.appendChild(el);
@@ -256,18 +339,27 @@ function linhaVar(v={}){
 }
 document.getElementById('addVar').onclick=()=>document.getElementById('vars').appendChild(linhaVar());
 
-// Liga/desliga a coluna "Em mãos" conforme o produto é sob encomenda.
-const chkEnc=document.getElementById('pOnDemand');
-function modoEncomenda(){
-  const on=chkEnc.checked;
+// Modo do produto: estoque próprio ou sob encomenda. Sob encomenda a
+// coluna "Em mãos" aparece, porque aí os dois números se separam.
+const campoModo=document.getElementById('pOnDemand');
+function pintaModo(){
+  const on=campoModo.value==='1';
+  document.querySelectorAll('#pModo .modo').forEach(b=>b.classList.toggle('sel',(b.dataset.od==='1')===on));
   dlg.classList.toggle('encomenda',on);
   document.getElementById('thSite').textContent=on?'No site':'Estoque';
-  // Ao marcar pela primeira vez, o que você tem em mãos costuma ser o
-  // estoque atual — já vem preenchido para não zerar o valor sem querer.
-  if(on)document.querySelectorAll('#vars .vrow').forEach(r=>{
+}
+function setModo(v,preencher){
+  campoModo.value=v?'1':'0';
+  pintaModo();
+  // Ao trocar para encomenda, o que você tem em mãos costuma ser o estoque
+  // atual — já vem preenchido para não zerar o valor sem querer.
+  if(v&&preencher)document.querySelectorAll('#vars .vrow').forEach(r=>{
     const h=r.querySelector('.vhand');if(h.value==='')h.value=r.querySelector('.vstock').value||'0';});
 }
-chkEnc.onchange=modoEncomenda;
+document.getElementById('pModo').onclick=e=>{
+  const b=e.target.closest('.modo');if(!b)return;
+  setModo(b.dataset.od==='1',true);
+};
 
 function resize(file,max,q){return new Promise((ok,fail)=>{const img=new Image(),u=URL.createObjectURL(file);
   img.onload=()=>{URL.revokeObjectURL(u);let w=img.width,h=img.height;
@@ -294,7 +386,7 @@ function novo(){
   document.getElementById('dlgT').textContent='Novo produto';document.getElementById('pId').value='';
   ['pName','pBrand','pCat','pDesc','pW'].forEach(i=>document.getElementById(i).value='');
   document.getElementById('dup').hidden=true;
-  chkEnc.checked=false;modoEncomenda();
+  setModo(false,false);
   setFoto('');const v=document.getElementById('vars');v.innerHTML='';v.appendChild(linhaVar({variant_name:'Único'}));
   dlg.showModal();
 }
@@ -308,9 +400,8 @@ async function abrir(id){
   setFoto(p.image_url||'');
   const v=document.getElementById('vars');v.innerHTML='';
   (p.variants.length?p.variants:[{variant_name:'Único'}]).forEach(x=>v.appendChild(linhaVar(x)));
-  // depois das linhas, senão o preenchimento automático não acha os campos
-  chkEnc.checked=!!p.on_demand;dlg.classList.toggle('encomenda',!!p.on_demand);
-  document.getElementById('thSite').textContent=p.on_demand?'No site':'Estoque';
+  // sem preencher: os valores gravados é que mandam ao editar
+  setModo(!!p.on_demand,false);
   dlg.showModal();
 }
 document.getElementById('novo').onclick=novo;
@@ -326,7 +417,7 @@ document.getElementById('save').onclick=async e=>{
     on_hand:parseInt(r.querySelector('.vhand').value)||0}));
   const body={name,brand:document.getElementById('pBrand').value.trim(),category:document.getElementById('pCat').value.trim(),
     description:document.getElementById('pDesc').value.trim(),image_url:document.getElementById('pImg').value.trim(),
-    weight:parseFloat(document.getElementById('pW').value)||null,on_demand:chkEnc.checked?1:0,variants};
+    weight:parseFloat(document.getElementById('pW').value)||null,on_demand:campoModo.value==='1'?1:0,variants};
   const id=document.getElementById('pId').value,btn=document.getElementById('save');
   btn.textContent='Salvando…';btn.disabled=true;
   try{const r=await api(id?('/api/catalog/'+id):'/api/catalog',{method:id?'PUT':'POST',

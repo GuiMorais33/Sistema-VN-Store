@@ -173,14 +173,18 @@ ensureColumn('sales', 'fin_posted', 'fin_posted INTEGER NOT NULL DEFAULT 0');
 ensureColumn('sales', 'ns_customer_id', 'ns_customer_id TEXT'); // cliente do pedido na loja
 ensureColumn('customers', 'instagram', 'instagram TEXT');       // @ do cliente (como a loja identifica)
 
-// ---- Grade sob encomenda (o caso dos tênis) ----
-// No site a grade inteira de numerações fica disponível, mas na loja
-// existe só o par (ou os pares) que temos em mãos; o resto é buscado no
-// fornecedor no mesmo dia. Então são dois números diferentes:
-//   variants.stock   = o que vai para a Nuvemshop (a grade)
-//   variants.on_hand = o que existe de verdade aqui (vale o estoque)
+// ---- Estoque próprio x sob encomenda ----
+// Nem tudo que está à venda no site está aqui na loja: tem produto (e
+// tem tamanho) que fica anunciado porque dá para pegar no fornecedor e
+// não perder a venda. São dois números por variação:
+//   variants.stock   = o que vai para a Nuvemshop (o que está à venda)
+//   variants.on_hand = o que existe de verdade aqui (é o que vale)
+// products.on_demand marca o modo do produto: 0 = estoque próprio,
+// 1 = sob encomenda (aí "em mãos" pode ser menor que o do site).
 ensureColumn('products', 'on_demand', 'on_demand INTEGER NOT NULL DEFAULT 0');
 ensureColumn('variants', 'on_hand', 'on_hand INTEGER NOT NULL DEFAULT 0');
+// Quantas peças da linha saíram por encomenda (não estavam aqui).
+ensureColumn('sale_items', 'encomenda', 'encomenda INTEGER NOT NULL DEFAULT 0');
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_order ON sales(nuvemshop_order_id) WHERE nuvemshop_order_id IS NOT NULL'); } catch (_) {}
 
 // ---- Plano de contas padrão (criado uma vez) ----
