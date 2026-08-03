@@ -183,6 +183,13 @@ export async function createCategory(name, parentId) {
   return data;
 }
 
+// Lê um produto pontual — usado antes de mexer nas categorias dele,
+// para nunca gravar em cima de uma lista desatualizada.
+export async function getProduct(nuvemshopProductId) {
+  const { data } = await request('GET', `/products/${nuvemshopProductId}`);
+  return data;
+}
+
 // -------- Clientes --------
 export async function createCustomer(payload) {
   const { data } = await request('POST', '/customers', payload);

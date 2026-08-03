@@ -75,6 +75,7 @@
       <a href="#estoque">Estoque</a>
       <a href="#clientes">Clientes e fiado</a>
       <a href="#lembretes">Lembretes</a>
+      <a href="#promocoes">Promoções</a>
       <a href="#financeiro">Financeiro</a>
       <a href="#automatico">O que roda sozinho</a>
       <a href="#agentes">Os agentes</a>
@@ -299,6 +300,43 @@
           de Início.</p>
       </section>
 
+      <!-- PROMOÇÕES -->
+      <section id="promocoes" class="card">
+        <h2><span class="ico-box brand" id="i11"></span>Promoções</h2>
+        <p>Serve para uma coisa específica: <b>juntar os produtos em promoção numa categoria</b>, para
+          eles ganharem uma <b>página própria no site</b> — do tipo "Liquidação até 75% de desconto".</p>
+
+        <div class="aviso dica"><span class="ico" id="d6"></span>
+          <div>Esta tela <b>não mexe em preço</b>. O desconto continua sendo feito na Nuvemshop;
+          aqui você só organiza em que categoria os produtos aparecem.</div></div>
+
+        <h3>Como usar</h3>
+        <ol class="passos">
+          <li><div>Crie a promoção normalmente na Nuvemshop e deixe os preços promocionais aplicados.</div></li>
+          <li><div>Abra <b>Promoções</b> aqui. O sistema lê a loja e lista quem está com preço
+            promocional, com o <b>de/por</b> e o <b>% de desconto</b>.</div></li>
+          <li><div>Em <b>Categoria de destino</b>, escolha a categoria que você já criou — ou digite
+            um nome em "ou criar" para o sistema criar na hora.</div></li>
+          <li><div>Marque os produtos (ou clique em <b>Marcar todos</b>) e clique em
+            <b>Adicionar à categoria</b>.</div></li>
+          <li><div>Ao terminar aparece o link da <b>página no site</b> para você conferir.</div></li>
+        </ol>
+
+        <h3>O que ele preserva</h3>
+        <p>A categoria de liquidação é <b>somada</b> às que o produto já tem — categoria e marca
+          continuam iguais. Rodar duas vezes não duplica nada: quem já está na categoria é pulado.</p>
+
+        <h3>Quando a promoção acabar</h3>
+        <p>Filtre por <b>Já na categoria</b>, marque todos e clique em <b>Tirar da categoria</b>.
+          Os produtos saem da página de liquidação e continuam nas categorias normais.</p>
+
+        <div class="aviso"><span class="ico" id="d7"></span>
+          <div><b>Não achou seus produtos?</b> A lista é montada pelos que têm <b>preço promocional</b>
+          na variação. Se a sua promoção foi feita por outro caminho (regra de desconto automático,
+          por exemplo), os produtos podem não vir marcados — troque o filtro para <b>Todos</b>, busque
+          pelo nome e selecione na mão. O resultado é o mesmo.</div></div>
+      </section>
+
       <!-- FINANCEIRO -->
       <section id="financeiro" class="card">
         <h2><span class="ico-box brand" id="i7"></span>Financeiro</h2>
@@ -417,10 +455,10 @@
 <script src="/nav.js"></script>
 <script>
 const icones={i1:'conectar',i2:'inicio',i3:'pdv',i4:'estoque',i5:'clientes',i6:'sino',
-  i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa'};
+  i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa',i11:'etiqueta'};
 Object.entries(icones).forEach(([id,n])=>{const e=document.getElementById(id);if(e)e.innerHTML=ICO(n,17);});
-['d1','d2','d3','d4','d5'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
-['a1','a2'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['d1','d2','d3','d4','d5','d6'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['a1','a2','d7'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
 
 // Marca a seção visível no índice
 const links=[...document.querySelectorAll('.indice a')];

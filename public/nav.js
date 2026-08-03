@@ -7,6 +7,7 @@
       { href: '/produtos',   ico: 'estoque',    label: 'Estoque',    match: (p) => p.startsWith('/produtos') || p.startsWith('/estoque') },
       { href: '/clientes',   ico: 'clientes',   label: 'Clientes',   match: (p) => p.startsWith('/clientes') },
       { href: '/lembretes',  ico: 'sino',       label: 'Lembretes',  match: (p) => p.startsWith('/lembretes') },
+      { href: '/promocoes',  ico: 'etiqueta',   label: 'Promoções',  match: (p) => p.startsWith('/promocoes') },
     ] },
     { titulo: 'Gestão', itens: [
       { href: '/financeiro', ico: 'financeiro', label: 'Financeiro', match: (p) => p.startsWith('/financeiro') },

@@ -410,6 +410,129 @@ async function pushProduct(productId) {
   }
 }
 
+// ==================== PROMOÇÕES / CATEGORIA DE LIQUIDAÇÃO ====================
+// Marca os produtos em promoção com uma categoria, para eles terem uma
+// página própria no site. Mexe SÓ em categoria — preço não é tocado.
+
+// Na Nuvemshop o produto está em promoção quando a variação tem
+// promotional_price menor que o price.
+const emPromocao = (p) => (p.variants || []).some((v) => {
+  const preco = parseFloat(v.price);
+  const promo = v.promotional_price == null ? null : parseFloat(v.promotional_price);
+  return promo != null && promo > 0 && preco > 0 && promo < preco;
+});
+// Maior desconto entre as variações (é o "até X%" da vitrine).
+const descontoMax = (p) => {
+  let melhor = 0;
+  for (const v of (p.variants || [])) {
+    const preco = parseFloat(v.price);
+    const promo = v.promotional_price == null ? null : parseFloat(v.promotional_price);
+    if (promo != null && promo > 0 && preco > 0 && promo < preco) {
+      melhor = Math.max(melhor, Math.round(((preco - promo) / preco) * 100));
+    }
+  }
+  return melhor;
+};
+
+app.get('/api/promocoes', async (req, res) => {
+  if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
+  try {
+    const [produtos, categorias] = await Promise.all([
+      nuvem.listAllProducts({ publishedOnly: false }),
+      nuvem.listAllCategories(),
+    ]);
+    const lista = produtos.map((p) => {
+      const precos = (p.variants || []).map((v) => parseFloat(v.price)).filter((n) => n > 0);
+      const promos = (p.variants || [])
+        .map((v) => (v.promotional_price == null ? null : parseFloat(v.promotional_price)))
+        .filter((n) => n != null && n > 0);
+      return {
+        id: String(p.id),
+        nome: nameOf(p.name),
+        imagem: (p.images && p.images[0] && p.images[0].src) || '',
+        publicado: p.published !== false,
+        preco: precos.length ? Math.min(...precos) : 0,
+        preco_promo: promos.length ? Math.min(...promos) : null,
+        desconto: descontoMax(p),
+        em_promocao: emPromocao(p),
+        categorias: (p.categories || []).map((c) => String(c.id)),
+      };
+    });
+    res.json({
+      ok: true,
+      total: lista.length,
+      em_promocao: lista.filter((p) => p.em_promocao).length,
+      produtos: lista,
+      categorias: categorias
+        .map((c) => ({ id: String(c.id), nome: nameOf(c.name), handle: nameOf(c.handle), parent: c.parent ? String(c.parent) : null }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+    });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Adiciona (ou tira) uma categoria de uma lista de produtos.
+// Regra de ouro: a Nuvemshop SUBSTITUI a lista de categorias no PUT, então
+// relemos as categorias atuais de cada produto e gravamos a união — nunca
+// se perde a categoria e a marca que o produto já tinha.
+app.post('/api/promocoes/categoria', async (req, res) => {
+  if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
+  const b = req.body || {};
+  const ids = (Array.isArray(b.produtos) ? b.produtos : []).map(String).filter(Boolean);
+  const acao = b.acao === 'remover' ? 'remover' : 'adicionar';
+  if (!ids.length) return res.status(400).json({ error: 'Escolha pelo menos um produto.' });
+
+  try {
+    // Categoria de destino: usa a existente ou cria pelo nome informado.
+    let catId = b.categoria_id ? String(b.categoria_id) : '';
+    let categoria = null;
+    const todas = await nuvem.listAllCategories();
+    if (catId) {
+      categoria = todas.find((c) => String(c.id) === catId) || null;
+      if (!categoria) return res.status(400).json({ error: 'Categoria não encontrada na loja.' });
+    } else {
+      const nome = String(b.categoria_nome || '').trim();
+      if (!nome) return res.status(400).json({ error: 'Escolha ou dê um nome para a categoria.' });
+      categoria = todas.find((c) => nameOf(c.name).trim().toLowerCase() === nome.toLowerCase()) || null;
+      if (!categoria) {
+        if (acao === 'remover') return res.status(400).json({ error: 'Essa categoria não existe na loja.' });
+        categoria = await nuvem.createCategory(nome);   // na raiz, vira página própria
+      }
+      catId = String(categoria.id);
+    }
+
+    const feitos = [], pulados = [], falhas = [];
+    for (const pid of ids) {
+      try {
+        const atual = await nuvem.getProduct(pid);
+        const nome = nameOf(atual.name);
+        const atuais = (atual.categories || []).map((c) => String(c.id));
+        const tem = atuais.includes(catId);
+        if (acao === 'adicionar' && tem) { pulados.push({ id: pid, nome, motivo: 'já estava na categoria' }); continue; }
+        if (acao === 'remover' && !tem) { pulados.push({ id: pid, nome, motivo: 'não estava na categoria' }); continue; }
+        const novas = acao === 'adicionar'
+          ? [...atuais, catId]
+          : atuais.filter((c) => c !== catId);
+        await nuvem.updateProduct(pid, { categories: novas.map(Number) });
+        feitos.push({ id: pid, nome, categorias: novas.length });
+      } catch (err) {
+        falhas.push({ id: pid, erro: err.message });
+      }
+    }
+
+    res.json({
+      ok: true,
+      acao,
+      categoria: { id: catId, nome: nameOf(categoria.name), handle: nameOf(categoria.handle) },
+      aplicados: feitos.length, pulados: pulados.length, falhas: falhas.length,
+      detalhe: { feitos, pulados, falhas },
+    });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // ==================== SINCRONIZAR (puxar da Nuvemshop) ====================
 app.post('/api/sync', async (req, res) => {
   if (!isLive()) { const seeded = seedDemoIfEmpty(); return res.json({ mode: 'demo', seeded, message: 'Modo demonstração — sem loja conectada.' }); }
@@ -1445,6 +1568,7 @@ app.get('/estoque', page('produtos.html'));
 app.get('/financeiro', page('financeiro.html'));
 app.get('/agentes', page('agentes.html'));
 app.get('/lembretes', page('lembretes.html'));
+app.get('/promocoes', page('promocoes.html'));
 app.get('/ajuda', page('ajuda.html'));
 app.get('/como-usar', page('ajuda.html'));
 

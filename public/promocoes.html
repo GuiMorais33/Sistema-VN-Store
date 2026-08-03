@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070907">
+<title>VN Store — Promoções</title>
+<link rel="icon" href="/logo.webp">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .top{display:grid;grid-template-columns:1.3fr 1fr;gap:var(--s3);margin-bottom:var(--s4)}
+  @media (max-width:900px){.top{grid-template-columns:1fr}}
+  .box{padding:var(--s4)}
+  .box .big{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;
+    font-size:clamp(22px,2.5vw,28px);color:var(--warn);letter-spacing:-.8px;margin-top:8px}
+  .box .sub{font-size:12px;color:var(--ink-3);margin-top:5px;line-height:1.5}
+
+  .alvo{display:flex;flex-direction:column;gap:var(--s2);margin-top:10px}
+  .alvo .linha{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .alvo select{flex:1;min-width:170px}
+  .alvo .ou{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.7px;font-weight:700}
+
+  .bar{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center;margin-bottom:var(--s3)}
+  .bar .search-wrap{flex:1;min-width:200px}
+  .seg{display:inline-flex;gap:3px;padding:3px;border:1px solid var(--line);border-radius:11px;background:var(--bg-elev)}
+  .seg-b{padding:7px 12px;border:none;background:none;color:var(--ink-3);font-size:12px;font-weight:600;
+    border-radius:8px;cursor:pointer;white-space:nowrap;transition:var(--t-fast)}
+  .seg-b:hover{color:var(--ink)}
+  .seg-b.sel{background:var(--surface-2);color:var(--ink);box-shadow:var(--sh-1)}
+
+  .acoes{display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap;
+    padding:11px var(--s4);border:1px solid var(--line);border-radius:var(--r);
+    background:var(--bg-elev);margin-bottom:var(--s3);position:sticky;top:var(--s3);z-index:5}
+  .acoes .cnt{font-size:12.5px;color:var(--ink-2);margin-right:auto}
+  .acoes .cnt b{font-family:var(--font-mono);color:var(--brand-hi)}
+
+  .rowsw{display:flex;flex-direction:column;gap:6px}
+  .prow{display:grid;grid-template-columns:26px 48px minmax(0,2.4fr) 120px 92px 96px;gap:var(--s3);
+    align-items:center;padding:9px var(--s4);border:1px solid var(--line);border-radius:var(--r);
+    background:linear-gradient(180deg,var(--surface-2),var(--surface));cursor:pointer;transition:var(--t-fast)}
+  .prow:hover{border-color:rgba(47,210,79,.35)}
+  .prow.on{border-color:var(--brand);box-shadow:0 0 0 1px rgba(47,210,79,.18)}
+  .prow input[type=checkbox]{width:17px;height:17px;accent-color:var(--brand);cursor:pointer}
+  .prow .thumb{width:48px;height:48px;border-radius:9px;overflow:hidden;background:var(--bg-elev);
+    display:grid;place-items:center;color:var(--ink-3)}
+  .prow .thumb img{width:100%;height:100%;object-fit:cover}
+  .prow .nm{font-weight:600;font-size:13.5px;line-height:1.3}
+  .prow .meta{font-size:11px;color:var(--ink-3);margin-top:2px;font-family:var(--font-mono)}
+  .preco{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:12.5px}
+  .preco .de{color:var(--ink-3);text-decoration:line-through;font-size:11px}
+  .preco .por{color:var(--brand-hi);font-weight:700;display:block}
+  .off{font-family:var(--font-mono);font-weight:700;font-size:14px;color:var(--warn);text-align:right}
+  .tag{font-size:9.5px;font-weight:700;text-transform:uppercase;padding:4px 8px;border-radius:999px;
+    white-space:nowrap;letter-spacing:.3px;text-align:center}
+  .tag.on{color:var(--ok);background:rgba(53,192,138,.1)}
+  .tag.off2{color:var(--ink-3);background:var(--bg-elev)}
+  @media (max-width:900px){
+    .prow{grid-template-columns:26px 48px 1fr;gap:4px var(--s3);align-items:start;padding:11px}
+    .prow input[type=checkbox]{grid-row:1/span 4;align-self:center}
+    .prow .thumb{grid-row:1/span 4;align-self:center}
+    .prow>*:not(.thumb):not(input){grid-column:3}
+    .off{text-align:left}
+    .tag{width:fit-content}
+    .acoes{position:static}
+  }
+  .relato{margin-top:var(--s3);padding:var(--s4);font-size:12.5px;line-height:1.6}
+  .relato ul{margin:6px 0 0;padding-left:18px;color:var(--ink-2)}
+  .relato .err{color:var(--crit)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="pagehead">
+    <div><h1>Promoções</h1><div class="ph-sub">Categoria de liquidação · página própria no site</div></div>
+    <div class="ph-actions"><button class="btn" id="recarregar" type="button">Reler da loja</button></div>
+  </div>
+
+  <div class="top">
+    <div class="card box">
+      <span class="label">Produtos em promoção na loja</span>
+      <div class="big" id="qtd">—</div>
+      <div class="sub" id="qtdSub">Lendo a sua loja…</div>
+    </div>
+    <div class="card box">
+      <span class="label">Categoria de destino</span>
+      <div class="alvo">
+        <div class="linha"><select id="cat"><option value="">Carregando…</option></select></div>
+        <div class="linha"><span class="ou">ou criar</span>
+          <input id="catNova" placeholder="Liquidação até 75% de desconto" style="flex:1;min-width:170px"></div>
+      </div>
+      <div class="sub" id="catSub">A categoria vira uma página própria no site, listando esses produtos.</div>
+    </div>
+  </div>
+
+  <div class="bar">
+    <div class="search-wrap"><input id="q" type="search" placeholder="Buscar produto pelo nome…"></div>
+    <div class="seg" id="fFiltro">
+      <button type="button" class="seg-b sel" data-f="promo">Em promoção</button>
+      <button type="button" class="seg-b" data-f="nesta">Já na categoria</button>
+      <button type="button" class="seg-b" data-f="todos">Todos</button>
+    </div>
+  </div>
+
+  <div class="acoes">
+    <span class="cnt"><b id="selN">0</b> selecionado(s)</span>
+    <button class="btn sm ghost" id="todos" type="button">Marcar todos</button>
+    <button class="btn sm ghost" id="nenhum" type="button">Limpar</button>
+    <button class="btn sm danger" id="remover" type="button">Tirar da categoria</button>
+    <button class="btn primary" id="aplicar" type="button">Adicionar à categoria</button>
+  </div>
+
+  <div class="rowsw" id="rows"><div class="sk" style="height:64px"></div></div>
+  <div class="card relato" id="relato" hidden></div>
+</div>
+
+<script src="/icons.js"></script>
+<script src="/nav.js"></script>
+<script>
+const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
+const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
+document.querySelector('.search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
+document.getElementById('recarregar').insertAdjacentHTML('afterbegin',ICO('sync',16));
+
+let DADOS={produtos:[],categorias:[]};
+let filtro='promo';
+const sel=new Set();
+
+const catAlvo=()=>document.getElementById('cat').value;
+
+async function carregar(){
+  const box=document.getElementById('rows');
+  box.innerHTML='<div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div>';
+  document.getElementById('qtdSub').textContent='Lendo a sua loja…';
+  try{
+    DADOS=await api('/api/promocoes');
+    document.getElementById('qtd').textContent=DADOS.em_promocao;
+    document.getElementById('qtdSub').textContent=
+      `de ${DADOS.total} produto(s) na loja · detectados pelo preço promocional`;
+    const c=document.getElementById('cat');
+    const atual=c.value;
+    c.innerHTML='<option value="">— escolher categoria —</option>'
+      +DADOS.categorias.map(x=>`<option value="${x.id}">${esc(x.nome)}</option>`).join('');
+    // Se já existe uma categoria com cara de liquidação, sugere ela.
+    const palpite=DADOS.categorias.find(x=>/liquida|promo|desconto|sale|outlet/i.test(x.nome));
+    c.value=atual||(palpite?palpite.id:'');
+    sel.clear();
+    lista();
+  }catch(e){
+    document.getElementById('qtd').textContent='—';
+    document.getElementById('qtdSub').textContent=e.message;
+    box.innerHTML=vazio('alerta','Não deu para ler a loja',e.message);
+  }
+}
+
+function filtrados(){
+  const q=document.getElementById('q').value.trim().toLowerCase();
+  const cid=catAlvo();
+  return DADOS.produtos.filter(p=>{
+    if(q&&!p.nome.toLowerCase().includes(q))return false;
+    if(filtro==='promo')return p.em_promocao;
+    if(filtro==='nesta')return cid&&p.categorias.includes(cid);
+    return true;
+  });
+}
+
+function lista(){
+  const box=document.getElementById('rows'),cid=catAlvo();
+  const rows=filtrados();
+  if(!rows.length){
+    box.innerHTML=vazio('etiqueta','Nenhum produto aqui',
+      filtro==='promo'?'Nenhum produto com preço promocional. Veja a observação abaixo e use "Todos" para escolher na mão.'
+      :'Tente outro filtro ou limpe a busca.');
+    contar();return;
+  }
+  box.innerHTML='';
+  for(const p of rows.slice(0,400)){
+    const nesta=cid&&p.categorias.includes(cid);
+    const el=document.createElement('div');
+    el.className='prow'+(sel.has(p.id)?' on':'');
+    const img=p.imagem
+      ?`<img src="${esc(p.imagem)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:ICO('estoque',20)}))">`
+      :ICO('estoque',20);
+    el.innerHTML=`<input type="checkbox" ${sel.has(p.id)?'checked':''} aria-label="selecionar">
+      <span class="thumb">${img}</span>
+      <div><div class="nm">${esc(p.nome)}</div>
+        <div class="meta">#${p.id}${p.publicado?'':' · não publicado'}</div></div>
+      <div class="preco">${p.preco_promo!=null
+        ? `<span class="de">${BRL(p.preco)}</span><span class="por">${BRL(p.preco_promo)}</span>`
+        : `<span class="por">${BRL(p.preco)}</span>`}</div>
+      <div class="off">${p.desconto?('-'+p.desconto+'%'):'—'}</div>
+      <div><span class="tag ${nesta?'on':'off2'}">${nesta?'na categoria':'fora'}</span></div>`;
+    const cb=el.querySelector('input');
+    const alterna=()=>{if(sel.has(p.id))sel.delete(p.id);else sel.add(p.id);
+      cb.checked=sel.has(p.id);el.classList.toggle('on',sel.has(p.id));contar();};
+    el.onclick=e=>{if(e.target!==cb)alterna();};
+    cb.onclick=e=>{e.stopPropagation();alterna();};
+    box.appendChild(el);
+  }
+  if(rows.length>400)box.insertAdjacentHTML('beforeend',
+    `<div class="hint" style="padding:8px 4px">Mostrando 400 de ${rows.length}. Use a busca para afinar.</div>`);
+  contar();
+}
+function contar(){document.getElementById('selN').textContent=sel.size;}
+
+document.getElementById('fFiltro').onclick=e=>{
+  const b=e.target.closest('.seg-b');if(!b)return;
+  document.querySelectorAll('#fFiltro .seg-b').forEach(x=>x.classList.remove('sel'));
+  b.classList.add('sel');filtro=b.dataset.f;lista();
+};
+let t;document.getElementById('q').oninput=()=>{clearTimeout(t);t=setTimeout(lista,200);};
+document.getElementById('cat').onchange=lista;
+document.getElementById('todos').onclick=()=>{filtrados().forEach(p=>sel.add(p.id));lista();};
+document.getElementById('nenhum').onclick=()=>{sel.clear();lista();};
+document.getElementById('recarregar').onclick=carregar;
+
+async function aplicar(acao){
+  if(!sel.size)return alert('Escolha pelo menos um produto.');
+  const cid=catAlvo(),nova=document.getElementById('catNova').value.trim();
+  if(!cid&&!nova)return alert('Escolha uma categoria da lista ou dê um nome para criar.');
+  const nome=cid?document.getElementById('cat').selectedOptions[0].textContent:nova;
+  const verbo=acao==='remover'?'TIRAR de':'ADICIONAR em';
+  if(!confirm(`${verbo} "${nome}"\n${sel.size} produto(s) selecionado(s).\n\nIsso mexe só na categoria — nenhum preço é alterado.`))return;
+
+  const bs=[...document.querySelectorAll('.acoes button')];
+  bs.forEach(b=>b.disabled=true);
+  const btn=document.getElementById(acao==='remover'?'remover':'aplicar');
+  const txt=btn.textContent;btn.textContent='Aplicando…';
+  try{
+    const r=await api('/api/promocoes/categoria',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({acao,produtos:[...sel],categoria_id:cid||undefined,categoria_nome:cid?undefined:nova})});
+    mostrarRelato(r);
+    await carregar();
+  }catch(e){alert(e.message);}
+  finally{bs.forEach(b=>b.disabled=false);btn.textContent=txt;}
+}
+document.getElementById('aplicar').onclick=()=>aplicar('adicionar');
+document.getElementById('remover').onclick=()=>aplicar('remover');
+
+function mostrarRelato(r){
+  const el=document.getElementById('relato');el.hidden=false;
+  const url=r.categoria.handle?`https://vnstoreonline.com.br/${r.categoria.handle}`:null;
+  el.innerHTML=`<b>${r.acao==='remover'?'Removido':'Aplicado'}:</b>
+    ${r.aplicados} produto(s) · ${r.pulados} já estava(m) assim · ${r.falhas} falha(s)
+    <br>Categoria: <b>${esc(r.categoria.nome)}</b>
+    ${url?` · <a href="${url}" target="_blank" rel="noopener">ver a página no site</a>`:''}
+    ${r.detalhe.falhas.length?`<ul>${r.detalhe.falhas.slice(0,10)
+      .map(f=>`<li class="err">#${f.id}: ${esc(f.erro)}</li>`).join('')}</ul>`:''}
+    <div class="hint" style="margin-top:6px">A página da categoria pode levar alguns minutos para
+      atualizar no site. Se ela não aparecer no menu, é só ativá-la no menu da Nuvemshop —
+      o link acima já funciona direto.</div>`;
+  el.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+carregar();
+</script>
+</body>
+</html>
