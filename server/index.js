@@ -472,6 +472,26 @@ app.get('/api/promocoes', async (req, res) => {
   }
 });
 
+// A aba "Promoções" do painel da Nuvemshop não mexe no preço promocional
+// do produto — o desconto é uma regra à parte. Esta sondagem pergunta à
+// própria loja quais desses caminhos existem na API, para sabermos se dá
+// para ler a lista de produtos da promoção automaticamente.
+app.get('/api/promocoes/sondar', async (req, res) => {
+  if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
+  const caminhos = [
+    '/promotions', '/promotions?per_page=5',
+    '/discounts', '/discount_rules', '/price_rules', '/promotion_rules',
+    '/marketing/promotions', '/coupons?per_page=5',
+  ];
+  const achados = [];
+  for (const c of caminhos) achados.push(await nuvem.sondar(c));
+  res.json({
+    ok: true,
+    dica: 'Caminhos com ok:true existem nesta loja. Se algum trouxer os produtos da promoção, dá para automatizar.',
+    achados,
+  });
+});
+
 // Raio-x de uma categoria pelo ID (o número que aparece na URL do painel
 // da Nuvemshop: /admin/categories/40176961). Serve para descobrir o que
 // é aquela categoria e o que tem dentro dela.

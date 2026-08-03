@@ -64,6 +64,18 @@
     .tag{width:fit-content}
     .acoes{position:static}
   }
+  .colar{padding:0;margin-bottom:var(--s3);overflow:hidden}
+  .colar>summary{padding:12px var(--s4);cursor:pointer;font-size:13px;font-weight:600;list-style:none}
+  .colar>summary::-webkit-details-marker{display:none}
+  .colar>summary::before{content:'+';display:inline-block;width:16px;color:var(--brand-hi);font-weight:900}
+  .colar[open]>summary::before{content:'−'}
+  .colar>summary:hover{background:var(--bg-elev)}
+  .colar-in{padding:0 var(--s4) var(--s4);display:flex;flex-direction:column;gap:var(--s2)}
+  .colar-in textarea{font-family:var(--font-mono);font-size:12.5px;resize:vertical}
+  .colar-in .linha{display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap}
+  .falta{margin-top:6px;font-size:11.5px;color:var(--warn);line-height:1.6}
+  .falta b{display:block;color:var(--ink-2);margin-bottom:2px}
+
   .relato{margin-top:var(--s3);padding:var(--s4);font-size:12.5px;line-height:1.6}
   .relato ul{margin:6px 0 0;padding-left:18px;color:var(--ink-2)}
   .relato .err{color:var(--crit)}
@@ -104,6 +116,21 @@
       <button type="button" class="seg-b" data-f="todos">Todos</button>
     </div>
   </div>
+
+  <details class="card colar" id="colarBox">
+    <summary>Colar a lista da promoção <span class="hint">— o jeito mais rápido quando a promoção não vem marcada</span></summary>
+    <div class="colar-in">
+      <p class="hint">Na aba <b>Promoções</b> da Nuvemshop, selecione os nomes dos produtos e copie
+        (Ctrl+C). Cole aqui — um por linha. Também aceita os <b>números de ID</b> ou os links dos
+        produtos. O sistema acha cada um e já deixa marcado.</p>
+      <textarea id="colarTxt" rows="5" placeholder="Camiseta Quebrada Verde&#10;Bermuda Moletom Verde&#10;198765432"></textarea>
+      <div class="linha">
+        <button class="btn sm" id="casar" type="button">Encontrar e marcar</button>
+        <span class="hint" id="casarR"></span>
+      </div>
+      <div id="casarFalta"></div>
+    </div>
+  </details>
 
   <div class="acoes">
     <span class="cnt"><b id="selN">0</b> selecionado(s)</span>
@@ -257,6 +284,52 @@ async function aplicar(acao){
   }catch(e){alert(e.message);}
   finally{bs.forEach(b=>b.disabled=false);btn.textContent=txt;}
 }
+// ---- Colar a lista da promoção ----
+// A aba Promoções da Nuvemshop não marca o produto de nenhum jeito que a
+// API mostre, então o caminho é copiar os nomes de lá e casar aqui.
+const chave=(s)=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  .toLowerCase().replace(/\s+/g,' ').trim();
+
+function acharProduto(linha){
+  const bruto=linha.trim().replace(/^#/,'');
+  if(!bruto)return null;
+  // Tenta como ID: a linha inteira, ou os números que aparecem num link.
+  const cands=[];
+  if(/^\d+$/.test(bruto))cands.push(bruto);
+  for(const m of bruto.matchAll(/\d{2,}/g))cands.push(m[0]);
+  for(const c of cands){const p=DADOS.produtos.find(x=>x.id===c);if(p)return p;}
+  // Senão, pelo nome: igual primeiro, depois contido.
+  const k=chave(bruto);
+  if(!k)return null;
+  return DADOS.produtos.find(x=>chave(x.nome)===k)
+     || DADOS.produtos.find(x=>chave(x.nome).includes(k)&&k.length>=4)
+     || null;
+}
+
+document.getElementById('casar').onclick=()=>{
+  const txt=document.getElementById('colarTxt').value;
+  const linhas=txt.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!linhas.length)return;
+  const achou=[],falta=[];
+  for(const l of linhas){
+    // Se colou de uma tabela, a linha vem com colunas separadas por tab.
+    let p=acharProduto(l);
+    if(!p&&l.includes('\t'))for(const parte of l.split('\t')){p=acharProduto(parte);if(p)break;}
+    if(p){sel.add(p.id);achou.push(p);}else falta.push(l);
+  }
+  // Mostra "Todos" para os marcados aparecerem, mesmo sem preço promocional.
+  document.querySelectorAll('#fFiltro .seg-b').forEach(x=>x.classList.toggle('sel',x.dataset.f==='todos'));
+  filtro='todos';
+  lista();
+  document.getElementById('casarR').textContent=
+    `${achou.length} encontrado(s) e marcado(s)${falta.length?` · ${falta.length} não localizado(s)`:''}`;
+  document.getElementById('casarFalta').innerHTML=falta.length
+    ? `<div class="falta"><b>Não achei estes — confira o nome ou marque na mão:</b>`
+      +falta.slice(0,25).map(f=>'· '+esc(f)).join('<br>')
+      +(falta.length>25?`<br>… e mais ${falta.length-25}`:'')+'</div>'
+    : '';
+};
+
 document.getElementById('aplicar').onclick=()=>aplicar('adicionar');
 document.getElementById('remover').onclick=()=>aplicar('remover');
 
