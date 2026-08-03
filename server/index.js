@@ -472,6 +472,39 @@ app.get('/api/promocoes', async (req, res) => {
   }
 });
 
+// Raio-x de uma categoria pelo ID (o número que aparece na URL do painel
+// da Nuvemshop: /admin/categories/40176961). Serve para descobrir o que
+// é aquela categoria e o que tem dentro dela.
+app.get('/api/promocoes/categoria/:id', async (req, res) => {
+  if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
+  const alvo = String(req.params.id);
+  try {
+    const [categorias, produtos] = await Promise.all([
+      nuvem.listAllCategories(),
+      nuvem.listAllProducts({ publishedOnly: false }),
+    ]);
+    const cat = categorias.find((c) => String(c.id) === alvo);
+    if (!cat) return res.status(404).json({ error: `Não existe categoria ${alvo} nesta loja.` });
+    const pai = cat.parent ? categorias.find((c) => String(c.id) === String(cat.parent)) : null;
+    const filhas = categorias.filter((c) => String(c.parent) === alvo).map((c) => ({ id: String(c.id), nome: nameOf(c.name) }));
+    const dentro = produtos.filter((p) => (p.categories || []).some((c) => String(c.id) === alvo));
+    res.json({
+      ok: true,
+      categoria: { id: alvo, nome: nameOf(cat.name), handle: nameOf(cat.handle),
+        pai: pai ? { id: String(pai.id), nome: nameOf(pai.name) } : null, subcategorias: filhas },
+      produtos: dentro.length,
+      em_promocao: dentro.filter(emPromocao).length,
+      amostra: dentro.slice(0, 20).map((p) => ({
+        id: String(p.id), nome: nameOf(p.name),
+        desconto: descontoMax(p), em_promocao: emPromocao(p),
+        categorias: (p.categories || []).map((c) => ({ id: String(c.id), nome: nameOf(c.name) })),
+      })),
+    });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // Adiciona (ou tira) uma categoria de uma lista de produtos.
 // Regra de ouro: a Nuvemshop SUBSTITUI a lista de categorias no PUT, então
 // relemos as categorias atuais de cada produto e gravamos a união — nunca

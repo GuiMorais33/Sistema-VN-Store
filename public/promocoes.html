@@ -22,6 +22,7 @@
 
   .bar{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center;margin-bottom:var(--s3)}
   .bar .search-wrap{flex:1;min-width:200px}
+  .bar select{width:auto;min-width:190px;max-width:320px}
   .seg{display:inline-flex;gap:3px;padding:3px;border:1px solid var(--line);border-radius:11px;background:var(--bg-elev)}
   .seg-b{padding:7px 12px;border:none;background:none;color:var(--ink-3);font-size:12px;font-weight:600;
     border-radius:8px;cursor:pointer;white-space:nowrap;transition:var(--t-fast)}
@@ -94,6 +95,9 @@
 
   <div class="bar">
     <div class="search-wrap"><input id="q" type="search" placeholder="Buscar produto pelo nome…"></div>
+    <select id="origem" title="Mostrar só os produtos que estão nesta categoria">
+      <option value="">Vindos de qualquer categoria</option>
+    </select>
     <div class="seg" id="fFiltro">
       <button type="button" class="seg-b sel" data-f="promo">Em promoção</button>
       <button type="button" class="seg-b" data-f="nesta">Já na categoria</button>
@@ -138,13 +142,24 @@ async function carregar(){
     document.getElementById('qtd').textContent=DADOS.em_promocao;
     document.getElementById('qtdSub').textContent=
       `de ${DADOS.total} produto(s) na loja · detectados pelo preço promocional`;
+    // Quantos produtos cada categoria tem — ajuda a achar a da promoção.
+    const conta={};
+    DADOS.produtos.forEach(p=>p.categorias.forEach(id=>{conta[id]=(conta[id]||0)+1;}));
+    // O #id é o mesmo número da URL do painel (/admin/categories/40176961).
+    const opt=(x)=>`<option value="${x.id}">${esc(x.nome)} · ${conta[x.id]||0} produto(s) · #${x.id}</option>`;
+
     const c=document.getElementById('cat');
     const atual=c.value;
-    c.innerHTML='<option value="">— escolher categoria —</option>'
-      +DADOS.categorias.map(x=>`<option value="${x.id}">${esc(x.nome)}</option>`).join('');
+    c.innerHTML='<option value="">— escolher categoria —</option>'+DADOS.categorias.map(opt).join('');
     // Se já existe uma categoria com cara de liquidação, sugere ela.
     const palpite=DADOS.categorias.find(x=>/liquida|promo|desconto|sale|outlet/i.test(x.nome));
     c.value=atual||(palpite?palpite.id:'');
+
+    const o=document.getElementById('origem');
+    const orig=o.value;
+    o.innerHTML='<option value="">Vindos de qualquer categoria</option>'+DADOS.categorias.map(opt).join('');
+    o.value=orig;
+
     sel.clear();
     lista();
   }catch(e){
@@ -157,8 +172,11 @@ async function carregar(){
 function filtrados(){
   const q=document.getElementById('q').value.trim().toLowerCase();
   const cid=catAlvo();
+  const org=document.getElementById('origem').value;
   return DADOS.produtos.filter(p=>{
     if(q&&!p.nome.toLowerCase().includes(q))return false;
+    // Origem: só os que estão na categoria escolhida (a da promoção).
+    if(org&&!p.categorias.includes(org))return false;
     if(filtro==='promo')return p.em_promocao;
     if(filtro==='nesta')return cid&&p.categorias.includes(cid);
     return true;
@@ -169,9 +187,12 @@ function lista(){
   const box=document.getElementById('rows'),cid=catAlvo();
   const rows=filtrados();
   if(!rows.length){
+    const org=document.getElementById('origem').value;
     box.innerHTML=vazio('etiqueta','Nenhum produto aqui',
-      filtro==='promo'?'Nenhum produto com preço promocional. Veja a observação abaixo e use "Todos" para escolher na mão.'
-      :'Tente outro filtro ou limpe a busca.');
+      filtro==='promo'
+        ?(org?'Nenhum produto dessa categoria está com preço promocional. Troque o filtro para "Todos" — a origem continua valendo.'
+             :'Nenhum produto com preço promocional. Use "Todos" e escolha na mão, ou filtre pela categoria da promoção em "Vindos de".')
+        :'Tente outro filtro ou limpe a busca.');
     contar();return;
   }
   box.innerHTML='';
@@ -211,6 +232,7 @@ document.getElementById('fFiltro').onclick=e=>{
 };
 let t;document.getElementById('q').oninput=()=>{clearTimeout(t);t=setTimeout(lista,200);};
 document.getElementById('cat').onchange=lista;
+document.getElementById('origem').onchange=()=>{sel.clear();lista();};
 document.getElementById('todos').onclick=()=>{filtrados().forEach(p=>sel.add(p.id));lista();};
 document.getElementById('nenhum').onclick=()=>{sel.clear();lista();};
 document.getElementById('recarregar').onclick=carregar;
