@@ -75,6 +75,10 @@
   .colar-in .linha{display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap}
   .falta{margin-top:6px;font-size:11.5px;color:var(--warn);line-height:1.6}
   .falta b{display:block;color:var(--ink-2);margin-bottom:2px}
+  .sonda{font-size:12px;line-height:1.6;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+  .sonda pre{font-family:var(--font-mono);font-size:11.5px;line-height:1.7;margin:0;white-space:pre-wrap;
+    background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:10px;padding:10px;
+    width:100%;max-height:220px;overflow:auto;color:var(--ink-2)}
 
   .relato{margin-top:var(--s3);padding:var(--s4);font-size:12.5px;line-height:1.6}
   .relato ul{margin:6px 0 0;padding-left:18px;color:var(--ink-2)}
@@ -129,6 +133,11 @@
         <span class="hint" id="casarR"></span>
       </div>
       <div id="casarFalta"></div>
+      <div class="linha" style="border-top:1px solid var(--line-soft);padding-top:10px;margin-top:2px">
+        <button class="btn sm ghost" id="sondar" type="button">Dá para automatizar?</button>
+        <span class="hint">Pergunta à sua loja se a API entrega a lista da promoção pronta.</span>
+      </div>
+      <div id="sondaR"></div>
     </div>
   </details>
 
@@ -328,6 +337,43 @@ document.getElementById('casar').onclick=()=>{
       +falta.slice(0,25).map(f=>'· '+esc(f)).join('<br>')
       +(falta.length>25?`<br>… e mais ${falta.length-25}`:'')+'</div>'
     : '';
+};
+
+// Descobre se a API desta loja expõe as promoções do painel. Se expuser,
+// dá para trocar o "colar" por leitura automática.
+document.getElementById('sondar').onclick=async()=>{
+  const b=document.getElementById('sondar'),cx=document.getElementById('sondaR');
+  b.disabled=true;const t=b.textContent;b.textContent='Perguntando…';
+  try{
+    const r=await api('/api/promocoes/sondar');
+    // Responder vazio não é o mesmo que servir: só conta quem trouxe algo.
+    const comDados=r.achados.filter(a=>a.ok&&(a.itens==null||a.itens>0));
+    const vazios=r.achados.filter(a=>a.ok&&a.itens===0);
+    const linhas=r.achados.map(a=>{
+      if(!a.ok)return `✘ ${a.path} → não existe (${a.status||'erro'})`;
+      if(a.itens===0)return `○ ${a.path} → existe, mas veio vazio`;
+      return `✔ ${a.path} → ${a.itens==null?'objeto':a.itens+' item(ns)'}`;
+    }).join('\n');
+    const titulo=comDados.length
+      ? `${comDados.length} caminho(s) trouxe(ram) dados — dá para automatizar`
+      : (vazios.length
+        ? `Nenhum trouxe dados (${vazios.length} respondeu(ram) vazio)`
+        : 'Nenhum caminho de promoção existe nesta loja');
+    cx.innerHTML=`<div class="sonda">
+      <b>${titulo}</b>
+      <pre>${esc(linhas)}</pre>
+      <button class="btn sm ghost" id="copiaSonda" type="button">Copiar resultado</button>
+      <span class="hint">${comDados.length
+        ? 'Manda esse resultado para eu ler a promoção direto, sem colar.'
+        : 'Então o caminho é mesmo colar a lista — a API não entrega as promoções do painel. Manda o resultado assim mesmo, que eu confiro.'}</span>
+      </div>`;
+    document.getElementById('copiaSonda').onclick=()=>{
+      navigator.clipboard.writeText(JSON.stringify(r.achados,null,2))
+        .then(()=>{document.getElementById('copiaSonda').textContent='Copiado!';})
+        .catch(()=>alert(JSON.stringify(r.achados,null,2)));
+    };
+  }catch(e){cx.innerHTML=`<div class="falta">${esc(e.message)}</div>`;}
+  finally{b.disabled=false;b.textContent=t;}
 };
 
 document.getElementById('aplicar').onclick=()=>aplicar('adicionar');
