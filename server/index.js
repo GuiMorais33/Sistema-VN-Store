@@ -472,6 +472,70 @@ app.get('/api/promocoes', async (req, res) => {
   }
 });
 
+// ---- Ler as promoções do painel pela API ----
+// Não sabemos de antemão em que caminho (nem em que formato) a loja
+// devolve as promoções. Então tentamos vários e normalizamos o que vier,
+// validando os IDs contra o catálogo real — assim um número solto no JSON
+// nunca vira "produto" por engano.
+const CAMINHOS_PROMO = [
+  '/promotions?per_page=50', '/promotions',
+  '/discounts?per_page=50', '/discounts',
+  '/price_rules?per_page=50', '/discount_rules', '/promotion_rules',
+  '/marketing/promotions',
+];
+
+// Junta todo número que aparece no JSON, em qualquer profundidade.
+function numerosDe(v, saco = new Set(), nivel = 0) {
+  if (v == null || nivel > 6) return saco;
+  if (Array.isArray(v)) { v.forEach((x) => numerosDe(x, saco, nivel + 1)); return saco; }
+  if (typeof v === 'object') { Object.values(v).forEach((x) => numerosDe(x, saco, nivel + 1)); return saco; }
+  const s = String(v);
+  if (/^\d{3,}$/.test(s)) saco.add(s);
+  return saco;
+}
+
+app.get('/api/promocoes/lista', async (req, res) => {
+  if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
+  try {
+    const produtos = await nuvem.listAllProducts({ publishedOnly: false });
+    const existe = new Set(produtos.map((p) => String(p.id)));
+    const nomePorId = new Map(produtos.map((p) => [String(p.id), nameOf(p.name)]));
+
+    const tentativas = [];
+    let promocoes = null, caminhoOk = null;
+    for (const c of CAMINHOS_PROMO) {
+      const r = await nuvem.sondar(c);
+      tentativas.push({ path: c, ok: r.ok, status: r.status, itens: r.itens });
+      if (r.ok && Array.isArray(r.amostra) && r.itens > 0) {
+        // Reconsulta o caminho inteiro (a sondagem traz só uma amostra).
+        const cheio = await nuvem.sondar(c.includes('per_page') ? c : `${c}?per_page=200`);
+        promocoes = Array.isArray(cheio.amostra) && cheio.itens > 0 ? cheio.amostra : r.amostra;
+        caminhoOk = c;
+        break;
+      }
+    }
+
+    if (!promocoes) {
+      return res.json({ ok: true, encontrou: false, tentativas,
+        motivo: 'Nenhum caminho da API devolveu promoções nesta loja.' });
+    }
+
+    const lista = promocoes.map((p, i) => {
+      const ids = [...numerosDe(p)].filter((n) => existe.has(n));
+      return {
+        id: String(p.id != null ? p.id : i),
+        nome: nameOf(p.name) || nameOf(p.title) || nameOf(p.description) || `Promoção ${i + 1}`,
+        ativa: p.active !== false && p.enabled !== false && p.status !== 'inactive',
+        produtos: ids.map((id) => ({ id, nome: nomePorId.get(id) || '' })),
+        bruto: p,   // deixa o objeto cru para conferência
+      };
+    });
+    res.json({ ok: true, encontrou: true, caminho: caminhoOk, promocoes: lista, tentativas });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // A aba "Promoções" do painel da Nuvemshop não mexe no preço promocional
 // do produto — o desconto é uma regra à parte. Esta sondagem pergunta à
 // própria loja quais desses caminhos existem na API, para sabermos se dá

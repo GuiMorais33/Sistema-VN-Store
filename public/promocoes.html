@@ -15,6 +15,19 @@
     font-size:clamp(22px,2.5vw,28px);color:var(--warn);letter-spacing:-.8px;margin-top:8px}
   .box .sub{font-size:12px;color:var(--ink-3);margin-top:5px;line-height:1.5}
 
+  .promos{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+  .promo{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);
+    border-radius:var(--r);background:var(--bg-elev);text-align:left;cursor:pointer;
+    color:var(--ink);font-family:inherit;transition:var(--t-fast)}
+  .promo:hover{border-color:rgba(47,210,79,.4)}
+  .promo .i{flex:1;min-width:0}
+  .promo .n{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .promo .s{font-size:11px;color:var(--ink-3);font-family:var(--font-mono);margin-top:2px}
+  .promo .b{font-size:11px;font-weight:700;color:var(--brand-hi);white-space:nowrap}
+  .promo[disabled]{opacity:.55;cursor:default}
+  .semPromo{font-size:12px;color:var(--ink-3);line-height:1.55;margin-top:10px}
+  .semPromo b{color:var(--ink-2)}
+
   .alvo{display:flex;flex-direction:column;gap:var(--s2);margin-top:10px}
   .alvo .linha{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
   .alvo select{flex:1;min-width:170px}
@@ -94,9 +107,8 @@
 
   <div class="top">
     <div class="card box">
-      <span class="label">Produtos em promoção na loja</span>
-      <div class="big" id="qtd">—</div>
-      <div class="sub" id="qtdSub">Lendo a sua loja…</div>
+      <span class="label">Suas promoções</span>
+      <div class="promos" id="promos"><div class="sk" style="height:44px"></div></div>
     </div>
     <div class="card box">
       <span class="label">Categoria de destino</span>
@@ -172,12 +184,9 @@ const catAlvo=()=>document.getElementById('cat').value;
 async function carregar(){
   const box=document.getElementById('rows');
   box.innerHTML='<div class="sk" style="height:64px"></div><div class="sk" style="height:64px"></div>';
-  document.getElementById('qtdSub').textContent='Lendo a sua loja…';
+  document.getElementById('promos').innerHTML='<div class="sk" style="height:44px"></div>';
   try{
     DADOS=await api('/api/promocoes');
-    document.getElementById('qtd').textContent=DADOS.em_promocao;
-    document.getElementById('qtdSub').textContent=
-      `de ${DADOS.total} produto(s) na loja · detectados pelo preço promocional`;
     // Quantos produtos cada categoria tem — ajuda a achar a da promoção.
     const conta={};
     DADOS.produtos.forEach(p=>p.categorias.forEach(id=>{conta[id]=(conta[id]||0)+1;}));
@@ -198,12 +207,51 @@ async function carregar(){
 
     sel.clear();
     lista();
+    carregarPromos();
   }catch(e){
-    document.getElementById('qtd').textContent='—';
-    document.getElementById('qtdSub').textContent=e.message;
+    document.getElementById('promos').innerHTML=`<div class="semPromo">${esc(e.message)}</div>`;
     box.innerHTML=vazio('alerta','Não deu para ler a loja',e.message);
   }
 }
+
+// Tenta ler as promoções do painel pela API. Se a loja expuser, você
+// escolhe a promoção e os produtos dela já ficam marcados.
+async function carregarPromos(){
+  const cx=document.getElementById('promos');
+  try{
+    const r=await api('/api/promocoes/lista');
+    if(!r.encontrou){
+      const comPromo=DADOS.em_promocao;
+      cx.innerHTML=`<div class="semPromo">
+        <b>A API desta loja não entrega as promoções do painel.</b><br>
+        As promoções que você criou na Nuvemshop ficam só lá — não dá para lê-las daqui.
+        Use <b>Colar a lista da promoção</b> logo abaixo: copia os nomes de lá, cola aqui,
+        e os produtos já ficam marcados.
+        ${comPromo?`<br><br>${comPromo} produto(s) da loja têm <b>preço promocional</b> preenchido —
+          esses o filtro "Em promoção" acha sozinho.`:''}
+      </div>`;
+      return;
+    }
+    PROMOS=r.promocoes;
+    cx.innerHTML=PROMOS.map((p,i)=>`<button class="promo" type="button" data-i="${i}"
+        ${p.produtos.length?'':'disabled'}>
+        <span class="i"><span class="n">${esc(p.nome)}</span>
+          <span class="s">${p.produtos.length} produto(s)${p.ativa?'':' · inativa'}</span></span>
+        ${p.produtos.length?'<span class="b">marcar</span>':''}
+      </button>`).join('');
+    cx.querySelectorAll('.promo[data-i]').forEach(b=>b.onclick=()=>{
+      const p=PROMOS[+b.dataset.i];
+      sel.clear();
+      p.produtos.forEach(x=>sel.add(x.id));
+      document.querySelectorAll('#fFiltro .seg-b').forEach(x=>x.classList.toggle('sel',x.dataset.f==='todos'));
+      filtro='todos';
+      lista();
+    });
+  }catch(e){
+    cx.innerHTML=`<div class="semPromo">Não deu para consultar as promoções: ${esc(e.message)}</div>`;
+  }
+}
+let PROMOS=[];
 
 function filtrados(){
   const q=document.getElementById('q').value.trim().toLowerCase();
