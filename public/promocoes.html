@@ -88,6 +88,28 @@
   .colar-in .linha{display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap}
   .falta{margin-top:6px;font-size:11.5px;color:var(--warn);line-height:1.6}
   .falta b{display:block;color:var(--ink-2);margin-bottom:2px}
+  .amb{margin-top:6px;font-size:11.5px;line-height:1.6}
+  .amb>b{display:block;color:var(--warn);margin-bottom:6px}
+  .ambl{padding:8px 0;border-top:1px solid var(--line-soft)}
+  .ambl .q{color:var(--ink-3);margin-bottom:5px}
+  .ops{display:flex;gap:5px;flex-wrap:wrap}
+  .opb{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:9px;cursor:pointer;
+    border:1px solid var(--line);background:var(--bg-elev);color:var(--ink-2);font-family:var(--font-mono);
+    font-size:11px;transition:var(--t-fast)}
+  .opb:hover{border-color:var(--brand);color:var(--ink)}
+  .opb img{width:22px;height:22px;border-radius:5px;object-fit:cover}
+  .opb b{color:var(--brand-hi)} .opb i{color:var(--warn);font-style:normal}
+  .opb.ok{border-color:var(--brand);background:rgba(47,210,79,.12);color:var(--brand-hi)}
+  .opb[disabled]{opacity:.35;cursor:default}
+  .aviso-id{font-size:12px;line-height:1.55;padding:10px 12px;border-radius:10px;
+    background:rgba(232,163,23,.08);border:1px solid rgba(232,163,23,.28);color:var(--ink-2)}
+  .aviso-id b{color:var(--warn)}
+  .pegador{border-top:1px solid var(--line-soft);padding-top:10px;margin-top:2px;font-size:12px;line-height:1.6}
+  .pegador>b{display:block;color:var(--ink);margin-bottom:5px}
+  .pegador ol{margin:0 0 8px;padding-left:18px;color:var(--ink-2)}
+  .pegador li{margin-bottom:3px}
+  .pegador code{font-family:var(--font-mono);font-size:11.5px;background:var(--surface-3);
+    border:1px solid var(--line-str);border-radius:5px;padding:1px 5px}
   .sonda{font-size:12px;line-height:1.6;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
   .sonda pre{font-family:var(--font-mono);font-size:11.5px;line-height:1.7;margin:0;white-space:pre-wrap;
     background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:10px;padding:10px;
@@ -136,15 +158,36 @@
   <details class="card colar" id="colarBox">
     <summary>Colar a lista da promoção <span class="hint">— o jeito mais rápido quando a promoção não vem marcada</span></summary>
     <div class="colar-in">
-      <p class="hint">Na aba <b>Promoções</b> da Nuvemshop, selecione os nomes dos produtos e copie
-        (Ctrl+C). Cole aqui — um por linha. Também aceita os <b>números de ID</b> ou os links dos
-        produtos. O sistema acha cada um e já deixa marcado.</p>
+      <div class="aviso-id">
+        <b>Tem produto com nome repetido na sua loja?</b> Então colar nome não basta — "Camiseta
+        Lacoste" pode ser vários. Use o <b>pegador de IDs</b> abaixo: ele lê a página da promoção
+        no seu próprio navegador e traz o <b>ID exato</b> de cada produto. Aí não tem erro.
+      </div>
+      <p class="hint">Ou cole os nomes mesmo — um por linha. Se algum nome bater com mais de um
+        produto, o sistema <b>não escolhe sozinho</b>: mostra as opções para você apontar qual é.</p>
       <textarea id="colarTxt" rows="5" placeholder="Camiseta Quebrada Verde&#10;Bermuda Moletom Verde&#10;198765432"></textarea>
       <div class="linha">
         <button class="btn sm" id="casar" type="button">Encontrar e marcar</button>
         <span class="hint" id="casarR"></span>
       </div>
       <div id="casarFalta"></div>
+      <div class="pegador">
+        <b>Pegador de IDs — o jeito sem erro</b>
+        <ol>
+          <li>Abra a sua promoção no painel da Nuvemshop (a tela que lista os produtos dela).</li>
+          <li>Aperte <kbd>F12</kbd> e clique na aba <b>Console</b>.</li>
+          <li>Se o Chrome pedir, digite <code>allow pasting</code> e dê Enter (ele faz isso na
+            primeira vez, por segurança).</li>
+          <li>Clique em <b>Copiar o pegador</b> aqui, cole no console e dê Enter.</li>
+          <li>Ele copia a lista de IDs. Volte aqui, cole no campo acima e clique em
+            <b>Encontrar e marcar</b>.</li>
+        </ol>
+        <div class="linha">
+          <button class="btn sm" id="copiaPeg" type="button">Copiar o pegador</button>
+          <span class="hint" id="pegR"></span>
+        </div>
+      </div>
+
       <div class="linha" style="border-top:1px solid var(--line-soft);padding-top:10px;margin-top:2px">
         <button class="btn sm ghost" id="sondar" type="button">Dá para automatizar?</button>
         <span class="hint">Pergunta à sua loja se a API entrega a lista da promoção pronta.</span>
@@ -347,44 +390,121 @@ async function aplicar(acao){
 const chave=(s)=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
   .toLowerCase().replace(/\s+/g,' ').trim();
 
+// Devolve {tipo:'unico'|'ambiguo'|'nada'}. Nome repetido NUNCA é
+// resolvido no chute: "Camiseta Lacoste" pode ser 8 produtos diferentes,
+// e marcar o errado colocaria peça fora de promoção na liquidação.
 function acharProduto(linha){
   const bruto=linha.trim().replace(/^#/,'');
-  if(!bruto)return null;
-  // Tenta como ID: a linha inteira, ou os números que aparecem num link.
+  if(!bruto)return {tipo:'nada'};
+  // ID é sempre exato — o caminho seguro.
   const cands=[];
   if(/^\d+$/.test(bruto))cands.push(bruto);
   for(const m of bruto.matchAll(/\d{2,}/g))cands.push(m[0]);
-  for(const c of cands){const p=DADOS.produtos.find(x=>x.id===c);if(p)return p;}
-  // Senão, pelo nome: igual primeiro, depois contido.
+  for(const c of cands){
+    const p=DADOS.produtos.find(x=>x.id===c);
+    if(p)return {tipo:'unico',produto:p};
+  }
   const k=chave(bruto);
-  if(!k)return null;
-  return DADOS.produtos.find(x=>chave(x.nome)===k)
-     || DADOS.produtos.find(x=>chave(x.nome).includes(k)&&k.length>=4)
-     || null;
+  if(!k)return {tipo:'nada'};
+  let achados=DADOS.produtos.filter(x=>chave(x.nome)===k);
+  if(!achados.length&&k.length>=4)achados=DADOS.produtos.filter(x=>chave(x.nome).includes(k));
+  if(achados.length===1)return {tipo:'unico',produto:achados[0]};
+  if(achados.length>1)return {tipo:'ambiguo',opcoes:achados};
+  return {tipo:'nada'};
 }
 
 document.getElementById('casar').onclick=()=>{
   const txt=document.getElementById('colarTxt').value;
   const linhas=txt.split('\n').map(l=>l.trim()).filter(Boolean);
   if(!linhas.length)return;
-  const achou=[],falta=[];
+  const achou=[],falta=[],ambiguos=[];
   for(const l of linhas){
     // Se colou de uma tabela, a linha vem com colunas separadas por tab.
-    let p=acharProduto(l);
-    if(!p&&l.includes('\t'))for(const parte of l.split('\t')){p=acharProduto(parte);if(p)break;}
-    if(p){sel.add(p.id);achou.push(p);}else falta.push(l);
+    let r=acharProduto(l);
+    if(r.tipo==='nada'&&l.includes('\t')){
+      for(const parte of l.split('\t')){const t=acharProduto(parte);if(t.tipo!=='nada'){r=t;break;}}
+    }
+    if(r.tipo==='unico'){sel.add(r.produto.id);achou.push(r.produto);}
+    else if(r.tipo==='ambiguo')ambiguos.push({linha:l,opcoes:r.opcoes});
+    else falta.push(l);
   }
   // Mostra "Todos" para os marcados aparecerem, mesmo sem preço promocional.
   document.querySelectorAll('#fFiltro .seg-b').forEach(x=>x.classList.toggle('sel',x.dataset.f==='todos'));
   filtro='todos';
   lista();
   document.getElementById('casarR').textContent=
-    `${achou.length} encontrado(s) e marcado(s)${falta.length?` · ${falta.length} não localizado(s)`:''}`;
-  document.getElementById('casarFalta').innerHTML=falta.length
-    ? `<div class="falta"><b>Não achei estes — confira o nome ou marque na mão:</b>`
+    `${achou.length} marcado(s)`
+    +(ambiguos.length?` · ${ambiguos.length} com nome repetido`:'')
+    +(falta.length?` · ${falta.length} não localizado(s)`:'');
+
+  const cx=document.getElementById('casarFalta');
+  let html='';
+  if(ambiguos.length){
+    // Nome repetido: você escolhe qual é, um por um.
+    html+=`<div class="amb"><b>Tem mais de um produto com esse nome — escolha qual entrou na promoção:</b>`
+      +ambiguos.slice(0,15).map((a,i)=>`<div class="ambl">
+          <div class="q">“${esc(a.linha)}” · ${a.opcoes.length} produtos com esse nome</div>
+          <div class="ops">${a.opcoes.slice(0,12).map(o=>`
+            <button type="button" class="opb" data-id="${o.id}">
+              ${o.imagem?`<img src="${esc(o.imagem)}" alt="">`:''}
+              <span>#${o.id}</span>
+              <b>${BRL(o.preco_promo!=null?o.preco_promo:o.preco)}</b>
+              ${o.desconto?`<i>-${o.desconto}%</i>`:''}
+            </button>`).join('')}</div>
+        </div>`).join('')
+      +(ambiguos.length>15?`<div class="q">… e mais ${ambiguos.length-15} nome(s) repetido(s)</div>`:'')
+      +`</div>`;
+  }
+  if(falta.length){
+    html+=`<div class="falta"><b>Não achei estes — confira o nome ou marque na mão:</b>`
       +falta.slice(0,25).map(f=>'· '+esc(f)).join('<br>')
-      +(falta.length>25?`<br>… e mais ${falta.length-25}`:'')+'</div>'
-    : '';
+      +(falta.length>25?`<br>… e mais ${falta.length-25}`:'')+'</div>';
+  }
+  cx.innerHTML=html;
+  cx.querySelectorAll('.opb').forEach(b=>b.onclick=()=>{
+    sel.add(b.dataset.id);
+    b.classList.add('ok');
+    // marcou uma das opções: as irmãs saem de cena para não marcar duas
+    b.parentElement.querySelectorAll('.opb').forEach(o=>{if(o!==b)o.disabled=true;});
+    lista();
+  });
+};
+
+// ---- Pegador de IDs ----
+// Roda no navegador DELE, na página da promoção, onde a sessão está
+// logada. Junta os IDs de produto que a página mostra e copia.
+const PEGADOR = `(()=>{
+  const achados=new Map();
+  const guarda=(id,nome)=>{ if(!id)return; id=String(id);
+    if(!achados.has(id)||(!achados.get(id)&&nome)) achados.set(id,(nome||'').trim()); };
+  document.querySelectorAll('a[href*="/products/"]').forEach(a=>{
+    const m=/\\/products\\/(\\d+)/.exec(a.getAttribute('href')||'');
+    if(m) guarda(m[1], a.innerText);
+  });
+  document.querySelectorAll('[data-product-id]').forEach(e=>guarda(e.dataset.productId, e.innerText));
+  document.querySelectorAll('input[type=checkbox][value]').forEach(e=>{
+    if(/^\\d{4,}$/.test(e.value)&&e.checked!==false){
+      const li=e.closest('li,tr,div'); guarda(e.value, li?li.innerText:'');
+    }
+  });
+  const linhas=[...achados].map(([id,nome])=>nome?id+'  '+nome.replace(/\\s+/g,' ').slice(0,60):id);
+  const txt=linhas.join('\\n');
+  if(!linhas.length){ console.log('Nada encontrado nesta pagina. Role a lista ate o fim e rode de novo.'); return; }
+  console.log(txt);
+  try{ navigator.clipboard.writeText(txt); }catch(e){ try{ copy(txt); }catch(_){} }
+  return linhas.length+' produto(s) copiado(s) - cole no sistema VN Store';
+})()`;
+
+document.getElementById('copiaPeg').onclick=()=>{
+  const r=document.getElementById('pegR');
+  navigator.clipboard.writeText(PEGADOR)
+    .then(()=>{r.textContent='Copiado — agora cole no console do painel da Nuvemshop.';})
+    .catch(()=>{
+      // Sem permissão de área de transferência: mostra para copiar na mão.
+      const t=document.getElementById('colarTxt');
+      t.value=PEGADOR;t.select();
+      r.textContent='Copie o texto do campo acima (Ctrl+C) e apague depois.';
+    });
 };
 
 // Descobre se a API desta loja expõe as promoções do painel. Se expuser,

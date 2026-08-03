@@ -354,6 +354,25 @@
           <b>número de ID</b> do produto, o <b>link</b> dele, e até linha copiada de tabela com
           preço e desconto junto.</p>
 
+        <div class="aviso"><span class="ico" id="a3"></span>
+          <div><b>Nome repetido não é resolvido no chute.</b> Se você tem várias "Camiseta Lacoste",
+          o sistema <b>não escolhe uma</b> — ele mostra todas com ID, preço e desconto para você
+          apontar qual entrou na promoção. Ao escolher uma, as irmãs são desativadas, então não dá
+          para marcar duas sem querer.</div></div>
+
+        <h3>Pegador de IDs · quando o nome não basta</h3>
+        <p>O jeito sem nenhuma chance de erro, porque trabalha com o <b>ID</b> e não com o nome:</p>
+        <ol class="passos">
+          <li><div>Abra a sua promoção no painel da Nuvemshop.</div></li>
+          <li><div>Aperte <kbd>F12</kbd> e vá na aba <b>Console</b>.</div></li>
+          <li><div>Se o Chrome pedir, digite <span class="rota">allow pasting</span> e dê Enter —
+            ele faz isso na primeira vez, por segurança.</div></li>
+          <li><div>Aqui, clique em <b>Copiar o pegador</b>, cole no console e dê Enter.</div></li>
+          <li><div>Ele copia os IDs. Volte, cole no campo e clique em <b>Encontrar e marcar</b>.</div></li>
+        </ol>
+        <p>O pegador só <b>lê</b> a página que está aberta e copia os IDs. Ele não altera nada na
+          sua loja, não envia nada para lugar nenhum e some quando você fecha o console.</p>
+
         <h3>Quando os produtos já estão numa categoria</h3>
         <p>É o caminho mais rápido, e funciona mesmo que o desconto não apareça marcado. No painel da
           Nuvemshop, abra a categoria onde os produtos estão — o número no fim da URL
@@ -495,7 +514,7 @@ const icones={i1:'conectar',i2:'inicio',i3:'pdv',i4:'estoque',i5:'clientes',i6:'
   i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa',i11:'etiqueta'};
 Object.entries(icones).forEach(([id,n])=>{const e=document.getElementById(id);if(e)e.innerHTML=ICO(n,17);});
 ['d1','d2','d3','d4','d5','d6'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
-['a1','a2','d7'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['a1','a2','a3','d7'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
 
 // Marca a seção visível no índice
 const links=[...document.querySelectorAll('.indice a')];
