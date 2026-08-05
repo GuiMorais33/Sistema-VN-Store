@@ -500,6 +500,10 @@ app.post('/api/sync', async (req, res) => {
           variantCount += 1;
         }
       }
+      // O estoque veio da loja; em produto de estoque próprio "em mãos" é
+      // o mesmo número. (Sob encomenda é nosso, e não se toca nele.)
+      db.exec(`UPDATE variants SET on_hand = stock WHERE product_id IN
+        (SELECT id FROM products WHERE on_demand = 0)`);
     })();
 
     res.json({
@@ -660,6 +664,194 @@ app.post('/api/reset', (req, res) => {
   res.json({ ok: true, kept_settings: keepConnection.length });
 });
 
+// ==================== CUSTOS EM MASSA ====================
+// Sem custo, margem e valor de estoque são mentira. Abrir 2.700 produtos
+// um por um não acontece — então aqui a lista vem pronta para digitar.
+app.get('/api/custos', (req, res) => {
+  const q = (req.query.q || '').trim();
+  const brand = (req.query.brand || '').trim();
+  const cat = (req.query.category || '').trim();
+  const soFalta = req.query.falta === '1';
+  const where = [], args = [];
+  if (q) { where.push('(v.product_name LIKE ? OR v.variant_name LIKE ? OR v.sku LIKE ?)'); args.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+  if (brand) { where.push('p.brand = ?'); args.push(brand); }
+  if (cat) { where.push('(p.category = ? OR p.categories_all LIKE ?)'); args.push(cat, `%${cat}%`); }
+  if (soFalta) where.push('COALESCE(v.cost,0) <= 0');
+
+  const rows = db.prepare(`
+    SELECT v.id, v.product_id, v.product_name, v.variant_name, v.sku, v.price, v.cost,
+           v.stock, COALESCE(v.on_hand,0) AS on_hand, p.brand, p.category, p.image_url,
+           COALESCE(p.on_demand,0) AS on_demand
+    FROM variants v LEFT JOIN products p ON p.id = v.product_id
+    ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+    ORDER BY (COALESCE(v.cost,0) <= 0) DESC, v.product_name, v.variant_name
+    LIMIT 500
+  `).all(...args);
+
+  const resumo = db.prepare(`
+    SELECT COUNT(*) total,
+      SUM(CASE WHEN COALESCE(v.cost,0) <= 0 THEN 1 ELSE 0 END) sem_custo
+    FROM variants v`).get();
+  res.json({ resumo, variantes: rows });
+});
+
+// Grava vários custos de uma vez.
+app.post('/api/custos', (req, res) => {
+  const itens = Array.isArray((req.body || {}).itens) ? req.body.itens : [];
+  if (!itens.length) return res.status(400).json({ error: 'Nada para salvar.' });
+  const upd = db.prepare('UPDATE variants SET cost = ?, updated_at = ? WHERE id = ?');
+  const ts = now();
+  let n = 0, ignorados = 0;
+  db.transaction(() => {
+    for (const it of itens) {
+      // Valida ANTES de arredondar: money() transforma texto em 0, e
+      // gravar 0 por causa de um valor inválido apagaria o custo certo.
+      const bruto = typeof it.cost === 'string' ? it.cost.replace(',', '.') : it.cost;
+      const num = Number(bruto);
+      if (bruto === '' || bruto == null || !Number.isFinite(num) || num < 0) { ignorados += 1; continue; }
+      const r = upd.run(money(num), ts, it.variant_id);
+      if (r.changes) n += r.changes; else ignorados += 1;
+    }
+  })();
+  const resumo = db.prepare(`SELECT COUNT(*) total,
+    SUM(CASE WHEN COALESCE(cost,0) <= 0 THEN 1 ELSE 0 END) sem_custo FROM variants`).get();
+  res.json({ ok: true, salvos: n, ignorados, resumo });
+});
+
+// ==================== FORNECEDORES ====================
+app.get('/api/suppliers', (req, res) => {
+  res.json(db.prepare(`SELECT s.*,
+      (SELECT COUNT(*) FROM purchases p WHERE p.supplier_id = s.id) compras,
+      (SELECT COALESCE(SUM(p.total),0) FROM purchases p WHERE p.supplier_id = s.id) gasto
+    FROM suppliers s WHERE archived = 0 ORDER BY name`).all());
+});
+
+app.post('/api/suppliers', (req, res) => {
+  const nome = String((req.body || {}).name || '').trim();
+  if (!nome) return res.status(400).json({ error: 'Informe o nome do fornecedor.' });
+  const existe = db.prepare('SELECT * FROM suppliers WHERE lower(name) = lower(?)').get(nome);
+  if (existe) {
+    if (existe.archived) db.prepare('UPDATE suppliers SET archived = 0 WHERE id = ?').run(existe.id);
+    return res.json({ ok: true, supplier: db.prepare('SELECT * FROM suppliers WHERE id = ?').get(existe.id), ja_existia: true });
+  }
+  const b = req.body || {};
+  const id = db.prepare('INSERT INTO suppliers (name, phone, note, created_at) VALUES (?,?,?,?)')
+    .run(nome, b.phone || '', b.note || '', now()).lastInsertRowid;
+  res.json({ ok: true, supplier: db.prepare('SELECT * FROM suppliers WHERE id = ?').get(id) });
+});
+
+// ==================== ENTRADA DE MERCADORIA ====================
+// Uma entrada resolve três coisas de uma vez: soma o estoque (aqui e na
+// loja), atualiza o custo da peça e lança a despesa no caixa.
+app.post('/api/purchases', async (req, res) => {
+  const b = req.body || {};
+  const itens = Array.isArray(b.items) ? b.items : [];
+  if (!itens.length) return res.status(400).json({ error: 'Adicione ao menos um item à entrada.' });
+
+  // Fornecedor: usa o existente ou cria na hora.
+  let fornId = b.supplier_id || null, fornNome = '';
+  if (!fornId && b.supplier_name && String(b.supplier_name).trim()) {
+    const nome = String(b.supplier_name).trim();
+    const ex = db.prepare('SELECT id FROM suppliers WHERE lower(name) = lower(?)').get(nome);
+    fornId = ex ? ex.id : db.prepare('INSERT INTO suppliers (name, created_at) VALUES (?,?)').run(nome, now()).lastInsertRowid;
+  }
+  if (fornId) {
+    const s = db.prepare('SELECT name FROM suppliers WHERE id = ?').get(fornId);
+    fornNome = s ? s.name : '';
+  }
+
+  const getV = db.prepare(`SELECT v.*, COALESCE(p.on_demand,0) AS on_demand
+    FROM variants v LEFT JOIN products p ON p.id = v.product_id WHERE v.id = ?`);
+  const linhas = [];
+  for (const it of itens) {
+    const v = getV.get(it.variant_id);
+    if (!v) return res.status(400).json({ error: `Produto não encontrado (id ${it.variant_id}).` });
+    const qty = Math.max(1, parseInt(it.qty, 10) || 1);
+    const custo = money(it.unit_cost != null ? it.unit_cost : v.cost);
+    if (!(custo > 0)) return res.status(400).json({ error: `Informe o custo de "${v.product_name} ${v.variant_name}".` });
+    linhas.push({ v, qty, custo, total: money(custo * qty) });
+  }
+
+  const frete = money(Math.max(0, parseFloat(b.freight) || 0));
+  const totalItens = money(linhas.reduce((s, l) => s + l.total, 0));
+  const total = money(totalItens + frete);
+  const pago = b.paid === false ? 0 : 1;
+  const ts = now();
+  const code = 'EM-' + String(db.prepare('SELECT COALESCE(MAX(id),0)+1 AS n FROM purchases').get().n).padStart(5, '0');
+
+  const compraId = db.transaction(() => {
+    const id = db.prepare(`INSERT INTO purchases (code, supplier_id, supplier_name, note, items_count, total, freight, paid, due_date, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .run(code, fornId, fornNome, b.note || '', linhas.reduce((s, l) => s + l.qty, 0), total, frete, pago, b.due_date || null, ts).lastInsertRowid;
+
+    const insItem = db.prepare(`INSERT INTO purchase_items (purchase_id, variant_id, name, qty, unit_cost, line_total)
+      VALUES (?,?,?,?,?,?)`);
+    // Entrada soma o que existe de verdade (em mãos). O número do site
+    // só sobe em produto de estoque próprio — sob encomenda a grade é sua.
+    // Em estoque próprio "em mãos" é o próprio estoque — mantém os dois
+    // iguais, senão o número deriva e mente se o produto virar encomenda.
+    const updProprio = db.prepare(`UPDATE variants SET stock = stock + ?, on_hand = stock + ?,
+      cost = ?, updated_at = ? WHERE id = ?`);
+    const updEncomenda = db.prepare(`UPDATE variants SET on_hand = COALESCE(on_hand,0) + ?,
+      cost = ?, updated_at = ? WHERE id = ?`);
+    const insMove = db.prepare('INSERT INTO stock_movements (variant_id, delta, reason, ref, created_at) VALUES (?,?,?,?,?)');
+
+    for (const l of linhas) {
+      insItem.run(id, l.v.id, `${l.v.product_name} ${l.v.variant_name}`, l.qty, l.custo, l.total);
+      if (l.v.on_demand) updEncomenda.run(l.qty, l.custo, ts, l.v.id);
+      else updProprio.run(l.qty, l.qty, l.custo, ts, l.v.id);
+      insMove.run(l.v.id, l.qty, 'entrada', code, ts);
+    }
+
+    // Caixa: a compra é despesa. Se ainda não pagou, fica agendada.
+    db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, ref, paid, due_date, paid_at, created_at)
+      VALUES ('despesa','Compra de mercadoria',?,?,?,?,?,?,?,?)`)
+      .run(categoryId('Compra de mercadoria', 'despesa'),
+        `Entrada ${code}${fornNome ? ' · ' + fornNome : ''}`, total, code,
+        pago, pago ? null : (b.due_date || null), pago ? ts : null, ts);
+    db.prepare('UPDATE purchases SET fin_posted = 1 WHERE id = ?').run(id);
+    return id;
+  })();
+
+  // Sobe o novo estoque para a loja (só produto de estoque próprio).
+  let sincOk = true; const notas = [];
+  if (isLive()) {
+    for (const l of linhas) {
+      if (l.v.on_demand || !l.v.stock_management) continue;
+      if (!l.v.nuvemshop_product_id || !l.v.nuvemshop_variant_id) continue;
+      try { await nuvem.setVariantStock(l.v.nuvemshop_product_id, l.v.nuvemshop_variant_id, l.v.stock + l.qty); }
+      catch (err) { sincOk = false; notas.push(`${l.v.product_name} ${l.v.variant_name}: ${err.message}`); }
+    }
+  } else { sincOk = false; notas.push('Modo demonstração — estoque não enviado à Nuvemshop.'); }
+  db.prepare('UPDATE purchases SET synced_nuvemshop = ?, sync_note = ? WHERE id = ?')
+    .run(sincOk && isLive() ? 1 : 0, notas.join(' | ') || null, compraId);
+
+  res.json({
+    ok: true, code, total, itens: linhas.length,
+    pecas: linhas.reduce((s, l) => s + l.qty, 0),
+    fornecedor: fornNome, paid: !!pago,
+    stock_synced: sincOk && isLive(), notes: notas,
+  });
+});
+
+// Histórico de entradas
+app.get('/api/purchases', (req, res) => {
+  const dias = parseInt(req.query.days, 10) || 90;
+  const desde = new Date(Date.now() - dias * 864e5).toISOString();
+  const rows = db.prepare(`SELECT * FROM purchases WHERE created_at >= ? ORDER BY id DESC LIMIT 100`).all(desde);
+  const tot = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(total),0) total,
+      COALESCE(SUM(CASE WHEN paid = 0 THEN total ELSE 0 END),0) a_pagar
+    FROM purchases WHERE created_at >= ?`).get(desde);
+  res.json({ resumo: tot, compras: rows });
+});
+
+app.get('/api/purchases/:id', (req, res) => {
+  const c = db.prepare('SELECT * FROM purchases WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Entrada não encontrada.' });
+  c.items = db.prepare('SELECT * FROM purchase_items WHERE purchase_id = ? ORDER BY id').all(c.id);
+  res.json(c);
+});
+
 // ==================== CLIENTES ====================
 // Ranking: quanto cada cliente já gastou + pendências.
 app.get('/api/customers', (req, res) => {
@@ -808,7 +1000,8 @@ app.post('/api/sales', async (req, res) => {
     const insItem = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, name, qty, unit_price, unit_cost, line_total, encomenda) VALUES (?,?,?,?,?,?,?,?)`);
     // Grade do site e par em mãos baixam separados: o site perde a
     // numeração vendida, o estoque real só perde se o par estava aqui.
-    const updStock = db.prepare('UPDATE variants SET stock = stock - ?, updated_at = ? WHERE id = ?');
+    // Estoque próprio: os dois números andam juntos (em mãos = estoque).
+    const updStock = db.prepare('UPDATE variants SET stock = stock - ?, on_hand = MAX(0, stock - ?), updated_at = ? WHERE id = ?');
     const updHand = db.prepare('UPDATE variants SET on_hand = MAX(0, COALESCE(on_hand,0) - ?), updated_at = ? WHERE id = ?');
     const insMove = db.prepare('INSERT INTO stock_movements (variant_id, delta, reason, ref, created_at) VALUES (?,?,?,?,?)');
     const insRem = db.prepare(`INSERT INTO reminders (title, notes, due_date, kind, customer_id, created_at)
@@ -821,7 +1014,7 @@ app.post('/api/sales', async (req, res) => {
         updHand.run(l.qty, ts, l.v.id);
         insMove.run(l.v.id, -l.qty, 'venda_pdv', code, ts);
       } else if (l.v.stock_management) {
-        updStock.run(l.qty, ts, l.v.id); insMove.run(l.v.id, -l.qty, 'venda_pdv', code, ts);
+        updStock.run(l.qty, l.qty, ts, l.v.id); insMove.run(l.v.id, -l.qty, 'venda_pdv', code, ts);
       }
       // Vendeu numeração que não tinha: vira lembrete de buscar hoje.
       if (l.encomendar > 0) {
@@ -1445,6 +1638,8 @@ app.get('/estoque', page('produtos.html'));
 app.get('/financeiro', page('financeiro.html'));
 app.get('/agentes', page('agentes.html'));
 app.get('/lembretes', page('lembretes.html'));
+app.get('/compras', page('compras.html'));
+app.get('/custos', page('custos.html'));
 app.get('/ajuda', page('ajuda.html'));
 app.get('/como-usar', page('ajuda.html'));
 

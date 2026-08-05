@@ -99,6 +99,7 @@
   .modo[data-od="1"].sel{border-color:var(--warn);background:rgba(232,163,23,.07)}
   .modo[data-od="1"].sel b{color:var(--warn)}
   .tag.enc{color:var(--warn);background:rgba(232,163,23,.12);border-color:rgba(232,163,23,.3)}
+  .btn.alerta{color:var(--warn);border-color:rgba(232,163,23,.4);background:rgba(232,163,23,.07)}
   .num .site{color:var(--ink-3);font-size:10.5px;display:block;margin-top:1px}
   .vhead{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3);font-weight:700;padding:0 2px}
   .vrow input{padding:7px 9px;font-size:12.5px;border-radius:8px}
@@ -117,7 +118,10 @@
 <div class="app">
   <div class="pagehead">
     <div><h1>Estoque</h1><div class="ph-sub">Produtos · custo · publicação na loja</div></div>
-    <div class="ph-actions"><button class="btn primary" id="novo" type="button">Novo produto</button></div>
+    <div class="ph-actions">
+      <a class="btn ghost" id="linkCustos" href="/custos">Custos em massa</a>
+      <button class="btn primary" id="novo" type="button">Novo produto</button>
+    </div>
   </div>
 
   <div class="top">
@@ -251,6 +255,18 @@ async function resumo(){
   document.getElementById('sVal').textContent=BRL(s.totals.value_cost);
   document.getElementById('sSub').textContent=
     `${s.totals.units} peça(s) em mãos · ${BRL(s.totals.value_price)} a preço de venda`;
+  // Custo vazio faz esse número mentir — avisa quantas peças faltam.
+  api('/api/custos?falta=1').then(c=>{
+    const n=c.resumo.sem_custo;
+    const l=document.getElementById('linkCustos');
+    if(n>0){
+      l.textContent=`Custos em massa · ${n} sem custo`;
+      l.classList.add('alerta');
+      document.getElementById('sSub').insertAdjacentHTML('beforeend',
+        `<br><a href="/custos" style="color:var(--warn);font-weight:700">${n} peça(s) sem custo</a>`
+        +` — este valor está incompleto.`);
+    }else{l.textContent='Custos em massa';l.classList.remove('alerta');}
+  }).catch(()=>{});
 
   const e=s.encomenda||{units:0,products:0,value_price:0,a_pegar:0};
   document.getElementById('eVal').textContent=BRL(e.value_price);

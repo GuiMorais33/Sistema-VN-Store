@@ -135,6 +135,74 @@ CREATE TABLE IF NOT EXISTS reminders (
 );
 CREATE INDEX IF NOT EXISTS idx_rem_due ON reminders(due_date, done);
 
+-- Fornecedores: de quem a mercadoria vem
+CREATE TABLE IF NOT EXISTS suppliers (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  phone      TEXT DEFAULT '',
+  note       TEXT DEFAULT '',
+  archived   INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  UNIQUE(name)
+);
+
+-- Entrada de mercadoria: o que chegou, de quem, por quanto.
+-- Uma compra mexe em três lugares de uma vez: estoque, custo e caixa.
+CREATE TABLE IF NOT EXISTS purchases (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  code        TEXT UNIQUE,
+  supplier_id INTEGER REFERENCES suppliers(id),
+  supplier_name TEXT DEFAULT '',
+  note        TEXT DEFAULT '',
+  items_count INTEGER NOT NULL DEFAULT 0,
+  total       REAL NOT NULL DEFAULT 0,
+  freight     REAL NOT NULL DEFAULT 0,
+  paid        INTEGER NOT NULL DEFAULT 1,   -- já saiu do caixa?
+  due_date    TEXT,                          -- se a pagar, quando vence
+  fin_posted  INTEGER NOT NULL DEFAULT 0,    -- já lançou a despesa?
+  synced_nuvemshop INTEGER NOT NULL DEFAULT 0,
+  sync_note   TEXT,
+  created_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS purchase_items (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  purchase_id INTEGER NOT NULL REFERENCES purchases(id),
+  variant_id  INTEGER REFERENCES variants(id),
+  name        TEXT NOT NULL,
+  qty         INTEGER NOT NULL,
+  unit_cost   REAL NOT NULL,
+  line_total  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pitems_purchase ON purchase_items(purchase_id);
+CREATE INDEX IF NOT EXISTS idx_purchases_created ON purchases(created_at);
+
+-- Despesas fixas: aluguel, assinaturas, o que vence todo mês.
+-- O sistema lança sozinho quando chega o dia, uma vez por mês.
+CREATE TABLE IF NOT EXISTS fixed_expenses (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL,
+  category     TEXT NOT NULL,
+  category_id  INTEGER,
+  amount       REAL NOT NULL,
+  day_of_month INTEGER NOT NULL DEFAULT 1,   -- 1..28
+  active       INTEGER NOT NULL DEFAULT 1,
+  last_ym      TEXT,                          -- AAAA-MM do último lançamento
+  created_at   TEXT NOT NULL
+);
+
+-- Fechamento de caixa do dia: o que o sistema esperava x o que foi contado.
+CREATE TABLE IF NOT EXISTS cash_closings (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  day        TEXT NOT NULL UNIQUE,   -- AAAA-MM-DD
+  esperado   REAL NOT NULL DEFAULT 0,
+  contado    REAL NOT NULL DEFAULT 0,
+  diferenca  REAL NOT NULL DEFAULT 0,
+  por_forma  TEXT,                   -- JSON com o esperado de cada forma
+  note       TEXT DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at);
 CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales(customer_id);
 CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(payment_status);
@@ -185,6 +253,13 @@ ensureColumn('products', 'on_demand', 'on_demand INTEGER NOT NULL DEFAULT 0');
 ensureColumn('variants', 'on_hand', 'on_hand INTEGER NOT NULL DEFAULT 0');
 // Quantas peças da linha saíram por encomenda (não estavam aqui).
 ensureColumn('sale_items', 'encomenda', 'encomenda INTEGER NOT NULL DEFAULT 0');
+
+// ---- Despesa a pagar ----
+// Uma despesa pode já ter saído do caixa ou estar só agendada. Sem isso
+// o "sobrou" do mês contaria dinheiro que ainda não saiu.
+ensureColumn('financial_entries', 'paid', 'paid INTEGER NOT NULL DEFAULT 1');
+ensureColumn('financial_entries', 'due_date', 'due_date TEXT');
+ensureColumn('financial_entries', 'paid_at', 'paid_at TEXT');
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_order ON sales(nuvemshop_order_id) WHERE nuvemshop_order_id IS NOT NULL'); } catch (_) {}
 
 // ---- Plano de contas padrão (criado uma vez) ----

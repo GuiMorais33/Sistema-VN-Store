@@ -6,6 +6,7 @@
       { href: '/pdv',        ico: 'pdv',        label: 'PDV',        match: (p) => p.startsWith('/pdv') },
       { href: '/produtos',   ico: 'estoque',    label: 'Estoque',    match: (p) => p.startsWith('/produtos') || p.startsWith('/estoque') },
       { href: '/clientes',   ico: 'clientes',   label: 'Clientes',   match: (p) => p.startsWith('/clientes') },
+      { href: '/compras',    ico: 'caixa_vazia',label: 'Compras',    match: (p) => p.startsWith('/compras') },
       { href: '/lembretes',  ico: 'sino',       label: 'Lembretes',  match: (p) => p.startsWith('/lembretes') },
     ] },
     { titulo: 'Gestão', itens: [

@@ -74,6 +74,7 @@
       <a href="#pdv">Vender no PDV</a>
       <a href="#estoque">Estoque</a>
       <a href="#clientes">Clientes e fiado</a>
+      <a href="#compras">Compras e custos</a>
       <a href="#lembretes">Lembretes</a>
       <a href="#financeiro">Financeiro</a>
       <a href="#automatico">O que roda sozinho</a>
@@ -244,6 +245,47 @@
           <div>Se o valor do seu estoque parecer alto demais, quase sempre é produto anunciado
           sendo contado como peça sua. Passe esses produtos para <b>sob encomenda</b> e deixe
           <b>Em mãos</b> só com o que existe aqui — o número volta ao real na hora.</div></div>
+      </section>
+
+      <!-- COMPRAS E CUSTOS -->
+      <section id="compras" class="card">
+        <h2><span class="ico-box brand" id="i12"></span>Compras e custos</h2>
+        <p>Sem custo preenchido, três números do sistema mentem: a <b>margem</b> da venda, o
+          <b>valor do estoque</b> e o <b>lucro</b> do mês. Aqui é onde isso se resolve.</p>
+
+        <h3>Custos em massa</h3>
+        <p>Em <span class="rota">Estoque</span>, o botão <b>Custos em massa</b> avisa quantas peças
+          estão sem custo e abre uma lista para digitar em sequência.</p>
+        <ul>
+          <li><b>Enter pula para o próximo campo</b> — dá para preencher a lista inteira sem mouse.</li>
+          <li>Filtre por <b>marca</b> ou <b>categoria</b> para atacar um fornecedor de cada vez.</li>
+          <li>A <b>margem aparece na hora</b> ao lado: verde acima de 25%, amarelo abaixo, vermelho
+            se o custo passou do preço.</li>
+          <li><b>Preencher rápido:</b> "custo = 45% do preço" dá um chute inicial em tudo que está
+            vazio. Ele <b>nunca mexe</b> em custo que você já preencheu.</li>
+          <li>Nada é gravado até clicar em <b>Salvar custos</b>. Se sair da página com alteração
+            pendente, o navegador avisa.</li>
+        </ul>
+
+        <h3>Entrada de mercadoria</h3>
+        <p>Na aba <span class="rota">Compras</span>, você lança o que chegou do fornecedor uma vez e
+          o sistema resolve <b>três coisas de uma vez</b>:</p>
+        <div class="tw"><table>
+          <tr><th>O que acontece</th><th>Detalhe</th></tr>
+          <tr><td>Soma o estoque</td><td>Aqui e na Nuvemshop. Em produto <b>sob encomenda</b>, sobe
+            só o "em mãos" — a grade do site é sua.</td></tr>
+          <tr><td>Atualiza o custo</td><td>O custo que você digitou na entrada passa a ser o custo
+            da peça, então a margem das próximas vendas já sai certa.</td></tr>
+          <tr><td>Lança no caixa</td><td>Vira despesa em <b>Compra de mercadoria</b>. Se marcar
+            <b>A pagar</b>, fica agendada com vencimento em vez de sair do caixa agora.</td></tr>
+        </table></div>
+        <p>O <b>fornecedor</b> é cadastrado sozinho se for novo, e o <b>frete</b> entra no total da
+          despesa. O botão só libera quando <b>toda peça tem custo</b> — entrada sem custo não serve
+          para nada.</p>
+
+        <div class="aviso dica"><span class="ico" id="d6"></span>
+          <div>Comece pela <b>marca que mais vende</b> nos custos em massa. Depois disso, use a
+          entrada de mercadoria sempre que chegar coisa nova — aí o custo nunca mais fica vazio.</div></div>
       </section>
 
       <!-- CLIENTES -->
@@ -417,9 +459,9 @@
 <script src="/nav.js"></script>
 <script>
 const icones={i1:'conectar',i2:'inicio',i3:'pdv',i4:'estoque',i5:'clientes',i6:'sino',
-  i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa'};
+  i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa',i12:'caixa_vazia'};
 Object.entries(icones).forEach(([id,n])=>{const e=document.getElementById(id);if(e)e.innerHTML=ICO(n,17);});
-['d1','d2','d3','d4','d5'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['d1','d2','d3','d4','d5','d6'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
 ['a1','a2'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
 
 // Marca a seção visível no índice

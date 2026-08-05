@@ -209,6 +209,9 @@ a{color:inherit}
 .btn:hover{background:var(--surface-3);border-color:var(--ink-3)}
 .btn:active{transform:translateY(1px)}
 .btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+/* display:flex/grid nas classes vence o atributo hidden — sem isto,
+   campo escondido continua aparecendo. */
+[hidden]{display:none !important}
 .btn.primary{
   background:linear-gradient(180deg,var(--brand),var(--brand-deep));
   color:#04170A;border-color:transparent;box-shadow:0 2px 10px var(--glow);
