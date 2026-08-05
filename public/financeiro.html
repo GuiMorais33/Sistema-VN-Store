@@ -21,8 +21,52 @@
   .org .v{display:block;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:21px}
   .org .n{display:block;font-size:11.5px;color:var(--ink-3)}
 
+  .sw{display:flex;gap:9px;align-items:flex-start;padding:11px 12px;border:1px solid var(--line);
+    border-radius:var(--r);background:var(--bg-elev);font-size:12px;line-height:1.45;color:var(--ink-2);cursor:pointer}
+  .sw input{width:17px;height:17px;flex:none;margin-top:1px;accent-color:var(--brand)}
+  .sw b{color:var(--ink)}
   .cols{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3);margin-top:var(--s3)}
   @media (max-width:900px){.cols{grid-template-columns:1fr}}
+  .cols2{display:grid;grid-template-columns:1.15fr 1fr;gap:var(--s3);margin-top:var(--s3)}
+  @media (max-width:900px){.cols2{grid-template-columns:1fr}}
+  .ph{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:var(--s2)}
+  .ph h3{margin:0}
+  .mini{width:auto;padding:5px 8px;font-size:12px;border-radius:8px}
+
+  .lista{display:flex;flex-direction:column;gap:5px;max-height:280px;overflow-y:auto}
+  .cp{display:grid;grid-template-columns:1fr auto auto;gap:9px;align-items:center;padding:9px 11px;
+    border:1px solid var(--line);border-radius:var(--r);background:var(--bg-elev);font-size:12.5px}
+  .cp.venc{border-color:rgba(242,86,74,.42);background:rgba(242,86,74,.06)}
+  .cp .d{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cp .s{font-size:10.5px;color:var(--ink-3);font-family:var(--font-mono);margin-top:2px}
+  .cp .s.venc{color:var(--crit);font-weight:700}
+  .cp .v{font-family:var(--font-mono);font-weight:700;white-space:nowrap}
+
+  .cxl{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-2);padding:4px 0}
+  .cxl .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+  .cxt{display:flex;justify-content:space-between;align-items:baseline;padding-top:8px;margin-top:4px;
+    border-top:1px dashed var(--line-str)}
+  .cxt .l{font-size:12px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.6px;font-weight:700}
+  .cxt .v{font-family:var(--font-mono);font-weight:700;font-size:18px;color:var(--brand-hi)}
+  .conf{display:flex;gap:6px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .conf input{flex:1;min-width:110px}
+  .dif{font-family:var(--font-mono);font-weight:700;font-size:13px;padding:7px 10px;border-radius:9px;margin-top:8px}
+  .dif.ok{color:var(--ok);background:rgba(53,192,138,.1)}
+  .dif.falta{color:var(--crit);background:rgba(242,86,74,.1)}
+  .dif.sobra{color:var(--warn);background:rgba(232,163,23,.1)}
+
+  .fixas{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px}
+  .fx{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:11px 13px;
+    border:1px solid var(--line);border-radius:var(--r);
+    background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+  .fx.off{opacity:.5}
+  .fx .n{font-size:13px;font-weight:600}
+  .fx .s{font-size:10.5px;color:var(--ink-3);font-family:var(--font-mono);margin-top:2px}
+  .fx .v{font-family:var(--font-mono);font-weight:700;font-size:13.5px;color:var(--crit)}
+  .fx .acts{display:flex;gap:2px;margin-top:3px;justify-content:flex-end}
+  .fx .ib{background:none;border:none;color:var(--ink-3);cursor:pointer;padding:2px}
+  .fx .ib:hover{color:var(--ink)}
+  .fx .ib.del:hover{color:var(--crit)}
 
   .bar-row{display:grid;grid-template-columns:minmax(88px,1.1fr) 1fr 96px;gap:10px;align-items:center;margin-bottom:9px}
   .bar-lab{font-size:12.5px;font-weight:600;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -86,6 +130,23 @@
     <span class="meta" id="imp"></span></div>
   <div class="origem" id="origem"></div>
 
+  <div class="cols2">
+    <div class="card panel">
+      <div class="ph"><h3>Contas a pagar</h3><span class="meta" id="apMeta"></span></div>
+      <div class="lista" id="aPagar"></div>
+    </div>
+    <div class="card panel">
+      <div class="ph"><h3>Fechamento do caixa</h3>
+        <input type="date" id="cxDia" class="mini"></div>
+      <div id="caixa"></div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>Despesas fixas do mês</h2><span class="rule"></span>
+    <span class="meta" id="fixMeta"></span>
+    <button class="btn sm" id="novaFixa" type="button">Nova fixa</button></div>
+  <div class="fixas" id="fixas"></div>
+
   <div class="cols">
     <div class="card panel">
       <h3>Entradas por categoria</h3>
@@ -128,6 +189,27 @@
   </form>
 </dialog>
 
+<!-- Despesa fixa -->
+<dialog id="dlgFixa">
+  <form class="dlg" method="dialog">
+    <h3 id="dlgFixaT">Nova despesa fixa</h3>
+    <input type="hidden" id="fId">
+    <div class="field"><label>O que é *</label><input id="fNome" required placeholder="Ex.: Aluguel da loja"></div>
+    <div class="field"><label>Categoria</label><select id="fCat"></select></div>
+    <div class="g2">
+      <div class="field"><label>Valor (R$) *</label><input id="fValor" type="number" step="0.01" min="0" required></div>
+      <div class="field"><label>Vence todo dia</label><input id="fDia" type="number" min="1" max="28" value="5"></div>
+    </div>
+    <label class="sw"><input type="checkbox" id="fAtiva" checked>
+      <span>Ativa — o sistema lança sozinho todo mês, como <b>conta a pagar</b>.
+        Quando você pagar de fato, é só clicar em Pagar.</span></label>
+    <div class="dlg-foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn primary" id="salvarFixa" value="ok" type="submit">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- Categorias -->
 <dialog id="dlgCat">
   <form class="dlg" method="dialog">
@@ -152,6 +234,7 @@
 <script>
 const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const D=(s)=>s?new Date(s).toLocaleDateString('pt-BR'):'—';
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
 const vazio=(i,t,d)=>`<div class="empty">${ICO(i,28)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
 document.getElementById('novo').insertAdjacentHTML('afterbegin',ICO('mais',16));
@@ -175,12 +258,23 @@ function barras(el,dados,tipo){
 
 async function load(){
   const d=await api('/api/financial?period='+per);
-  const pos=d.saldo>=0;
+  const pos=d.saldo>=0,lucroPos=d.lucro>=0;
+  // Lucro é o que sobra depois do custo da mercadoria — não é o saldo.
+  const cmp=(atual,ant)=>{
+    if(ant==null||!ant)return 'sem mês anterior para comparar';
+    const dif=atual-ant, pct=ant?Math.round((dif/Math.abs(ant))*100):0;
+    return `${dif>=0?'▲':'▼'} ${Math.abs(pct)}% vs mês passado`;
+  };
   document.getElementById('kpis').innerHTML=[
-    kpi({label:'Entrou',ico:'subiu',tone:'brand',val:BRL(d.receita),sub:'receitas do período',color:'var(--ok)'}),
-    kpi({label:'Saiu',ico:'desceu',tone:'crit',val:BRL(d.despesa),sub:'despesas do período',color:'var(--crit)'}),
-    kpi({label:'Saldo',ico:'financeiro',val:BRL(d.saldo),sub:pos?'no azul':'no vermelho',color:pos?'var(--brand-hi)':'var(--crit)'}),
-    kpi({label:'A receber',ico:'relogio',tone:d.a_receber>0?'warn':'',mod:d.a_receber>0?'is-warn':'',val:BRL(d.a_receber),sub:'fiado em aberto'}),
+    kpi({label:'Entrou',ico:'subiu',tone:'brand',val:BRL(d.receita),
+      sub:d.anterior?cmp(d.receita,d.anterior.receita):'receitas do período',color:'var(--ok)'}),
+    kpi({label:'Saiu',ico:'desceu',tone:'crit',val:BRL(d.despesa),
+      sub:d.despesa_agendada>0?`+ ${BRL(d.despesa_agendada)} a pagar`:'despesas pagas',color:'var(--crit)'}),
+    kpi({label:'Lucro',ico:'grafico',tone:lucroPos?'brand':'crit',mod:lucroPos?'':'is-warn',val:BRL(d.lucro),
+      sub:d.anterior?cmp(d.lucro,d.anterior.lucro):'depois do custo da mercadoria',
+      color:lucroPos?'var(--brand-hi)':'var(--crit)'}),
+    kpi({label:'A receber',ico:'relogio',tone:d.a_receber>0?'warn':'',mod:d.a_receber>0?'is-warn':'',
+      val:BRL(d.a_receber),sub:'fiado em aberto'}),
   ].join('');
 
   // duas frentes
@@ -204,14 +298,130 @@ async function load(){
     const inn=e.type==='receita';
     return `<div class="m"><div class="l">
       <span class="ico-box ${inn?'brand':'crit'}" style="width:30px;height:30px">${ICO(inn?'subiu':'desceu',15)}</span>
-      <span class="txt"><span class="d">${e.description||e.category}</span><span class="s">${D(e.created_at)} · ${e.category}</span></span>
+      <span class="txt"><span class="d">${esc(e.description||e.category)}</span><span class="s">${D(e.created_at)} · ${esc(e.category)}${e.type==='despesa'&&!e.paid?' · A PAGAR':''}</span></span>
       </div><span class="rt"><span class="r ${inn?'in':'out'}">${inn?'+':'−'} ${BRL(e.amount)}</span>
       ${e.ref?'':`<button class="ib" data-del="${e.id}" type="button" aria-label="apagar">${ICO('lixeira',15)}</button>`}</span></div>`;
   }).join(''):vazio('recibo','Sem lançamentos','Nada movimentado neste período.');
   mov.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Apagar este lançamento?'))return;
     await api('/api/financial/entry/'+b.dataset.del,{method:'DELETE'});load();});
+
+  contasAPagar(d);
 }
+
+/* contas a pagar */
+function contasAPagar(d){
+  const hoje=new Date().toISOString().slice(0,10);
+  const box=document.getElementById('aPagar');
+  document.getElementById('apMeta').textContent=d.a_pagar.length
+    ? BRL(d.despesa_agendada)+(d.a_pagar_vencidas?` · ${d.a_pagar_vencidas} vencida(s)`:'')
+    : '';
+  if(!d.a_pagar.length){
+    box.innerHTML=vazio('ok','Nada a pagar','Nenhuma conta agendada em aberto.');return;
+  }
+  box.innerHTML=d.a_pagar.map(e=>{
+    const venc=e.due_date&&e.due_date<hoje;
+    return `<div class="cp${venc?' venc':''}">
+      <div><div class="d">${esc(e.description||e.category)}</div>
+        <div class="s${venc?' venc':''}">${e.category}${e.due_date?' · vence '+D(e.due_date):' · sem vencimento'}${venc?' · VENCIDA':''}</div></div>
+      <div class="v">${BRL(e.amount)}</div>
+      <button class="btn sm" data-pay="${e.id}" type="button">Pagar</button></div>`;
+  }).join('');
+  box.querySelectorAll('[data-pay]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true;
+    try{await api('/api/financial/entry/'+b.dataset.pay+'/pay',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:'{}'});load();}
+    catch(e){alert(e.message);b.disabled=false;}
+  });
+}
+
+/* fechamento de caixa */
+async function caixa(){
+  const dia=document.getElementById('cxDia').value||new Date().toISOString().slice(0,10);
+  const d=await api('/api/caixa?day='+dia);
+  const f=d.fechamento;
+  const dif=f?f.diferenca:null;
+  document.getElementById('caixa').innerHTML=`
+    ${d.por_forma.length?d.por_forma.map(x=>`<div class="cxl"><span>${esc(x.forma)} · ${x.n} venda(s)</span>
+      <span class="v">${BRL(x.total)}</span></div>`).join(''):'<div class="cxl"><span>Nenhuma venda no balcão</span><span class="v">R$ 0,00</span></div>'}
+    ${d.site.n?`<div class="cxl"><span style="color:var(--ink-3)">site · ${d.site.n} pedido(s)</span>
+      <span class="v" style="color:var(--ink-3)">${BRL(d.site.total)}</span></div>`:''}
+    ${d.saidas>0?`<div class="cxl"><span style="color:var(--crit)">saídas do dia</span>
+      <span class="v" style="color:var(--crit)">− ${BRL(d.saidas)}</span></div>`:''}
+    <div class="cxt"><span class="l">Esperado em espécie</span><span class="v">${BRL(d.esperado_especie)}</span></div>
+    <div class="conf">
+      <input id="cxContado" type="number" step="0.01" min="0" inputmode="decimal"
+        placeholder="Quanto tem na gaveta" value="${f?f.contado:''}">
+      <button class="btn sm primary" id="cxFechar" type="button">${f?'Refazer':'Fechar'}</button>
+    </div>
+    ${f?`<div class="dif ${dif===0?'ok':(dif<0?'falta':'sobra')}">
+      ${dif===0?'Bateu certinho':(dif<0?`Faltou ${BRL(Math.abs(dif))}`:`Sobrou ${BRL(dif)}`)}
+      ${f.note?' · '+esc(f.note):''}</div>`:''}`;
+  document.getElementById('cxFechar').onclick=async()=>{
+    const c=parseFloat(document.getElementById('cxContado').value);
+    if(!(c>=0))return alert('Informe quanto você contou na gaveta.');
+    const nota=prompt('Alguma observação? (opcional)','')||'';
+    await api('/api/caixa/fechar',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({day:dia,contado:c,note:nota})});
+    caixa();
+  };
+}
+
+/* despesas fixas */
+async function fixas(){
+  const d=await api('/api/fixed-expenses');
+  document.getElementById('fixMeta').textContent=d.itens.length
+    ? `${BRL(d.total_mes)} por mês` : '';
+  const box=document.getElementById('fixas');
+  if(!d.itens.length){
+    box.innerHTML=vazio('calendario','Nenhuma despesa fixa',
+      'Cadastre aluguel, assinaturas e o que vence todo mês — o sistema lança sozinho no dia.');
+    return;
+  }
+  box.innerHTML=d.itens.map(f=>`<div class="fx${f.active?'':' off'}">
+      <div><div class="n">${esc(f.name)}</div>
+        <div class="s">${esc(f.category)} · todo dia ${f.day_of_month}${f.active?'':' · desligada'}</div></div>
+      <div><div class="v">${BRL(f.amount)}</div>
+        <div class="acts">
+          <button class="ib" data-ed="${f.id}" type="button" aria-label="editar">${ICO('editar',14)}</button>
+          <button class="ib del" data-rm="${f.id}" type="button" aria-label="remover">${ICO('lixeira',14)}</button>
+        </div></div>
+    </div>`).join('');
+  box.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Remover esta despesa fixa? Os lançamentos já feitos continuam.'))return;
+    await api('/api/fixed-expenses/'+b.dataset.rm,{method:'DELETE'});fixas();});
+  box.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>{
+    const f=d.itens.find(x=>String(x.id)===b.dataset.ed);abrirFixa(f);});
+}
+
+function abrirFixa(f){
+  const dlg=document.getElementById('dlgFixa');
+  document.getElementById('fId').value=f?f.id:'';
+  document.getElementById('fNome').value=f?f.name:'';
+  document.getElementById('fValor').value=f?f.amount:'';
+  document.getElementById('fDia').value=f?f.day_of_month:5;
+  document.getElementById('fAtiva').checked=f?!!f.active:true;
+  const sel=document.getElementById('fCat');
+  sel.innerHTML=CATS.filter(c=>c.kind==='despesa').map(c=>`<option${f&&f.category===c.name?' selected':''}>${esc(c.name)}</option>`).join('');
+  document.getElementById('dlgFixaT').textContent=f?'Editar despesa fixa':'Nova despesa fixa';
+  dlg.showModal();
+}
+document.getElementById('novaFixa').onclick=()=>abrirFixa(null);
+document.getElementById('salvarFixa').onclick=async e=>{
+  const nome=document.getElementById('fNome').value.trim();
+  const valor=parseFloat(document.getElementById('fValor').value);
+  if(!nome||!(valor>0))return;
+  e.preventDefault();
+  try{
+    await api('/api/fixed-expenses',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:document.getElementById('fId').value||undefined,
+        name:nome,amount:valor,category:document.getElementById('fCat').value,
+        day_of_month:parseInt(document.getElementById('fDia').value,10)||1,
+        active:document.getElementById('fAtiva').checked})});
+    document.getElementById('dlgFixa').close();fixas();load();
+  }catch(err){alert(err.message);}
+};
+document.getElementById('cxDia').onchange=caixa;
 
 
 /* categorias */
@@ -263,7 +473,8 @@ document.getElementById('save').onclick=async e=>{
 };
 document.getElementById('per').onclick=e=>{const b=e.target.closest('button');if(!b)return;
   document.querySelectorAll('#per button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');per=b.dataset.p;load();};
-carregarCats().then(()=>setKind('despesa'));load();
+document.getElementById('cxDia').value=new Date().toISOString().slice(0,10);
+carregarCats().then(()=>{setKind('despesa');fixas();});load();caixa();
 </script>
 </body>
 </html>

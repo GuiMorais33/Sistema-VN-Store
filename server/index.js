@@ -1163,26 +1163,179 @@ app.get('/api/financial', (req, res) => {
   const cond = since ? 'AND created_at >= ?' : '';
   const a = since ? [since] : [];
   const receita = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries WHERE type='receita' ${cond}`).get(...a).n;
-  const despesa = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries WHERE type='despesa' ${cond}`).get(...a).n;
+  // Despesa que JÁ saiu do caixa x a que está só agendada. Somar as duas
+  // no mesmo número faria o "sobrou" mostrar dinheiro que ainda está aí.
+  const despesa = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries
+    WHERE type='despesa' AND paid = 1 ${cond}`).get(...a).n;
+  const agendada = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries
+    WHERE type='despesa' AND paid = 0`).get().n;
   const aReceber = db.prepare("SELECT COALESCE(SUM(total),0) n FROM sales WHERE payment_status='pendente'").get().n;
   const byMethod = db.prepare(`SELECT COALESCE(NULLIF(payment_method,''),'—') label, COUNT(*) n, COALESCE(SUM(total),0) total
     FROM sales WHERE payment_status='pago' ${cond} GROUP BY payment_method ORDER BY total DESC`).all(...a);
-  const entries = db.prepare(`SELECT id, type, category, description, amount, ref, created_at FROM financial_entries
-    ${since ? 'WHERE created_at >= ?' : ''} ORDER BY id DESC LIMIT 120`).all(...a);
+  const entries = db.prepare(`SELECT id, type, category, description, amount, ref, paid, due_date, created_at
+    FROM financial_entries ${since ? 'WHERE created_at >= ?' : ''} ORDER BY id DESC LIMIT 120`).all(...a);
+  // Contas a pagar: o que está agendado, do mais vencido para o mais longe.
+  const aPagar = db.prepare(`SELECT id, category, description, amount, due_date, created_at
+    FROM financial_entries WHERE type='despesa' AND paid = 0
+    ORDER BY COALESCE(due_date,'9999-12-31'), id`).all();
+  const hoje = new Date().toISOString().slice(0, 10);
+  const vencidas = aPagar.filter((e) => e.due_date && e.due_date < hoje);
   // Por categoria (o coração da gestão): entra e sai, agrupado.
+  // Só o que já saiu/entrou de verdade — para bater com o número do topo.
   const porCategoria = (tipo) => db.prepare(`SELECT COALESCE(NULLIF(category,''),'Sem categoria') label,
       COUNT(*) n, COALESCE(SUM(amount),0) total FROM financial_entries
-      WHERE type = ? ${cond} GROUP BY label ORDER BY total DESC`).all(tipo, ...a);
+      WHERE type = ? AND paid = 1 ${cond} GROUP BY label ORDER BY total DESC`).all(tipo, ...a);
   // Receita por origem (PDV x Site) — as duas frentes.
   const porOrigem = db.prepare(`SELECT CASE WHEN channel='site' THEN 'Site' ELSE 'PDV' END origem,
       COUNT(*) n, COALESCE(SUM(total),0) total FROM sales
       WHERE payment_status='pago' ${cond} GROUP BY origem ORDER BY total DESC`).all(...a);
+  // Lucro de verdade: o que sobrou depois do custo da mercadoria vendida.
+  // A margem das vendas já desconta o custo; as demais despesas saem dela.
+  const margemVendas = db.prepare(`SELECT COALESCE(SUM(margin),0) n FROM sales
+    WHERE payment_status='pago' ${since ? 'AND created_at >= ?' : ''}`).get(...a).n;
+  const despesaSemMercadoria = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries
+    WHERE type='despesa' AND paid = 1 AND category <> 'Compra de mercadoria' ${cond}`).get(...a).n;
+
+  // Mês passado, para comparar.
+  let anterior = null;
+  if (period === 'month') {
+    const ini = new Date(d.getFullYear(), d.getMonth() - 1, 1).toISOString();
+    const fim = new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
+    const r = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries
+      WHERE type='receita' AND created_at >= ? AND created_at < ?`).get(ini, fim).n;
+    const de = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries
+      WHERE type='despesa' AND paid = 1 AND created_at >= ? AND created_at < ?`).get(ini, fim).n;
+    const mg = db.prepare(`SELECT COALESCE(SUM(margin),0) n FROM sales
+      WHERE payment_status='pago' AND created_at >= ? AND created_at < ?`).get(ini, fim).n;
+    const dsm = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries
+      WHERE type='despesa' AND paid = 1 AND category <> 'Compra de mercadoria'
+        AND created_at >= ? AND created_at < ?`).get(ini, fim).n;
+    anterior = { receita: money(r), despesa: money(de), saldo: money(r - de), lucro: money(mg - dsm) };
+  }
+
   res.json({
     period, receita: money(receita), despesa: money(despesa), saldo: money(receita - despesa),
+    despesa_agendada: money(agendada), a_pagar: aPagar, a_pagar_vencidas: vencidas.length,
+    lucro: money(margemVendas - despesaSemMercadoria),
+    margem_vendas: money(margemVendas), despesas_operacao: money(despesaSemMercadoria),
+    anterior,
     a_receber: money(aReceber), by_method: byMethod, entries,
     por_categoria_receita: porCategoria('receita'), por_categoria_despesa: porCategoria('despesa'),
     por_origem: porOrigem, ultima_importacao: getSetting('last_orders_import'),
   });
+});
+
+// Marcar uma despesa agendada como paga (aí sim sai do caixa).
+app.post('/api/financial/entry/:id/pay', (req, res) => {
+  const e = db.prepare('SELECT * FROM financial_entries WHERE id = ?').get(req.params.id);
+  if (!e) return res.status(404).json({ error: 'Lançamento não encontrado.' });
+  if (e.paid) return res.json({ ok: true, already: true });
+  const ts = now();
+  db.prepare('UPDATE financial_entries SET paid = 1, paid_at = ? WHERE id = ?').run(ts, e.id);
+  // Se veio de uma entrada de mercadoria, a compra também fica quitada.
+  if (e.ref) db.prepare('UPDATE purchases SET paid = 1 WHERE code = ?').run(e.ref);
+  res.json({ ok: true, entry: db.prepare('SELECT * FROM financial_entries WHERE id = ?').get(e.id) });
+});
+
+// ==================== DESPESAS FIXAS ====================
+// Aluguel, assinaturas, o que vence todo mês. O sistema lança sozinho.
+app.get('/api/fixed-expenses', (req, res) => {
+  const rows = db.prepare('SELECT * FROM fixed_expenses ORDER BY active DESC, day_of_month, name').all();
+  const total = rows.filter((r) => r.active).reduce((s, r) => s + r.amount, 0);
+  res.json({ total_mes: money(total), itens: rows });
+});
+
+app.post('/api/fixed-expenses', (req, res) => {
+  const b = req.body || {};
+  const nome = String(b.name || '').trim();
+  const valor = money(b.amount);
+  if (!nome) return res.status(400).json({ error: 'Dê um nome à despesa.' });
+  if (!(valor > 0)) return res.status(400).json({ error: 'Informe um valor maior que zero.' });
+  const dia = Math.min(28, Math.max(1, parseInt(b.day_of_month, 10) || 1));
+  const cat = (b.category || 'Outras despesas').trim();
+  if (b.id) {
+    db.prepare(`UPDATE fixed_expenses SET name=?, category=?, category_id=?, amount=?, day_of_month=?, active=? WHERE id=?`)
+      .run(nome, cat, categoryId(cat, 'despesa'), valor, dia, b.active === false ? 0 : 1, b.id);
+    return res.json({ ok: true, item: db.prepare('SELECT * FROM fixed_expenses WHERE id = ?').get(b.id) });
+  }
+  const id = db.prepare(`INSERT INTO fixed_expenses (name, category, category_id, amount, day_of_month, created_at)
+    VALUES (?,?,?,?,?,?)`).run(nome, cat, categoryId(cat, 'despesa'), valor, dia, now()).lastInsertRowid;
+  res.json({ ok: true, item: db.prepare('SELECT * FROM fixed_expenses WHERE id = ?').get(id) });
+});
+
+app.delete('/api/fixed-expenses/:id', (req, res) => {
+  db.prepare('DELETE FROM fixed_expenses WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// Lança as fixas que já chegaram no dia — uma vez por mês cada.
+function lancarFixas() {
+  const hoje = new Date();
+  const ym = hoje.toISOString().slice(0, 7);
+  const dia = hoje.getDate();
+  const pend = db.prepare(`SELECT * FROM fixed_expenses
+    WHERE active = 1 AND day_of_month <= ? AND COALESCE(last_ym,'') <> ?`).all(dia, ym);
+  if (!pend.length) return 0;
+  const ins = db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, ref, paid, due_date, paid_at, created_at)
+    VALUES ('despesa',?,?,?,?,?,0,?,NULL,?)`);
+  const marca = db.prepare('UPDATE fixed_expenses SET last_ym = ? WHERE id = ?');
+  const ts = now();
+  db.transaction(() => {
+    for (const f of pend) {
+      const venc = `${ym}-${String(f.day_of_month).padStart(2, '0')}`;
+      // Entra como A PAGAR: quem decide que saiu do caixa é você.
+      ins.run(f.category, f.category_id, `${f.name} · ${ym}`, f.amount, `FIXA-${f.id}-${ym}`, venc, ts);
+      marca.run(ym, f.id);
+    }
+  })();
+  return pend.length;
+}
+app.post('/api/fixed-expenses/rodar', (req, res) => res.json({ ok: true, lancadas: lancarFixas() }));
+
+// ==================== FECHAMENTO DE CAIXA ====================
+// Confere o que o sistema esperava receber com o que você contou.
+app.get('/api/caixa', (req, res) => {
+  const dia = (req.query.day || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const ini = `${dia}T00:00:00`, fim = `${dia}T23:59:59`;
+  const porForma = db.prepare(`SELECT COALESCE(NULLIF(payment_method,''),'não informado') forma,
+      COUNT(*) n, COALESCE(SUM(total),0) total FROM sales
+    WHERE payment_status='pago' AND channel='pdv' AND created_at BETWEEN ? AND ?
+    GROUP BY forma ORDER BY total DESC`).all(ini, fim);
+  const site = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(total),0) total FROM sales
+    WHERE payment_status='pago' AND channel='site' AND created_at BETWEEN ? AND ?`).get(ini, fim);
+  const saidas = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries
+    WHERE type='despesa' AND paid = 1 AND created_at BETWEEN ? AND ?`).get(ini, fim).n;
+  const especie = porForma.find((f) => /esp[ée]cie|dinheiro/i.test(f.forma));
+  const fechado = db.prepare('SELECT * FROM cash_closings WHERE day = ?').get(dia);
+  res.json({
+    dia,
+    por_forma: porForma,
+    balcao: money(porForma.reduce((s, f) => s + f.total, 0)),
+    site: { n: site.n, total: money(site.total) },
+    saidas: money(saidas),
+    esperado_especie: money(especie ? especie.total : 0),
+    fechamento: fechado || null,
+  });
+});
+
+app.post('/api/caixa/fechar', (req, res) => {
+  const b = req.body || {};
+  const dia = (b.day || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const contado = money(b.contado);
+  if (!(contado >= 0)) return res.status(400).json({ error: 'Informe quanto você contou.' });
+  const ini = `${dia}T00:00:00`, fim = `${dia}T23:59:59`;
+  const porForma = db.prepare(`SELECT COALESCE(NULLIF(payment_method,''),'não informado') forma,
+      COALESCE(SUM(total),0) total FROM sales
+    WHERE payment_status='pago' AND channel='pdv' AND created_at BETWEEN ? AND ?
+    GROUP BY forma`).all(ini, fim);
+  const especie = porForma.find((f) => /esp[ée]cie|dinheiro/i.test(f.forma));
+  const esperado = money(especie ? especie.total : 0);
+  db.prepare(`INSERT INTO cash_closings (day, esperado, contado, diferenca, por_forma, note, created_at)
+    VALUES (?,?,?,?,?,?,?)
+    ON CONFLICT(day) DO UPDATE SET esperado=excluded.esperado, contado=excluded.contado,
+      diferenca=excluded.diferenca, por_forma=excluded.por_forma, note=excluded.note`)
+    .run(dia, esperado, contado, money(contado - esperado), JSON.stringify(porForma), b.note || '', now());
+  res.json({ ok: true, fechamento: db.prepare('SELECT * FROM cash_closings WHERE day = ?').get(dia) });
 });
 
 // Lançamento manual (despesa ou receita avulsa)
@@ -1408,6 +1561,10 @@ async function sincronizarPedidos(dias = 45) {
 const INTERVALO_MIN = Math.max(2, parseInt(process.env.SYNC_MINUTES, 10) || 10);
 let sincronizando = false;
 async function tickAutomatico(motivo = 'automático') {
+  // As fixas não dependem da loja: rodam mesmo sem conexão.
+  try { const n = lancarFixas(); if (n) console.log(`› ${n} despesa(s) fixa(s) lançada(s) como a pagar.`); }
+  catch (err) { console.error('Despesas fixas:', err.message); }
+
   if (sincronizando || !isLive()) return;
   sincronizando = true;
   try {
