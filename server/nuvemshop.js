@@ -183,26 +183,6 @@ export async function createCategory(name, parentId) {
   return data;
 }
 
-// Lê um produto pontual — usado antes de mexer nas categorias dele,
-// para nunca gravar em cima de uma lista desatualizada.
-export async function getProduct(nuvemshopProductId) {
-  const { data } = await request('GET', `/products/${nuvemshopProductId}`);
-  return data;
-}
-
-// Bate num caminho qualquer da API só para ver o que a loja responde.
-// Usado para descobrir se as promoções do painel são expostas na API —
-// nunca lança: devolve o status para quem chamou decidir.
-export async function sondar(path) {
-  try {
-    const { data, res } = await request('GET', path);
-    const amostra = Array.isArray(data) ? data.slice(0, 3) : data;
-    return { path, ok: true, status: res.status, itens: Array.isArray(data) ? data.length : null, amostra };
-  } catch (err) {
-    return { path, ok: false, status: err.status || 0, erro: err.message };
-  }
-}
-
 // -------- Clientes --------
 export async function createCustomer(payload) {
   const { data } = await request('POST', '/customers', payload);

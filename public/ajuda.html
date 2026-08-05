@@ -75,7 +75,6 @@
       <a href="#estoque">Estoque</a>
       <a href="#clientes">Clientes e fiado</a>
       <a href="#lembretes">Lembretes</a>
-      <a href="#promocoes">Promoções</a>
       <a href="#financeiro">Financeiro</a>
       <a href="#automatico">O que roda sozinho</a>
       <a href="#agentes">Os agentes</a>
@@ -300,99 +299,6 @@
           de Início.</p>
       </section>
 
-      <!-- PROMOÇÕES -->
-      <section id="promocoes" class="card">
-        <h2><span class="ico-box brand" id="i11"></span>Promoções</h2>
-        <p>Serve para uma coisa específica: <b>juntar os produtos em promoção numa categoria</b>, para
-          eles ganharem uma <b>página própria no site</b> — do tipo "Liquidação até 75% de desconto".</p>
-
-        <div class="aviso dica"><span class="ico" id="d6"></span>
-          <div>Esta tela <b>não mexe em preço</b>. O desconto continua sendo feito na Nuvemshop;
-          aqui você só organiza em que categoria os produtos aparecem.</div></div>
-
-        <h3>Como usar</h3>
-        <ol class="passos">
-          <li><div>Crie a promoção normalmente na Nuvemshop e deixe os preços promocionais aplicados.</div></li>
-          <li><div>Abra <b>Promoções</b> aqui. O sistema lê a loja e lista quem está com preço
-            promocional, com o <b>de/por</b> e o <b>% de desconto</b>.</div></li>
-          <li><div>Em <b>Categoria de destino</b>, escolha a categoria que você já criou — ou digite
-            um nome em "ou criar" para o sistema criar na hora.</div></li>
-          <li><div>Marque os produtos (ou clique em <b>Marcar todos</b>) e clique em
-            <b>Adicionar à categoria</b>.</div></li>
-          <li><div>Ao terminar aparece o link da <b>página no site</b> para você conferir.</div></li>
-        </ol>
-
-        <h3>O que ele preserva</h3>
-        <p>A categoria de liquidação é <b>somada</b> às que o produto já tem — categoria e marca
-          continuam iguais. Rodar duas vezes não duplica nada: quem já está na categoria é pulado.</p>
-
-        <h3>Quando a promoção acabar</h3>
-        <p>Filtre por <b>Já na categoria</b>, marque todos e clique em <b>Tirar da categoria</b>.
-          Os produtos saem da página de liquidação e continuam nas categorias normais.</p>
-
-        <h3>Suas promoções, no topo da tela</h3>
-        <p>O sistema tenta ler as promoções do painel pela API. Se a sua loja entregar, elas
-          aparecem listadas com o nome e quantos produtos cada uma tem — <b>clique em "marcar"</b>
-          e os produtos daquela promoção já ficam selecionados. Aí é só escolher a categoria de
-          destino e aplicar.</p>
-        <p>Se aparecer o aviso de que <b>a API não entrega as promoções</b>, não tem jeito por ali:
-          a Nuvemshop guarda essas promoções só no painel. Use o colar, logo abaixo.</p>
-
-        <h3>Colar a lista da promoção</h3>
-        <p>A aba <b>Promoções</b> da Nuvemshop guarda a promoção só dela: ela <b>não cria categoria</b>
-          e <b>não muda o preço promocional do produto</b>. Por isso os produtos que você escolheu lá
-          não vêm marcados sozinhos aqui. A ponte é copiar e colar:</p>
-        <ol class="passos">
-          <li><div>Abra a sua promoção na Nuvemshop e <b>selecione a lista de produtos</b> dela.
-            Copie com <kbd>Ctrl</kbd>+<kbd>C</kbd>.</div></li>
-          <li><div>Aqui, abra <b>Colar a lista da promoção</b> e cole no campo — um por linha.</div></li>
-          <li><div>Clique em <b>Encontrar e marcar</b>. O sistema acha cada produto e já deixa
-            selecionado, mostrando quais não localizou.</div></li>
-          <li><div>Confira a <b>Categoria de destino</b> e clique em <b>Adicionar à categoria</b>.</div></li>
-        </ol>
-        <p>O casamento é tolerante: aceita <b>nome</b> (não liga para acento nem maiúscula), o
-          <b>número de ID</b> do produto, o <b>link</b> dele, e até linha copiada de tabela com
-          preço e desconto junto.</p>
-
-        <div class="aviso"><span class="ico" id="a3"></span>
-          <div><b>Nome repetido não é resolvido no chute.</b> Se você tem várias "Camiseta Lacoste",
-          o sistema <b>não escolhe uma</b> — ele mostra todas com ID, preço e desconto para você
-          apontar qual entrou na promoção. Ao escolher uma, as irmãs são desativadas, então não dá
-          para marcar duas sem querer.</div></div>
-
-        <h3>Pegador de IDs · quando o nome não basta</h3>
-        <p>O jeito sem nenhuma chance de erro, porque trabalha com o <b>ID</b> e não com o nome:</p>
-        <ol class="passos">
-          <li><div>Abra a sua promoção no painel da Nuvemshop.</div></li>
-          <li><div>Aperte <kbd>F12</kbd> e vá na aba <b>Console</b>.</div></li>
-          <li><div>Se o Chrome pedir, digite <span class="rota">allow pasting</span> e dê Enter —
-            ele faz isso na primeira vez, por segurança.</div></li>
-          <li><div>Aqui, clique em <b>Copiar o pegador</b>, cole no console e dê Enter.</div></li>
-          <li><div>Ele copia os IDs. Volte, cole no campo e clique em <b>Encontrar e marcar</b>.</div></li>
-        </ol>
-        <p>O pegador só <b>lê</b> a página que está aberta e copia os IDs. Ele não altera nada na
-          sua loja, não envia nada para lugar nenhum e some quando você fecha o console.</p>
-
-        <h3>Quando os produtos já estão numa categoria</h3>
-        <p>É o caminho mais rápido, e funciona mesmo que o desconto não apareça marcado. No painel da
-          Nuvemshop, abra a categoria onde os produtos estão — o número no fim da URL
-          (<span class="rota">/admin/categories/<b>40176961</b></span>) é o <b>ID dela</b>.</p>
-        <ol class="passos">
-          <li><div>Em <b>Vindos de</b>, escolha essa categoria. Cada opção mostra o nome, quantos
-            produtos tem e o <b>#ID</b> — é só procurar o número da URL.</div></li>
-          <li><div>Troque o filtro para <b>Todos</b> (assim não depende do preço promocional).</div></li>
-          <li><div><b>Marcar todos</b> → <b>Adicionar à categoria</b>.</div></li>
-        </ol>
-        <p>Pronto: todo mundo daquela categoria passa a aparecer também na página de liquidação,
-          sem sair de onde já estava.</p>
-
-        <div class="aviso"><span class="ico" id="d7"></span>
-          <div><b>O filtro "Em promoção" veio vazio?</b> É esperado se a sua promoção foi criada na
-          aba <b>Promoções</b> — ela não marca o produto de um jeito que a API mostre. O filtro só
-          enxerga quem tem <b>preço promocional</b> preenchido na variação. Use o
-          <b>colar a lista</b> ou o caminho por categoria: dá no mesmo.</div></div>
-      </section>
-
       <!-- FINANCEIRO -->
       <section id="financeiro" class="card">
         <h2><span class="ico-box brand" id="i7"></span>Financeiro</h2>
@@ -511,10 +417,10 @@
 <script src="/nav.js"></script>
 <script>
 const icones={i1:'conectar',i2:'inicio',i3:'pdv',i4:'estoque',i5:'clientes',i6:'sino',
-  i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa',i11:'etiqueta'};
+  i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa'};
 Object.entries(icones).forEach(([id,n])=>{const e=document.getElementById(id);if(e)e.innerHTML=ICO(n,17);});
-['d1','d2','d3','d4','d5','d6'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
-['a1','a2','a3','d7'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['d1','d2','d3','d4','d5'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['a1','a2'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
 
 // Marca a seção visível no índice
 const links=[...document.querySelectorAll('.indice a')];
