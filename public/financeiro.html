@@ -402,7 +402,10 @@ function abrirFixa(f){
   document.getElementById('fDia').value=f?f.day_of_month:5;
   document.getElementById('fAtiva').checked=f?!!f.active:true;
   const sel=document.getElementById('fCat');
-  sel.innerHTML=CATS.filter(c=>c.kind==='despesa').map(c=>`<option${f&&f.category===c.name?' selected':''}>${esc(c.name)}</option>`).join('');
+  // CATS vem separado por tipo: {receita:[], despesa:[]}.
+  const lista=(CATS&&CATS.despesa)||[];
+  sel.innerHTML=(lista.length?lista:[{name:'Outras despesas'}])
+    .map(c=>`<option${f&&f.category===c.name?' selected':''}>${esc(c.name)}</option>`).join('');
   document.getElementById('dlgFixaT').textContent=f?'Editar despesa fixa':'Nova despesa fixa';
   dlg.showModal();
 }

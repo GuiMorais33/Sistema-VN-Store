@@ -1331,9 +1331,19 @@ app.post('/api/fixed-expenses', (req, res) => {
   const dia = Math.min(28, Math.max(1, parseInt(b.day_of_month, 10) || 1));
   const cat = (b.category || 'Outras despesas').trim();
   if (b.id) {
+    const cid = categoryId(cat, 'despesa');
     db.prepare(`UPDATE fixed_expenses SET name=?, category=?, category_id=?, amount=?, day_of_month=?, active=? WHERE id=?`)
-      .run(nome, cat, categoryId(cat, 'despesa'), valor, dia, b.active === false ? 0 : 1, b.id);
-    return res.json({ ok: true, item: db.prepare('SELECT * FROM fixed_expenses WHERE id = ?').get(b.id) });
+      .run(nome, cat, cid, valor, dia, b.active === false ? 0 : 1, b.id);
+    // Se a conta deste mês já foi lançada e ainda não foi paga, ela
+    // acompanha a edição — senão você corrige o valor e a conta a pagar
+    // continua mostrando o antigo.
+    const ym = new Date().toISOString().slice(0, 7);
+    const upd = db.prepare(`UPDATE financial_entries
+      SET amount = ?, category = ?, category_id = ?, description = ?, due_date = ?
+      WHERE ref = ? AND paid = 0`)
+      .run(valor, cat, cid, `${nome} · ${ym}`, `${ym}-${String(dia).padStart(2, '0')}`, `FIXA-${b.id}-${ym}`);
+    return res.json({ ok: true, atualizou_conta_do_mes: upd.changes > 0,
+      item: db.prepare('SELECT * FROM fixed_expenses WHERE id = ?').get(b.id) });
   }
   const id = db.prepare(`INSERT INTO fixed_expenses (name, category, category_id, amount, day_of_month, created_at)
     VALUES (?,?,?,?,?,?)`).run(nome, cat, categoryId(cat, 'despesa'), valor, dia, now()).lastInsertRowid;
