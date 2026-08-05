@@ -77,6 +77,7 @@
       <a href="#compras">Compras e custos</a>
       <a href="#lembretes">Lembretes</a>
       <a href="#financeiro">Financeiro</a>
+      <a href="#relatorios">Relatórios</a>
       <a href="#automatico">O que roda sozinho</a>
       <a href="#agentes">Os agentes</a>
       <a href="#duvidas">Dúvidas comuns</a>
@@ -405,6 +406,41 @@
           lançá-las aqui. Use o "Lançar" apenas para <b>despesas</b> e receitas que não são venda.</div></div>
       </section>
 
+      <!-- RELATÓRIOS -->
+      <section id="relatorios" class="card">
+        <h2><span class="ico-box brand" id="i13"></span>Relatórios</h2>
+        <p>Responde a pergunta que o faturamento não responde: <b>o que realmente dá dinheiro</b>.
+          Vender muito de um produto de margem apertada pode render menos que vender pouco de um
+          produto de margem boa.</p>
+
+        <h3>Os números do topo</h3>
+        <p><b>Receita</b> menos <b>custo das peças</b> é o <b>lucro bruto</b>, e a <b>margem</b> é
+          esse lucro em porcentagem. O custo usado é o que a peça tinha <b>no dia da venda</b> —
+          mudar o custo hoje não reescreve o lucro do mês passado.</p>
+
+        <h3>Curva ABC · onde está o lucro</h3>
+        <div class="tw"><table>
+          <tr><th>Classe</th><th>O que significa</th></tr>
+          <tr><td><b>A</b></td><td>Os produtos que juntos fazem <b>80% do seu lucro</b>. São os que
+            não podem faltar no estoque.</td></tr>
+          <tr><td><b>B</b></td><td>Os 15% seguintes. Importantes, mas não críticos.</td></tr>
+          <tr><td><b>C</b></td><td>O resto. Ocupam espaço e capital para pouco retorno.</td></tr>
+        </table></div>
+        <p>Abaixo, o ranking mostra cada produto com peças vendidas, receita, lucro e margem.
+          <b>Margem abaixo de 25% fica amarela</b>, e negativa fica vermelha — sinal de que o preço
+          está errado ou o custo subiu.</p>
+
+        <h3>Dinheiro parado</h3>
+        <p>Produtos que <b>têm estoque e não venderam</b> no período, do mais caro para o mais
+          barato, com o valor <b>a custo</b> — quanto do seu dinheiro está dormindo ali. É a lista
+          para pensar em promoção, troca com o fornecedor ou simplesmente parar de repor.</p>
+
+        <div class="aviso atencao"><span class="ico" id="a4"></span>
+          <div><b>Margem de 100%?</b> Isso não é lucro perfeito, é <b>custo faltando</b>. Vá em
+          <span class="rota">Estoque → Custos em massa</span> e preencha — enquanto o custo for zero,
+          o relatório trata a venda inteira como lucro.</div></div>
+      </section>
+
       <!-- AUTOMÁTICO -->
       <section id="automatico" class="card">
         <h2><span class="ico-box brand" id="i8"></span>O que o sistema faz sozinho</h2>
@@ -488,10 +524,10 @@
 <script src="/nav.js"></script>
 <script>
 const icones={i1:'conectar',i2:'inicio',i3:'pdv',i4:'estoque',i5:'clientes',i6:'sino',
-  i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa',i12:'caixa_vazia'};
+  i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa',i12:'caixa_vazia',i13:'grafico'};
 Object.entries(icones).forEach(([id,n])=>{const e=document.getElementById(id);if(e)e.innerHTML=ICO(n,17);});
 ['d1','d2','d3','d4','d5','d6'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
-['a1','a2'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['a1','a2','a4'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
 
 // Marca a seção visível no índice
 const links=[...document.querySelectorAll('.indice a')];

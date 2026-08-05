@@ -11,6 +11,7 @@
     ] },
     { titulo: 'Gestão', itens: [
       { href: '/financeiro', ico: 'financeiro', label: 'Financeiro', match: (p) => p.startsWith('/financeiro') },
+      { href: '/relatorios', ico: 'grafico',    label: 'Relatórios', match: (p) => p.startsWith('/relatorios') },
       { href: '/agentes',    ico: 'agentes',    label: 'Agentes',    match: (p) => p.startsWith('/agentes') },
       { href: '/conectar',   ico: 'conectar',   label: 'Conectar',   match: (p) => p.startsWith('/conectar') },
       { href: '/ajuda',      ico: 'conversa',   label: 'Como usar',  match: (p) => p.startsWith('/ajuda') || p.startsWith('/como-usar') },

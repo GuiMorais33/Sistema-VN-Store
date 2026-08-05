@@ -1138,6 +1138,83 @@ app.get('/api/sales-series', (req, res) => {
   res.json({ days, series });
 });
 
+// ==================== RELATÓRIOS DE LUCRO ====================
+// A pergunta que interessa: o que dá dinheiro e onde ele está parado.
+app.get('/api/relatorios', (req, res) => {
+  const dias = Math.min(730, Math.max(7, parseInt(req.query.days, 10) || 90));
+  const desde = new Date(Date.now() - dias * 864e5).toISOString();
+  // Lucro por linha: o que entrou menos o custo que a peça tinha na hora
+  // da venda (unit_cost fica gravado no item, então mudar o custo depois
+  // não reescreve o passado).
+  const base = `FROM sale_items i
+    JOIN sales s ON s.id = i.sale_id
+    LEFT JOIN variants v ON v.id = i.variant_id
+    LEFT JOIN products p ON p.id = v.product_id
+    WHERE s.payment_status <> 'cancelado' AND s.created_at >= ?`;
+
+  const agrupado = (campo, rotulo) => db.prepare(`
+    SELECT COALESCE(NULLIF(${campo},''),'(sem ${rotulo})') label,
+      SUM(i.qty) pecas,
+      ROUND(SUM(i.line_total),2) receita,
+      ROUND(SUM(i.unit_cost * i.qty),2) custo,
+      ROUND(SUM(i.line_total - i.unit_cost * i.qty),2) lucro
+    ${base} GROUP BY label ORDER BY lucro DESC`).all(desde);
+
+  const produtos = db.prepare(`
+    SELECT COALESCE(v.product_id, 0) pid,
+      MAX(COALESCE(p.name, i.name)) produto,
+      MAX(p.brand) marca, MAX(p.category) categoria, MAX(p.image_url) imagem,
+      SUM(i.qty) pecas,
+      ROUND(SUM(i.line_total),2) receita,
+      ROUND(SUM(i.unit_cost * i.qty),2) custo,
+      ROUND(SUM(i.line_total - i.unit_cost * i.qty),2) lucro
+    ${base} GROUP BY pid ORDER BY lucro DESC`).all(desde);
+
+  const totais = produtos.reduce((t, p) => ({
+    pecas: t.pecas + p.pecas, receita: money(t.receita + p.receita),
+    custo: money(t.custo + p.custo), lucro: money(t.lucro + p.lucro),
+  }), { pecas: 0, receita: 0, custo: 0, lucro: 0 });
+
+  // Curva ABC: quem faz 80% do lucro é o A, 15% seguintes B, resto C.
+  let acum = 0;
+  const abc = produtos.map((p) => {
+    acum += Math.max(0, p.lucro);
+    const share = totais.lucro > 0 ? acum / totais.lucro : 0;
+    return { ...p, classe: share <= 0.8 ? 'A' : (share <= 0.95 ? 'B' : 'C') };
+  });
+  const resumoAbc = ['A', 'B', 'C'].map((c) => {
+    const g = abc.filter((p) => p.classe === c);
+    return { classe: c, produtos: g.length, lucro: money(g.reduce((s, p) => s + p.lucro, 0)) };
+  });
+
+  // Dinheiro parado: tem estoque e não vende há tempo (ou nunca vendeu).
+  const parado = db.prepare(`
+    SELECT p.id, p.name produto, p.brand marca, p.category categoria, p.image_url imagem,
+      COALESCE(p.on_demand,0) on_demand,
+      SUM(CASE WHEN p.on_demand = 1 THEN COALESCE(v.on_hand,0) ELSE v.stock END) pecas,
+      ROUND(SUM((CASE WHEN p.on_demand = 1 THEN COALESCE(v.on_hand,0) ELSE v.stock END) * v.cost),2) parado_custo,
+      (SELECT MAX(s2.created_at) FROM sale_items i2
+         JOIN sales s2 ON s2.id = i2.sale_id
+         JOIN variants v2 ON v2.id = i2.variant_id
+        WHERE v2.product_id = p.id AND s2.payment_status <> 'cancelado') ultima_venda
+    FROM products p JOIN variants v ON v.product_id = p.id
+    WHERE v.stock_management = 1
+    GROUP BY p.id
+    HAVING pecas > 0 AND (ultima_venda IS NULL OR ultima_venda < ?)
+    ORDER BY parado_custo DESC LIMIT 40`).all(desde);
+  const totalParado = money(parado.reduce((s, p) => s + (p.parado_custo || 0), 0));
+
+  res.json({
+    dias, desde,
+    totais: { ...totais, margem_pct: totais.receita > 0 ? Math.round((totais.lucro / totais.receita) * 100) : 0 },
+    produtos: abc.slice(0, 60),
+    por_marca: agrupado('p.brand', 'marca'),
+    por_categoria: agrupado('p.category', 'categoria'),
+    abc: resumoAbc,
+    parado, total_parado: totalParado,
+  });
+});
+
 // ==================== UPLOAD DE FOTO ====================
 // Recebe a imagem já redimensionada (base64) do navegador/celular e salva.
 app.post('/api/upload', (req, res) => {
@@ -1797,6 +1874,7 @@ app.get('/agentes', page('agentes.html'));
 app.get('/lembretes', page('lembretes.html'));
 app.get('/compras', page('compras.html'));
 app.get('/custos', page('custos.html'));
+app.get('/relatorios', page('relatorios.html'));
 app.get('/ajuda', page('ajuda.html'));
 app.get('/como-usar', page('ajuda.html'));
 
