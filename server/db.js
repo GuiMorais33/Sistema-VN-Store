@@ -258,6 +258,24 @@ CREATE TABLE IF NOT EXISTS atendimentos (
   created_at  TEXT NOT NULL,
   updated_at  TEXT
 );
+-- Visão do negócio: quem somos e como a loja gera valor.
+-- Textos longos (missão, visão, manifesto) ficam aqui;
+-- o que é lista (valores e os nove blocos do Canvas) fica em canvas_items.
+CREATE TABLE IF NOT EXISTS canvas_texts (
+  chave      TEXT PRIMARY KEY,
+  valor      TEXT NOT NULL DEFAULT '',
+  updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS canvas_items (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  bloco      TEXT NOT NULL,
+  ordem      INTEGER NOT NULL DEFAULT 0,
+  texto      TEXT NOT NULL,
+  nota       TEXT DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_canvas_bloco ON canvas_items(bloco, ordem);
+
 -- O mapa da estratégia: como um estranho vira cliente nesta loja.
 -- Cada nível é uma etapa da jornada (descoberta, perfil, conversa…) e
 -- cada nó é um caminho dentro dela (anúncio, reels, direct…). O desenho

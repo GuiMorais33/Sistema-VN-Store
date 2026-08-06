@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070907">
+<title>VN Store — Negócio</title>
+<link rel="icon" href="/logo.webp">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .barra{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center;margin-bottom:var(--s4)}
+  .prog-c{flex:1;min-width:170px;height:8px;border-radius:5px;background:var(--bg-elev);
+    border:1px solid var(--line-soft);overflow:hidden}
+  .prog-c i{display:block;height:100%;border-radius:5px;transition:width .5s var(--ease);
+    background:linear-gradient(90deg,var(--brand-deep),var(--brand))}
+
+  /* ---- Identidade: quem somos ---- */
+  .ident{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3);margin-bottom:var(--s4)}
+  @media (max-width:820px){.ident{grid-template-columns:1fr}}
+  .idc{padding:var(--s4);cursor:pointer;transition:border-color .2s var(--ease)}
+  .idc:hover{border-color:var(--brand)}
+  .idc .l{font-family:var(--font-disp);font-weight:900;font-size:13px;letter-spacing:.7px;
+    text-transform:uppercase;transform:skewX(-6deg);color:var(--brand-hi)}
+  .idc .v{font-size:14.5px;line-height:1.6;color:var(--ink);margin-top:8px;white-space:pre-wrap}
+  .idc .v.vazio{color:var(--ink-3);font-size:13px;font-style:italic}
+  .idc.larga{grid-column:1/-1}
+  .vals{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+  .val{font-size:12.5px;font-weight:700;padding:6px 12px;border-radius:999px;
+    background:rgba(47,210,79,.1);border:1px solid rgba(47,210,79,.28);color:var(--brand-hi);cursor:pointer}
+  .val.mais{background:var(--bg-elev);border:1px dashed var(--line-str);color:var(--ink-3);font-weight:600}
+
+  /* ---- O Canvas, no desenho do modelo ---- */
+  .canvas{display:grid;gap:6px;margin-bottom:var(--s3);
+    grid-template-columns:repeat(4,1fr);
+    grid-template-areas:
+      "parcerias atividades   proposta relacionamento"
+      "parcerias recursos     proposta segmentos";}
+  .canvas .base{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:var(--s5)}
+  @media (max-width:1080px){
+    .canvas{grid-template-columns:repeat(2,1fr);
+      grid-template-areas:
+        "parcerias atividades"
+        "recursos  proposta"
+        "relacionamento segmentos";}
+  }
+  @media (max-width:640px){
+    .canvas{grid-template-columns:1fr;grid-template-areas:none}
+    .canvas .bl{grid-area:auto !important}
+    .canvas .base{grid-template-columns:1fr}
+  }
+  .bl{border:1px solid var(--line);border-radius:var(--r2);padding:12px 13px;
+    background:linear-gradient(180deg,var(--surface-2),var(--surface));
+    display:flex;flex-direction:column;min-height:150px}
+  .bl[data-b=parcerias]{grid-area:parcerias}
+  .bl[data-b=atividades]{grid-area:atividades}
+  .bl[data-b=recursos]{grid-area:recursos}
+  .bl[data-b=proposta]{grid-area:proposta;border-color:rgba(47,210,79,.35)}
+  .bl[data-b=relacionamento]{grid-area:relacionamento}
+  .bl[data-b=segmentos]{grid-area:segmentos}
+  .bl .t{font-family:var(--font-disp);font-weight:900;font-size:11.5px;letter-spacing:.6px;
+    text-transform:uppercase;transform:skewX(-6deg);color:var(--ink-2);display:flex;gap:6px;align-items:baseline}
+  .bl[data-b=proposta] .t{color:var(--brand-hi)}
+  .bl .t .n{font-family:var(--font-mono);font-size:10px;color:var(--ink-3);transform:none}
+  .bl .perg{font-size:11px;color:var(--ink-3);line-height:1.45;margin-top:5px}
+  .postits{display:flex;flex-direction:column;gap:5px;margin-top:9px;flex:1}
+  .pit{background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:9px;
+    padding:8px 10px;font-size:12.5px;line-height:1.4;color:var(--ink);cursor:pointer;
+    transition:border-color .15s var(--ease)}
+  .pit:hover{border-color:var(--brand)}
+  .pit .nt{display:block;font-size:10.5px;color:var(--ink-3);margin-top:3px}
+  .pit.mais{border-style:dashed;color:var(--ink-3);text-align:center;font-weight:600;background:none}
+  .real{margin-top:9px;padding-top:8px;border-top:1px dashed var(--line);
+    font-size:10.5px;color:var(--ink-3);font-family:var(--font-mono);line-height:1.5}
+  .real b{color:var(--brand-hi);font-weight:700}
+
+  .dlg{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);min-width:min(440px,92vw)}
+  .dlg h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;font-size:18px;transform:skewX(-5deg)}
+  .dlg-foot{display:flex;gap:var(--s2);justify-content:flex-end}
+  .dlg textarea{min-height:110px;resize:vertical}
+
+  /* Cartaz para imprimir e colar na parede */
+  #folha{display:none}
+  @media print{
+    .sidebar,.app{display:none !important}
+    #folha{display:block !important;background:#fff;color:#000;font-family:Georgia,serif}
+    #folha h1{font-size:24pt;margin:0 0 2pt}
+    #folha .sub{font-size:11pt;color:#555;margin-bottom:16pt}
+    #folha h2{font-size:11pt;text-transform:uppercase;letter-spacing:1.5pt;
+      border-bottom:1.5pt solid #000;padding-bottom:3pt;margin:14pt 0 6pt}
+    #folha p{font-size:11.5pt;line-height:1.5;margin:0 0 6pt}
+    #folha .g{display:grid;grid-template-columns:1fr 1fr;gap:10pt}
+    #folha .b{border:1pt solid #999;border-radius:4pt;padding:7pt 9pt;break-inside:avoid}
+    #folha .b .bt{font-size:9pt;text-transform:uppercase;letter-spacing:1pt;font-weight:700;margin-bottom:4pt}
+    #folha .b ul{margin:0;padding-left:13pt;font-size:10.5pt;line-height:1.5}
+    #folha .pe{margin-top:18pt;border-top:2pt solid #000;padding-top:6pt;font-size:9.5pt;color:#444}
+    @page{margin:14mm}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="pagehead">
+    <div><h1>Negócio</h1><div class="ph-sub">Quem somos · para quem fazemos · como o dinheiro entra</div></div>
+    <div class="ph-actions"><button class="btn ghost" id="imprimir" type="button">Imprimir</button></div>
+  </div>
+
+  <div class="barra">
+    <span class="label" id="pctTxt">—</span>
+    <div class="prog-c"><i id="pctBar" style="width:0"></i></div>
+  </div>
+
+  <div class="sec" style="margin-top:0"><h2>Quem somos</h2><span class="rule"></span>
+    <span class="meta">a cultura da casa — clique para escrever</span></div>
+  <div class="ident" id="ident"></div>
+
+  <div class="sec"><h2>Business Model Canvas</h2><span class="rule"></span>
+    <span class="meta">os nove blocos do modelo</span></div>
+  <div class="canvas" id="canvas"></div>
+  <div class="canvas base" id="canvasBase"></div>
+</div>
+
+<dialog id="dlgTexto">
+  <form class="dlg" method="dialog">
+    <h3 id="tT">Missão</h3>
+    <input type="hidden" id="tChave">
+    <div class="field"><label id="tPerg">Pergunta</label>
+      <textarea id="tValor" placeholder="Escreva com as suas palavras"></textarea></div>
+    <div class="dlg-foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn primary" id="tSalvar" value="ok" type="submit">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgItem">
+  <form class="dlg" method="dialog">
+    <h3 id="iT">Item</h3>
+    <input type="hidden" id="iId"><input type="hidden" id="iBloco">
+    <div class="hint" id="iPerg" style="margin:0"></div>
+    <div class="field"><label>O que é *</label>
+      <input id="iTexto" placeholder="Uma coisa por vez, curto"></div>
+    <div class="field"><label>Detalhe (opcional)</label>
+      <input id="iNota" placeholder="O porquê, o nome, o número"></div>
+    <div class="dlg-foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn danger" id="iApagar" value="cancel" type="button" hidden>Remover</button>
+      <button class="btn primary" id="iSalvar" value="ok" type="submit">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="folha"></div>
+
+<script src="/icons.js"></script>
+<script src="/nav.js"></script>
+<script>
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
+let DADOS=null;
+
+async function carregar(){
+  const d=await api('/api/canvas');
+  DADOS=d;
+  document.getElementById('pctBar').style.width=d.completo+'%';
+  document.getElementById('pctTxt').textContent=d.completo===100
+    ? 'Canvas completo' : `${d.completo}% preenchido — o que falta está com a pergunta à mostra`;
+
+  // Identidade + valores
+  const ident=document.getElementById('ident');
+  ident.innerHTML=d.textos.map(t=>`<div class="card idc${t.id==='manifesto'?' larga':''}" data-txt="${t.id}">
+      <div class="l">${esc(t.label)}</div>
+      <div class="v${t.valor?'':' vazio'}">${t.valor?esc(t.valor):esc(t.pergunta)}</div>
+    </div>`).join('')
+    +`<div class="card idc larga" style="cursor:default">
+      <div class="l">Valores</div>
+      <div class="vals">${d.valores.map(v=>`<span class="val" data-val="${v.id}">${esc(v.texto)}</span>`).join('')}
+        <span class="val mais" data-addval="1">+ acrescentar</span></div>
+      ${d.valores.length?'':'<div class="v vazio" style="margin-top:8px">No que a loja não abre mão. Três a cinco bastam.</div>'}
+    </div>`;
+  ident.querySelectorAll('[data-txt]').forEach(b=>b.onclick=()=>abrirTexto(b.dataset.txt));
+  ident.querySelectorAll('[data-val]').forEach(b=>b.onclick=()=>{
+    abrirItem(d.valores.find(v=>String(v.id)===b.dataset.val),'valores',
+      {label:'Valor',pergunta:'No que a loja não abre mão.'});});
+  ident.querySelector('[data-addval]').onclick=()=>abrirItem(null,'valores',
+    {label:'Valor',pergunta:'No que a loja não abre mão.'});
+
+  // Canvas
+  const bloco=(b)=>`<div class="card bl" data-b="${b.id}">
+      <div class="t">${esc(b.label)}${b.itens.length?`<span class="n">${b.itens.length}</span>`:''}</div>
+      ${b.itens.length?'':`<div class="perg">${esc(b.pergunta)}</div>`}
+      <div class="postits">
+        ${b.itens.map(i=>`<div class="pit" data-item="${i.id}" data-bl="${b.id}">${esc(i.texto)}
+          ${i.nota?`<span class="nt">${esc(i.nota)}</span>`:''}</div>`).join('')}
+        <div class="pit mais" data-add="${b.id}">+</div>
+      </div>
+      ${b.real?`<div class="real">${esc(b.real)}</div>`:''}
+    </div>`;
+  document.getElementById('canvas').innerHTML=d.blocos.filter(b=>b.area==='canvas').map(bloco).join('');
+  document.getElementById('canvasBase').innerHTML=d.blocos.filter(b=>b.area==='base').map(bloco).join('');
+
+  document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
+    const bl=d.blocos.find(x=>x.id===b.dataset.add);abrirItem(null,bl.id,bl);});
+  document.querySelectorAll('[data-item]').forEach(b=>b.onclick=()=>{
+    const bl=d.blocos.find(x=>x.id===b.dataset.bl);
+    abrirItem(bl.itens.find(i=>String(i.id)===b.dataset.item),bl.id,bl);});
+}
+
+/* textos longos */
+const dlgTexto=document.getElementById('dlgTexto');
+function abrirTexto(id){
+  const t=DADOS.textos.find(x=>x.id===id);
+  document.getElementById('tT').textContent=t.label;
+  document.getElementById('tChave').value=t.id;
+  document.getElementById('tPerg').textContent=t.pergunta;
+  document.getElementById('tValor').value=t.valor;
+  dlgTexto.showModal();
+  setTimeout(()=>document.getElementById('tValor').focus(),40);
+}
+document.getElementById('tSalvar').onclick=async e=>{
+  e.preventDefault();
+  try{
+    await api('/api/canvas/texto',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({chave:document.getElementById('tChave').value,
+        valor:document.getElementById('tValor').value})});
+    dlgTexto.close();carregar();
+  }catch(err){alert(err.message);}
+};
+
+/* itens dos blocos */
+const dlgItem=document.getElementById('dlgItem');
+function abrirItem(item,bloco,info){
+  document.getElementById('iT').textContent=info.label;
+  document.getElementById('iPerg').innerHTML=esc(info.pergunta)
+    +(info.exemplos?`<br><b>Por exemplo:</b> ${esc(info.exemplos)}`:'');
+  document.getElementById('iId').value=item?item.id:'';
+  document.getElementById('iBloco').value=bloco;
+  document.getElementById('iTexto').value=item?item.texto:'';
+  document.getElementById('iNota').value=item?(item.nota||''):'';
+  document.getElementById('iApagar').hidden=!item;
+  dlgItem.showModal();
+  setTimeout(()=>document.getElementById('iTexto').focus(),40);
+}
+document.getElementById('iSalvar').onclick=async e=>{
+  e.preventDefault();
+  const texto=document.getElementById('iTexto').value.trim();
+  if(!texto)return alert('Escreva alguma coisa.');
+  const id=document.getElementById('iId').value;
+  try{
+    await api('/api/canvas/item',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({...(id?{id}:{}),bloco:document.getElementById('iBloco').value,texto,
+        nota:document.getElementById('iNota').value})});
+    dlgItem.close();carregar();
+  }catch(err){alert(err.message);}
+};
+document.getElementById('iApagar').onclick=async()=>{
+  if(!confirm('Remover este item?'))return;
+  try{await api('/api/canvas/item/'+document.getElementById('iId').value,{method:'DELETE'});
+    dlgItem.close();carregar();}catch(e){alert(e.message);}
+};
+
+/* imprimir: o canvas vale mais na parede do que na tela */
+document.getElementById('imprimir').onclick=()=>{
+  const d=DADOS;
+  const texto=(id)=>{const t=d.textos.find(x=>x.id===id);return t&&t.valor?esc(t.valor):'—';};
+  const b=(id)=>{
+    const x=d.blocos.find(y=>y.id===id);
+    return `<div class="b"><div class="bt">${esc(x.label)}</div>${
+      x.itens.length?`<ul>${x.itens.map(i=>`<li>${esc(i.texto)}</li>`).join('')}</ul>`
+        :'<div style="font-size:10pt;color:#888">—</div>'}</div>`;
+  };
+  document.getElementById('folha').innerHTML=`
+    <h1>VN Store</h1>
+    <div class="sub">Visão do negócio · ${new Date().toLocaleDateString('pt-BR')}</div>
+    <h2>Missão</h2><p>${texto('missao')}</p>
+    <h2>Visão</h2><p>${texto('visao')}</p>
+    <h2>Valores</h2><p>${d.valores.length?d.valores.map(v=>esc(v.texto)).join(' · '):'—'}</p>
+    <h2>Como a gente joga</h2><p>${texto('manifesto')}</p>
+    <h2>Business Model Canvas</h2>
+    <div class="g">
+      ${b('segmentos')}${b('proposta')}${b('canais')}${b('relacionamento')}
+      ${b('recursos')}${b('atividades')}${b('parcerias')}
+      ${b('receitas')}${b('custos')}
+    </div>
+    <div class="pe">Documento vivo: quando a loja mudar, mude aqui primeiro.</div>`;
+  window.print();
+};
+
+carregar();
+</script>
+</body>
+</html>

@@ -75,6 +75,7 @@
       <a href="#estoque">Estoque</a>
       <a href="#compras">Entradas e custos</a>
       <a href="#crm">Clientes</a>
+      <a href="#negocio">Visão do negócio</a>
       <a href="#financeiro">Financeiro e lucro</a>
       <a href="#equipe">Equipe, metas e sonhos</a>
       <a href="#automatico">O que roda sozinho</a>
@@ -491,6 +492,67 @@
         <p>O que você registra aqui alimenta o mapa em cima — por isso ele é vivo.</p>
       </section>
 
+      <!-- NEGÓCIO -->
+      <section id="negocio" class="card">
+        <h2><span class="ico-box brand" id="i16"></span>Visão do negócio</h2>
+        <p>É a única tela que não fala do dia de hoje. Ela responde o que costuma ficar só na
+          cabeça do dono: <b>quem somos, para quem fazemos, e como o dinheiro entra</b>. Serve para
+          decidir com critério e para explicar a loja para alguém que chega — vendedor novo,
+          sócio, fornecedor.</p>
+
+        <h3>Quem somos</h3>
+        <p>Quatro campos, clique em cada um para escrever:</p>
+        <ul>
+          <li><b>Missão</b> — por que a loja existe. Uma frase.</li>
+          <li><b>Visão</b> — onde ela precisa chegar. Coloque prazo, senão vira desejo.</li>
+          <li><b>Valores</b> — no que não se abre mão. Três a cinco bastam; mais que isso ninguém
+            lembra.</li>
+          <li><b>Como a gente joga</b> — o jeito da casa: como atende, como fala, o que nunca faz.
+            É o que um vendedor novo precisa ler no primeiro dia.</li>
+        </ul>
+
+        <h3>O Business Model Canvas</h3>
+        <p>É o modelo do Osterwalder, o mesmo que empresa grande usa, nos nove blocos e no desenho
+          original. Cada bloco responde uma pergunta:</p>
+        <div class="tw"><table>
+          <tr><th>Bloco</th><th>A pergunta</th></tr>
+          <tr><td>Segmentos de clientes</td><td>Para quem você faz isso? Descreva as pessoas, não
+            "todo mundo".</td></tr>
+          <tr><td>Proposta de valor</td><td>Que problema você resolve, e por que comprariam de você
+            e não do vizinho?</td></tr>
+          <tr><td>Canais</td><td>Por onde o cliente descobre, escolhe, compra e recebe?</td></tr>
+          <tr><td>Relacionamento</td><td>Como você conquista, mantém e faz o cliente voltar?</td></tr>
+          <tr><td>Fontes de receita</td><td>De onde entra dinheiro, e como o cliente prefere
+            pagar?</td></tr>
+          <tr><td>Recursos principais</td><td>O que você precisa ter para entregar isso? Gente,
+            coisa, marca, dinheiro.</td></tr>
+          <tr><td>Atividades-chave</td><td>O que a loja precisa fazer todo dia para essa proposta
+            existir?</td></tr>
+          <tr><td>Parcerias principais</td><td>Quem são os parceiros e fornecedores sem os quais a
+            loja não roda?</td></tr>
+          <tr><td>Estrutura de custos</td><td>Para onde o dinheiro vai? O que é fixo e o que cresce
+            com a venda?</td></tr>
+        </table></div>
+        <p>Cada bloco é uma pilha de bilhetes: clique no <b>+</b> para acrescentar, no bilhete para
+          editar ou remover. Uma ideia por bilhete, curta. Enquanto o bloco está vazio, a
+          <b>pergunta fica à mostra</b>; quando você escreve, ela some e dá lugar ao conteúdo.</p>
+
+        <div class="aviso dica"><span class="ico" id="d12"></span>
+          <div><b>O sistema não escreve por você.</b> Nenhum bloco vem preenchido com texto
+          inventado — isso é pensamento seu. O que ele faz é mostrar, no pé de alguns blocos, o
+          <b>número de verdade</b> que já tem: de onde veio a receita dos últimos 90 dias, quanto de
+          despesa entrou no mês, quantas pessoas há na base e por quais canais elas chegaram. Assim
+          você escreve olhando para o que está acontecendo, não para o que imagina.</div></div>
+
+        <h3>Imprimir</h3>
+        <p>O botão <b>Imprimir</b> gera uma folha limpa com a identidade e o canvas inteiro. Canvas
+          serve mais na parede e na mão de quem trabalha com você do que fechado num sistema.</p>
+
+        <p>A barra no topo mostra <b>quanto do canvas já está preenchido</b>. Não precisa terminar
+          de uma vez: escreva o que sabe hoje e volte quando a loja mudar. Documento vivo — quando a
+          operação mudar, mude aqui primeiro.</p>
+      </section>
+
       <!-- EQUIPE -->
       <section id="equipe" class="card">
         <h2><span class="ico-box brand" id="i14"></span>Equipe e metas</h2>
@@ -646,9 +708,9 @@
 <script src="/nav.js"></script>
 <script>
 const icones={i1:'conectar',i2:'inicio',i3:'pdv',i4:'estoque',i5:'clientes',i6:'sino',
-  i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa',i12:'caixa_vazia',i13:'grafico',i14:'clientes',i15:'conversa'};
+  i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa',i12:'caixa_vazia',i13:'grafico',i14:'clientes',i15:'conversa',i16:'grafico'};
 Object.entries(icones).forEach(([id,n])=>{const e=document.getElementById(id);if(e)e.innerHTML=ICO(n,17);});
-['d1','d2','d3','d4','d5','d6','d7','d8','d9','d10','d11'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['d1','d2','d3','d4','d5','d6','d7','d8','d9','d10','d11','d12'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
 ['a1','a2','a4','a5'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
 
 // Marca a seção visível no índice

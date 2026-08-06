@@ -1716,6 +1716,120 @@ app.delete('/api/crm/nota/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ==================== VISÃO DO NEGÓCIO ====================
+// Identidade (quem somos) + o Business Model Canvas, nos nove blocos do
+// modelo do Osterwalder. É documento de pensamento: o sistema não
+// inventa nada aqui — só oferece o que ele já sabe de fato.
+const CANVAS = [
+  { id: 'parcerias', label: 'Parcerias principais', area: 'canvas',
+    pergunta: 'Quem são os parceiros e fornecedores sem os quais a loja não roda?',
+    exemplos: 'Fornecedores, fábrica, transportadora, loja parceira, influenciador' },
+  { id: 'atividades', label: 'Atividades-chave', area: 'canvas',
+    pergunta: 'O que a loja precisa fazer todo dia para a proposta de valor existir?',
+    exemplos: 'Garimpar peça, fotografar, postar, atender no direct, embalar' },
+  { id: 'recursos', label: 'Recursos principais', area: 'canvas',
+    pergunta: 'O que você precisa ter para entregar isso? Gente, coisa, marca, dinheiro.',
+    exemplos: 'Estoque, ponto, o @ da loja, equipe, capital de giro, fornecedor fiel' },
+  { id: 'proposta', label: 'Proposta de valor', area: 'canvas',
+    pergunta: 'Que problema você resolve, e por que comprariam de você e não do vizinho?',
+    exemplos: 'Peça original, curadoria, entrega no mesmo dia, atendimento humano' },
+  { id: 'relacionamento', label: 'Relacionamento', area: 'canvas',
+    pergunta: 'Como você conquista, mantém e faz o cliente voltar?',
+    exemplos: 'Direct pessoal, pós-venda, fiado para cliente antigo, lançamento antes' },
+  { id: 'canais', label: 'Canais', area: 'canvas',
+    pergunta: 'Por onde o cliente descobre, escolhe, compra e recebe?',
+    exemplos: 'Instagram, WhatsApp, loja física, site, entrega' },
+  { id: 'segmentos', label: 'Segmentos de clientes', area: 'canvas',
+    pergunta: 'Para quem você faz isso? Descreva as pessoas, não "todo mundo".',
+    exemplos: 'Jovem de 16 a 25 do bairro, revendedor, quem compra presente' },
+  { id: 'custos', label: 'Estrutura de custos', area: 'base',
+    pergunta: 'Para onde o dinheiro vai? O que é fixo e o que cresce com a venda?',
+    exemplos: 'Mercadoria, aluguel, anúncio, embalagem, taxa da maquininha, salário' },
+  { id: 'receitas', label: 'Fontes de receita', area: 'base',
+    pergunta: 'De onde entra dinheiro, e como o cliente prefere pagar?',
+    exemplos: 'Venda no balcão, venda no site, encomenda, atacado' },
+];
+const TEXTOS = [
+  { id: 'missao', label: 'Missão', pergunta: 'Por que a loja existe? Em uma frase.' },
+  { id: 'visao', label: 'Visão', pergunta: 'Onde ela precisa chegar? Coloque prazo.' },
+  { id: 'manifesto', label: 'Como a gente joga', pergunta: 'O jeito da casa: como atende, como fala, o que nunca faz.' },
+];
+
+app.get('/api/canvas', (req, res) => {
+  const textos = {};
+  for (const r of db.prepare('SELECT chave, valor FROM canvas_texts').all()) textos[r.chave] = r.valor;
+  const itens = db.prepare('SELECT * FROM canvas_items ORDER BY bloco, ordem, id').all();
+  const doBloco = (b) => itens.filter((x) => x.bloco === b)
+    .map((x) => ({ id: x.id, texto: x.texto, nota: x.nota || '' }));
+
+  // Só o que o sistema mede de verdade — o resto é pensamento do dono.
+  const d90 = new Date(Date.now() - 90 * 864e5).toISOString();
+  const ym = new Date().toISOString().slice(0, 7);
+  const vendas = db.prepare(`SELECT channel, COUNT(*) n, COALESCE(SUM(total),0) v FROM sales
+    WHERE payment_status <> 'cancelado' AND created_at >= ? GROUP BY channel`).all(d90);
+  const totalV = vendas.reduce((s, x) => s + x.v, 0);
+  const pessoas = db.prepare(`SELECT COUNT(*) n FROM customers c WHERE ${SQL_PESSOA}`).get().n;
+  const recompra = db.prepare(`SELECT COUNT(*) n FROM (
+    SELECT customer_id FROM sales WHERE customer_id IS NOT NULL AND payment_status <> 'cancelado'
+    GROUP BY customer_id HAVING COUNT(*) > 1)`).get().n;
+  const despesa = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM financial_entries
+    WHERE type = 'despesa' AND substr(created_at,1,7) = ?`).get(ym).v;
+  const canais = db.prepare(`SELECT canal, COUNT(*) n FROM atendimentos WHERE day >= ?
+    GROUP BY canal ORDER BY n DESC`).all(d90.slice(0, 10));
+
+  const real = {
+    receitas: totalV > 0
+      ? vendas.map((x) => `${x.channel === 'site' ? 'Site' : 'Balcão'}: ${brl(x.v)} (${Math.round((x.v / totalV) * 100)}%)`).join(' · ')
+      : null,
+    custos: despesa > 0 ? `${brl(despesa)} de despesa lançada neste mês` : null,
+    segmentos: pessoas > 0 ? `${pessoas} pessoa(s) na base · ${recompra} já compraram mais de uma vez` : null,
+    canais: canais.length ? canais.map((c) => `${c.canal}: ${c.n}`).join(' · ') : null,
+  };
+
+  const preenchidos = CANVAS.filter((b) => doBloco(b.id).length).length
+    + TEXTOS.filter((t) => (textos[t.id] || '').trim()).length;
+  res.json({
+    textos: TEXTOS.map((t) => ({ ...t, valor: textos[t.id] || '' })),
+    valores: doBloco('valores'),
+    blocos: CANVAS.map((b) => ({ ...b, itens: doBloco(b.id), real: real[b.id] || null })),
+    completo: Math.round((preenchidos / (CANVAS.length + TEXTOS.length)) * 100),
+  });
+});
+
+app.post('/api/canvas/texto', (req, res) => {
+  const b = req.body || {};
+  const chave = String(b.chave || '').trim();
+  if (!TEXTOS.some((t) => t.id === chave)) return res.status(400).json({ error: 'Campo desconhecido.' });
+  db.prepare(`INSERT INTO canvas_texts (chave, valor, updated_at) VALUES (?,?,?)
+    ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor, updated_at = excluded.updated_at`)
+    .run(chave, String(b.valor || '').trim(), now());
+  res.json({ ok: true });
+});
+
+app.post('/api/canvas/item', (req, res) => {
+  const b = req.body || {};
+  const bloco = String(b.bloco || '').trim();
+  if (bloco !== 'valores' && !CANVAS.some((x) => x.id === bloco)) {
+    return res.status(400).json({ error: 'Bloco desconhecido.' });
+  }
+  const texto = String(b.texto || '').trim();
+  if (!texto) return res.status(400).json({ error: 'Escreva alguma coisa.' });
+  const nota = String(b.nota || '').trim();
+  if (b.id) {
+    db.prepare('UPDATE canvas_items SET texto = ?, nota = ? WHERE id = ?').run(texto, nota, b.id);
+    return res.json({ ok: true, id: Number(b.id) });
+  }
+  const prox = db.prepare('SELECT COALESCE(MAX(ordem),-1)+1 n FROM canvas_items WHERE bloco = ?').get(bloco).n;
+  const id = db.prepare('INSERT INTO canvas_items (bloco, ordem, texto, nota, created_at) VALUES (?,?,?,?,?)')
+    .run(bloco, prox, texto, nota, now()).lastInsertRowid;
+  res.json({ ok: true, id });
+});
+
+app.delete('/api/canvas/item/:id', (req, res) => {
+  db.prepare('DELETE FROM canvas_items WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
 // ==================== MAPA DA ESTRATÉGIA ====================
 // O quadro mostra as conversas de hoje; o mapa mostra o CAMINHO que a
 // loja construiu para uma pessoa chegar até ali. O desenho é do dono —
@@ -2618,6 +2732,7 @@ app.get('/funil', page('clientes.html'));
 app.get('/produtos', page('produtos.html'));
 app.get('/estoque', page('produtos.html'));
 app.get('/financeiro', page('financeiro.html'));
+app.get('/negocio', page('negocio.html'));
 app.get('/agentes', page('agentes.html'));
 app.get('/lembretes', page('index.html'));   // virou o painel do Início
 app.get('/compras', page('produtos.html'));   // virou a aba Entradas
