@@ -857,11 +857,7 @@ app.get('/api/purchases/:id', (req, res) => {
 app.get('/api/customers', (req, res) => {
   const q = (req.query.q || '').trim();
   const like = `%${q}%`;
-  // Compras sem comprador identificado (visitante) não entram no
-  // ranking de pessoas — mas continuam no faturamento.
-  const SEM_NOME = `lower(trim(c.name)) NOT IN
-    ('não informado','nao informado','não informada','nao informada','sem nome','cliente',
-     'cliente do site','consumidor final','consumidor','visitante','guest','n/a','na','-','')`;
+  const SEM_NOME = SQL_PESSOA;
 
   // "Gastou" = tudo que a pessoa levou, pago ou fiado — as peças já
   // saíram daqui, então o fiado também conta para a posição no ranking.
@@ -1297,6 +1293,28 @@ app.post('/api/metas', (req, res) => {
   res.json({ ok: true });
 });
 
+// Compras sem comprador identificado (visitante, consumidor final) não
+// são pessoa: não entram em ranking, segmento nem régua de contato —
+// mas continuam contando no faturamento.
+const SQL_PESSOA = `lower(trim(c.name)) NOT IN
+  ('não informado','nao informado','não informada','nao informada','sem nome','cliente',
+   'cliente do site','consumidor final','consumidor','visitante','guest','n/a','na','-','')`;
+
+// ==================== O FUNIL DA LOJA ====================
+// Seis etapas, em ordem. As quatro primeiras são conversa viva; as duas
+// últimas fecham a linha. Tudo no sistema que fala de funil olha aqui.
+const PIPE = [
+  { id: 'novo', label: 'Novo contato', dica: 'Chegou e ainda não foi respondido' },
+  { id: 'atendimento', label: 'Atendendo', dica: 'Conversa rolando, descobrindo o que a pessoa quer' },
+  { id: 'proposta', label: 'Proposta', dica: 'Mandou peça, foto ou preço' },
+  { id: 'fechando', label: 'Fechando', dica: 'Combinou pagamento, entrega ou retirada' },
+  { id: 'vendido', label: 'Ganho', dica: 'Virou venda' },
+  { id: 'perdido', label: 'Perdido', dica: 'Não deu — com o motivo anotado' },
+];
+const STAGES = PIPE.map((s) => s.id);
+const SQL_ABERTOS = `('novo','atendimento','proposta','fechando')`;
+const SQL_PROPOSTA = `('proposta','fechando','vendido')`;   // chegou a virar proposta
+
 // ==================== SONHO → META ====================
 // A meta não nasce de planilha, nasce de uma pergunta: o que a pessoa
 // quer conquistar e quanto custa. Daí a conta desce sozinha:
@@ -1324,11 +1342,11 @@ function taxasDe(memberId, dias = 180) {
     WHERE payment_status = 'pago' AND created_at >= ?`).get(desde);
 
   const fMeu = db.prepare(`SELECT COUNT(*) atend,
-      SUM(CASE WHEN stage IN ('proposta','vendido') THEN 1 ELSE 0 END) prop,
+      SUM(CASE WHEN stage IN ${SQL_PROPOSTA} THEN 1 ELSE 0 END) prop,
       SUM(CASE WHEN stage = 'vendido' THEN 1 ELSE 0 END) vend
     FROM atendimentos WHERE member_id = ? AND day >= ?`).get(memberId, desdeDia);
   const fLoja = db.prepare(`SELECT COUNT(*) atend,
-      SUM(CASE WHEN stage IN ('proposta','vendido') THEN 1 ELSE 0 END) prop,
+      SUM(CASE WHEN stage IN ${SQL_PROPOSTA} THEN 1 ELSE 0 END) prop,
       SUM(CASE WHEN stage = 'vendido' THEN 1 ELSE 0 END) vend
     FROM atendimentos WHERE day >= ?`).get(desdeDia);
 
@@ -1393,7 +1411,7 @@ app.get('/api/sonhos', (req, res) => {
     const t = taxasDe(m.id);
     const s = porMembro.get(String(m.id)) || null;
     const hojeF = db.prepare(`SELECT COUNT(*) atend,
-        SUM(CASE WHEN stage IN ('proposta','vendido') THEN 1 ELSE 0 END) prop,
+        SUM(CASE WHEN stage IN ${SQL_PROPOSTA} THEN 1 ELSE 0 END) prop,
         SUM(CASE WHEN stage = 'vendido' THEN 1 ELSE 0 END) vend
       FROM atendimentos WHERE member_id = ? AND day = ?`).get(m.id, hoje);
     const base = {
@@ -1483,7 +1501,6 @@ app.post('/api/sonhos/:memberId/meta', (req, res) => {
 // Cada pessoa atendida vira uma linha. É o que transforma "achismo de
 // conversão" em número — e o que mostra o que cada lead está comprando.
 const CANAIS = ['direct', 'whatsapp', 'loja', 'site', 'indicacao'];
-const STAGES = ['atendimento', 'proposta', 'vendido', 'perdido'];
 
 app.get('/api/atendimentos', (req, res) => {
   const dias = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
@@ -1500,7 +1517,7 @@ app.get('/api/atendimentos', (req, res) => {
 
   const hoje = new Date().toISOString().slice(0, 10);
   const resumo = db.prepare(`SELECT COUNT(*) atend,
-      SUM(CASE WHEN stage IN ('proposta','vendido') THEN 1 ELSE 0 END) prop,
+      SUM(CASE WHEN stage IN ${SQL_PROPOSTA} THEN 1 ELSE 0 END) prop,
       SUM(CASE WHEN stage = 'vendido' THEN 1 ELSE 0 END) vend,
       SUM(CASE WHEN stage = 'perdido' THEN 1 ELSE 0 END) perd
     FROM atendimentos WHERE day >= ?${req.query.member_id ? ' AND member_id = ?' : ''}`)
@@ -1531,11 +1548,20 @@ app.post('/api/atendimentos', (req, res) => {
   if (!nome && !insta) return res.status(400).json({ error: 'Diga quem foi atendido (nome ou @).' });
   const canal = CANAIS.includes(b.canal) ? b.canal : 'direct';
   const stage = STAGES.includes(b.stage) ? b.stage : 'atendimento';
+  // Se essa pessoa já é cliente, amarra na ficha dela — é isso que faz a
+  // conversa aparecer no histórico e o CRM enxergar o relacionamento.
+  let cid = b.customer_id ? Number(b.customer_id) : null;
+  if (!cid) {
+    const ach = insta
+      ? db.prepare('SELECT id FROM customers WHERE lower(instagram) = lower(?)').get(insta)
+      : db.prepare('SELECT id FROM customers WHERE lower(trim(name)) = lower(trim(?))').get(nome);
+    if (ach) cid = ach.id;
+  }
   const ts = now();
   const id = db.prepare(`INSERT INTO atendimentos
     (member_id, customer_id, nome, instagram, canal, querendo, stage, valor, day, created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?)`)
-    .run(mid, b.customer_id ? Number(b.customer_id) : null, nome, insta, canal,
+    .run(mid, cid, nome, insta, canal,
       String(b.querendo || '').trim(), stage, money(b.valor), ts.slice(0, 10), ts).lastInsertRowid;
   res.json({ ok: true, atendimento: db.prepare('SELECT * FROM atendimentos WHERE id = ?').get(id) });
 });
@@ -1562,6 +1588,403 @@ app.patch('/api/atendimentos/:id', (req, res) => {
 app.delete('/api/atendimentos/:id', (req, res) => {
   db.prepare('DELETE FROM atendimentos WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+});
+
+// ==================== CRM ====================
+// A pergunta que o CRM responde não é "quem são meus clientes" — é
+// "com quem eu preciso falar hoje, e o que eu digo". Todo o resto
+// (segmento, ciclo, ficha) existe para chegar nessa lista.
+
+const CICLO_MIN = 7;        // ninguém compra streetwear a cada 3 dias
+const CICLO_PADRAO = 45;    // chute inicial, até a loja ter histórico
+const dia = (d) => new Date(d).toISOString().slice(0, 10);
+const diasEntre = (a, b) => Math.floor((new Date(b) - new Date(a)) / 864e5);
+
+const SEGMENTOS = [
+  { id: 'novo', label: 'Novos', dica: 'Primeira compra nos últimos 30 dias — é agora que vira cliente ou some' },
+  { id: 'ativo', label: 'Ativos', dica: 'Comprando dentro do ritmo dele' },
+  { id: 'esfriando', label: 'Esfriando', dica: 'Passou do ritmo dele — ainda dá para trazer de volta fácil' },
+  { id: 'sumido', label: 'Sumidos', dica: 'Muito além do ritmo — precisa de um bom motivo para voltar' },
+  { id: 'perdido', label: 'Perdidos', dica: 'Faz tempo demais — só volta com oferta forte' },
+  { id: 'lead', label: 'Leads', dica: 'Foi atendido e nunca comprou' },
+  { id: 'cadastro', label: 'Só cadastro', dica: 'Está no sistema e nunca comprou nem foi atendido' },
+];
+
+// A régua: cada motivo tem urgência, e a fala que o vendedor manda.
+// Sem a fala pronta, ninguém executa.
+function falaDe(tipo, c, extra = {}) {
+  const nome = String(c.name || '').replace(/^@/, '').split(' ')[0];
+  const marca = extra.marca ? extra.marca : 'coisa nova';
+  switch (tipo) {
+    case 'cobranca': return `Oi ${nome}! Passando pra combinar o restinho da sua compra (${brl(extra.valor)}). Te mando o pix?`;
+    case 'agendado': return `Oi ${nome}! Como combinamos, tô te chamando. ${extra.nota || ''}`.trim();
+    case 'aniversario': return `${nome}, parabéns! 🎉 Separei uma condição especial pra você essa semana.`;
+    case 'pos_venda': return `E aí ${nome}, caiu bem ${extra.peca ? 'a ' + extra.peca : 'a peça'}? Qualquer coisa a gente resolve.`;
+    case 'esfriando': return `${nome}, chegou coisa nova da ${marca} e lembrei de você. Quer ver?`;
+    case 'sumido': return `${nome}, faz tempo! Tô com peça nova da ${marca}. Te mando as fotos?`;
+    case 'lead_parado': return `${nome}, conseguiu ver o que te mandei? Ainda tenho aqui.`;
+    default: return `Oi ${nome}!`;
+  }
+}
+const brl = (n) => 'R$ ' + money(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Junta tudo que o CRM precisa saber de cada pessoa, de uma vez só.
+function crmBase() {
+  const hoje = dia(Date.now());
+  const rows = db.prepare(`
+    SELECT c.*,
+      COUNT(CASE WHEN s.payment_status IN ('pago','pendente') THEN s.id END) compras,
+      COALESCE(SUM(CASE WHEN s.payment_status IN ('pago','pendente') THEN s.total ELSE 0 END),0) gasto,
+      COALESCE(SUM(CASE WHEN s.payment_status = 'pendente' THEN s.total ELSE 0 END),0) aberto,
+      MIN(CASE WHEN s.payment_status IN ('pago','pendente') THEN s.created_at END) primeira,
+      MAX(CASE WHEN s.payment_status IN ('pago','pendente') THEN s.created_at END) ultima
+    FROM customers c LEFT JOIN sales s ON s.customer_id = c.id
+    WHERE ${SQL_PESSOA}
+    GROUP BY c.id`).all();
+
+  const atend = new Map(db.prepare(`SELECT customer_id, COUNT(*) n, MAX(created_at) ultimo
+    FROM atendimentos WHERE customer_id IS NOT NULL GROUP BY customer_id`)
+    .all().map((r) => [String(r.customer_id), r]));
+  const notas = new Map(db.prepare(`SELECT customer_id, MAX(created_at) ultimo,
+      MAX(CASE WHEN kind = 'pos_venda' THEN created_at END) ultimo_pos
+    FROM crm_notes GROUP BY customer_id`).all().map((r) => [String(r.customer_id), r]));
+
+  // Marca preferida de cada um — é o gancho da conversa.
+  const marcas = new Map();
+  for (const r of db.prepare(`SELECT s.customer_id cid, p.brand marca, SUM(si.qty) n
+      FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id
+      JOIN variants v ON v.id = si.variant_id
+      JOIN products p ON p.id = v.product_id
+      WHERE s.customer_id IS NOT NULL AND COALESCE(p.brand,'') <> ''
+        AND s.payment_status IN ('pago','pendente')
+      GROUP BY s.customer_id, p.brand`).all()) {
+    const at = marcas.get(String(r.cid));
+    if (!at || r.n > at.n) marcas.set(String(r.cid), r);
+  }
+  // Última peça levada — serve para o pós-venda soar de gente.
+  const ultimaPeca = new Map();
+  for (const r of db.prepare(`SELECT s.customer_id cid, si.name peca, s.created_at
+      FROM sale_items si JOIN sales s ON s.id = si.sale_id
+      WHERE s.customer_id IS NOT NULL AND s.payment_status IN ('pago','pendente')
+      ORDER BY s.created_at ASC`).all()) ultimaPeca.set(String(r.cid), r.peca);
+
+  // Ciclo da loja: a mediana do intervalo entre compras de quem repetiu.
+  const ciclos = rows.filter((r) => r.compras >= 2 && r.primeira && r.ultima)
+    .map((r) => Math.max(CICLO_MIN, diasEntre(r.primeira, r.ultima) / (r.compras - 1)))
+    .sort((a, b) => a - b);
+  const cicloLoja = ciclos.length ? Math.round(ciclos[Math.floor(ciclos.length / 2)]) : CICLO_PADRAO;
+
+  // VIP: os 10% que mais gastaram (só faz sentido com alguma massa).
+  const gastos = rows.filter((r) => r.compras > 0).map((r) => r.gasto).sort((a, b) => b - a);
+  const corteVip = gastos.length >= 8 ? gastos[Math.max(0, Math.ceil(gastos.length * 0.1) - 1)] : Infinity;
+
+  const lista = rows.map((r) => {
+    const k = String(r.id);
+    const a = atend.get(k), nt = notas.get(k);
+    const ciclo = r.compras >= 2 ? Math.round(Math.max(CICLO_MIN, diasEntre(r.primeira, r.ultima) / (r.compras - 1))) : cicloLoja;
+    const dias = r.ultima ? diasEntre(r.ultima, Date.now()) : null;
+    let seg;
+    if (!r.compras) seg = (a && a.n) ? 'lead' : 'cadastro';
+    else if (r.compras === 1 && dias <= 30) seg = 'novo';
+    else if (dias <= ciclo) seg = 'ativo';
+    else if (dias <= ciclo * 1.5) seg = 'esfriando';
+    else if (dias <= ciclo * 3) seg = 'sumido';
+    else seg = 'perdido';
+    return {
+      ...r, ciclo, dias, seg,
+      vip: r.compras > 0 && r.gasto >= corteVip,
+      ticket: r.compras ? money(r.gasto / r.compras) : 0,
+      atendimentos: a ? a.n : 0,
+      ultimo_contato: nt ? nt.ultimo : null,
+      ultimo_pos: nt ? nt.ultimo_pos : null,
+      marca: marcas.get(k) ? marcas.get(k).marca : '',
+      peca: ultimaPeca.get(k) || '',
+    };
+  });
+  return { hoje, lista, cicloLoja, corteVip };
+}
+
+// A fila do dia. Uma linha por pessoa — a razão mais urgente vence.
+function reguaDeHoje(base) {
+  const { hoje, lista } = base;
+  const fiado = new Map(db.prepare(`SELECT customer_id cid, MIN(created_at) desde,
+      SUM(total) valor, COUNT(*) n FROM sales
+    WHERE payment_status = 'pendente' AND customer_id IS NOT NULL GROUP BY customer_id`)
+    .all().map((r) => [String(r.cid), r]));
+  // Conversa que ficou parada no funil também é motivo de contato.
+  const parados = new Map(db.prepare(`SELECT customer_id cid, MAX(COALESCE(updated_at, created_at)) mexeu
+    FROM atendimentos WHERE stage IN ${SQL_ABERTOS} AND customer_id IS NOT NULL GROUP BY customer_id`)
+    .all().map((r) => [String(r.cid), r]));
+
+  const desdeContato = (c) => (c.ultimo_contato ? diasEntre(c.ultimo_contato, Date.now()) : 9999);
+  const tarefas = [];
+  for (const c of lista) {
+    const k = String(c.id);
+    const f = fiado.get(k);
+    const t = (tipo, urgencia, porque, extra) => ({
+      tipo, urgencia, porque,
+      cliente_id: c.id, nome: c.name, instagram: c.instagram, phone: c.phone,
+      seg: c.seg, vip: c.vip, gasto: money(c.gasto), compras: c.compras, dias: c.dias,
+      fala: falaDe(tipo, c, extra || {}),
+    });
+
+    // "Adiar" é agendar para depois: enquanto a data não chega, a pessoa
+    // não aparece por motivo nenhum — senão o botão de adiar mentiria.
+    // A dívida continua visível no total a receber e no financeiro.
+    const adiado = c.next_contact && c.next_contact > hoje;
+
+    // 1. Dinheiro na rua vem antes de tudo — e não respeita opt-out.
+    if (f && diasEntre(f.desde, Date.now()) >= 7 && !adiado) {
+      tarefas.push(t('cobranca', 'alta', `${brl(f.valor)} em aberto há ${diasEntre(f.desde, Date.now())} dias`,
+        { valor: f.valor })); continue;
+    }
+    // Quem pediu para não ser incomodado só entra por cobrança.
+    if (c.no_contact || adiado) continue;
+
+    // 2. O que você mesmo agendou.
+    if (c.next_contact && c.next_contact <= hoje) {
+      tarefas.push(t('agendado', 'alta',
+        c.next_contact === hoje ? 'Você agendou para hoje' : `Agendado para ${c.next_contact} e ainda não foi feito`,
+        { nota: '' })); continue;
+    }
+    // 3. Aniversário na semana.
+    if (c.birthday) {
+      const md = String(c.birthday).slice(-5);
+      const falta = (() => {
+        const [m, d] = md.split('-').map(Number);
+        if (!m || !d) return null;
+        const hj = new Date(hoje + 'T00:00:00');
+        let alvo = new Date(hj.getFullYear(), m - 1, d);
+        if (alvo < hj) alvo = new Date(hj.getFullYear() + 1, m - 1, d);
+        return Math.round((alvo - hj) / 864e5);
+      })();
+      if (falta !== null && falta <= 7) {
+        tarefas.push(t('aniversario', falta === 0 ? 'alta' : 'media',
+          falta === 0 ? 'É hoje!' : `Faz aniversário em ${falta} dia(s)`)); continue;
+      }
+    }
+    // 4. Pós-venda: entre 5 e 12 dias da compra, uma vez só.
+    if (c.ultima && c.dias >= 5 && c.dias <= 12 && (!c.ultimo_pos || c.ultimo_pos < c.ultima)) {
+      tarefas.push(t('pos_venda', 'media', `Comprou há ${c.dias} dias e ninguém deu retorno`,
+        { peca: c.peca })); continue;
+    }
+    // 5. Conversa parada no funil há 3 dias.
+    const par = parados.get(k);
+    if (par && diasEntre(par.mexeu, Date.now()) >= 3) {
+      tarefas.push(t('lead_parado', 'media',
+        `Conversa parada há ${diasEntre(par.mexeu, Date.now())} dias no funil`)); continue;
+    }
+    // 6 e 7. Esfriou ou sumiu — e faz tempo que ninguém chamou.
+    if (c.seg === 'esfriando' && desdeContato(c) >= 15) {
+      tarefas.push(t('esfriando', 'media',
+        `Costuma comprar a cada ${c.ciclo} dias e já são ${c.dias}`, { marca: c.marca })); continue;
+    }
+    if (c.seg === 'sumido' && desdeContato(c) >= 30) {
+      tarefas.push(t('sumido', 'baixa',
+        `${c.dias} dias sem comprar (ritmo dele é ${c.ciclo})`, { marca: c.marca })); continue;
+    }
+  }
+  const peso = { alta: 0, media: 1, baixa: 2 };
+  tarefas.sort((a, b) => peso[a.urgencia] - peso[b.urgencia] || b.gasto - a.gasto);
+  return tarefas;
+}
+
+app.get('/api/crm', (req, res) => {
+  const base = crmBase();
+  const tarefas = reguaDeHoje(base);
+  const porSeg = new Map(SEGMENTOS.map((s) => [s.id, { ...s, n: 0, valor: 0 }]));
+  for (const c of base.lista) {
+    const s = porSeg.get(c.seg);
+    if (s) { s.n += 1; s.valor = money(s.valor + c.gasto); }
+  }
+  const pipe = db.prepare(`SELECT stage, COUNT(*) n, COALESCE(SUM(valor),0) valor
+    FROM atendimentos GROUP BY stage`).all();
+  const pipeMap = new Map(pipe.map((p) => [p.stage, p]));
+
+  const compradores = base.lista.filter((c) => c.compras > 0);
+  const recorrentes = compradores.filter((c) => c.compras >= 2).length;
+  res.json({
+    ciclo_loja: base.cicloLoja,
+    numeros: {
+      clientes: base.lista.length,
+      compradores: compradores.length,
+      recorrentes,
+      recompra_pct: compradores.length ? Math.round((recorrentes / compradores.length) * 100) : null,
+      vips: base.lista.filter((c) => c.vip).length,
+      em_risco: base.lista.filter((c) => c.seg === 'esfriando' || c.seg === 'sumido').length,
+      a_receber: money(base.lista.reduce((s, c) => s + c.aberto, 0)),
+      ticket: compradores.length
+        ? money(compradores.reduce((s, c) => s + c.gasto, 0) / compradores.reduce((s, c) => s + c.compras, 0)) : 0,
+    },
+    segmentos: SEGMENTOS.map((s) => porSeg.get(s.id)),
+    pipeline: PIPE.map((p) => ({
+      ...p, n: pipeMap.get(p.id) ? pipeMap.get(p.id).n : 0,
+      valor: pipeMap.get(p.id) ? money(pipeMap.get(p.id).valor) : 0,
+    })),
+    hoje: tarefas.slice(0, 60),
+    total_tarefas: tarefas.length,
+  });
+});
+
+app.get('/api/crm/clientes', (req, res) => {
+  const base = crmBase();
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const seg = String(req.query.seg || '');
+  let lista = base.lista;
+  if (seg && seg !== 'todos') lista = lista.filter((c) => (seg === 'vip' ? c.vip : c.seg === seg));
+  if (q) {
+    lista = lista.filter((c) => [c.name, c.instagram, c.phone, c.email, c.tags]
+      .some((v) => String(v || '').toLowerCase().includes(q)));
+  }
+  lista.sort((a, b) => b.gasto - a.gasto || String(a.name).localeCompare(String(b.name)));
+  res.json({
+    total: lista.length,
+    clientes: lista.slice(0, 300).map((c) => ({
+      id: c.id, nome: c.name, instagram: c.instagram, phone: c.phone,
+      seg: c.seg, vip: c.vip, compras: c.compras, gasto: money(c.gasto),
+      aberto: money(c.aberto), ticket: c.ticket, dias: c.dias, ciclo: c.ciclo,
+      marca: c.marca, tags: c.tags, next_contact: c.next_contact, no_contact: c.no_contact,
+    })),
+  });
+});
+
+// A ficha 360: tudo que a loja sabe da pessoa, em uma tela.
+app.get('/api/crm/cliente/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const base = crmBase();
+  const c = base.lista.find((x) => x.id === id)
+    || db.prepare('SELECT * FROM customers WHERE id = ?').get(id);
+  if (!c) return res.status(404).json({ error: 'Cliente não encontrado.' });
+
+  const vendas = db.prepare(`SELECT id, code, total, payment_method, payment_status, created_at, seller_name
+    FROM sales WHERE customer_id = ? ORDER BY created_at DESC LIMIT 60`).all(id);
+  const itens = db.prepare(`SELECT si.name, si.qty, si.unit_price, s.created_at, s.code,
+      COALESCE(p.brand,'') marca, COALESCE(v.variant_name,'') tamanho
+    FROM sale_items si JOIN sales s ON s.id = si.sale_id
+    LEFT JOIN variants v ON v.id = si.variant_id
+    LEFT JOIN products p ON p.id = v.product_id
+    WHERE s.customer_id = ? AND s.payment_status IN ('pago','pendente')
+    ORDER BY s.created_at DESC LIMIT 120`).all(id);
+  const conversas = db.prepare(`SELECT a.*, t.name vendedor FROM atendimentos a
+    LEFT JOIN team_members t ON t.id = a.member_id
+    WHERE a.customer_id = ? ORDER BY a.created_at DESC LIMIT 60`).all(id);
+  const notas = db.prepare(`SELECT n.*, t.name vendedor FROM crm_notes n
+    LEFT JOIN team_members t ON t.id = n.member_id
+    WHERE n.customer_id = ? ORDER BY n.created_at DESC LIMIT 80`).all(id);
+
+  const conta = (campo) => {
+    const m = new Map();
+    for (const i of itens) { const k = i[campo]; if (!k) continue; m.set(k, (m.get(k) || 0) + i.qty); }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([nome, n]) => ({ nome, n }));
+  };
+
+  // Linha do tempo única: compra, conversa e anotação misturadas em ordem.
+  const linha = [
+    ...vendas.map((v) => ({ t: 'venda', quando: v.created_at, titulo: `${v.code} · ${brl(v.total)}`,
+      texto: `${v.payment_status === 'pendente' ? 'Fiado em aberto' : 'Pago'}${v.payment_method ? ' · ' + v.payment_method : ''}${v.seller_name ? ' · ' + v.seller_name : ''}`, ref: v.id })),
+    ...conversas.map((a) => ({ t: 'conversa', quando: a.created_at,
+      titulo: (PIPE.find((p) => p.id === a.stage) || { label: a.stage }).label,
+      texto: [a.querendo, a.motivo, a.vendedor].filter(Boolean).join(' · '), ref: a.id })),
+    ...notas.map((n) => ({ t: n.kind, quando: n.created_at, titulo: n.kind,
+      texto: [n.body, n.vendedor].filter(Boolean).join(' · '), ref: n.id, nota: true })),
+  ].sort((a, b) => String(b.quando).localeCompare(String(a.quando)));
+
+  res.json({
+    cliente: {
+      id: c.id, nome: c.name, instagram: c.instagram || '', phone: c.phone || '', email: c.email || '',
+      note: c.note || '', birthday: c.birthday || '', tags: c.tags || '', origin: c.origin || '',
+      size_top: c.size_top || '', size_pants: c.size_pants || '', size_shoe: c.size_shoe || '',
+      owner_id: c.owner_id, next_contact: c.next_contact || '', last_contact: c.last_contact || '',
+      no_contact: !!c.no_contact, da_loja: !!c.nuvemshop_customer_id,
+    },
+    numeros: {
+      seg: c.seg || 'cadastro', vip: !!c.vip, compras: c.compras || 0, gasto: money(c.gasto || 0),
+      aberto: money(c.aberto || 0), ticket: c.ticket || 0, ciclo: c.ciclo || base.cicloLoja,
+      dias: c.dias == null ? null : c.dias, primeira: c.primeira || null, ultima: c.ultima || null,
+      atendimentos: c.atendimentos || 0,
+      previsao: c.ultima ? dia(new Date(c.ultima).getTime() + (c.ciclo || base.cicloLoja) * 864e5) : null,
+    },
+    gosta: { marcas: conta('marca'), tamanhos: conta('tamanho'), pecas: conta('name') },
+    linha: linha.slice(0, 80),
+    vendas,
+  });
+});
+
+app.patch('/api/crm/cliente/:id', (req, res) => {
+  const c = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Cliente não encontrado.' });
+  const b = req.body || {};
+  const txt = (k, atual) => (b[k] !== undefined ? String(b[k] || '').trim() : atual);
+  const dt = (k, atual) => {
+    if (b[k] === undefined) return atual;
+    const v = String(b[k] || '').trim();
+    if (!v) return null;
+    return /^\d{4}-\d{2}-\d{2}$/.test(v) || /^\d{2}-\d{2}$/.test(v) ? v : atual;
+  };
+  db.prepare(`UPDATE customers SET birthday=?, size_top=?, size_pants=?, size_shoe=?, tags=?,
+    origin=?, owner_id=?, next_contact=?, no_contact=?, note=? WHERE id=?`)
+    .run(dt('birthday', c.birthday), txt('size_top', c.size_top), txt('size_pants', c.size_pants),
+      txt('size_shoe', c.size_shoe), txt('tags', c.tags), txt('origin', c.origin),
+      b.owner_id !== undefined ? (b.owner_id ? Number(b.owner_id) : null) : c.owner_id,
+      dt('next_contact', c.next_contact),
+      b.no_contact !== undefined ? (b.no_contact ? 1 : 0) : c.no_contact,
+      txt('note', c.note), c.id);
+  res.json({ ok: true });
+});
+
+// Registrar que falou com a pessoa. É o que tira ela da fila de hoje e
+// já deixa marcado quando é a próxima conversa.
+app.post('/api/crm/cliente/:id/contato', (req, res) => {
+  const c = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Cliente não encontrado.' });
+  const b = req.body || {};
+  const kinds = ['nota', 'direct', 'whatsapp', 'ligacao', 'visita', 'pos_venda', 'cobranca'];
+  const kind = kinds.includes(b.kind) ? b.kind : 'nota';
+  const ts = now();
+  db.prepare(`INSERT INTO crm_notes (customer_id, member_id, kind, body, motivo, created_at)
+    VALUES (?,?,?,?,?,?)`).run(c.id, b.member_id ? Number(b.member_id) : null, kind,
+    String(b.body || '').trim(), String(b.motivo || '').trim(), ts);
+
+  // "Adiar" é só reagendar: some da fila hoje, volta no dia marcado.
+  let proximo = null;
+  if (b.next_contact) proximo = String(b.next_contact).slice(0, 10);
+  else if (b.adiar_dias) proximo = dia(Date.now() + Math.min(365, Math.max(1, Number(b.adiar_dias))) * 864e5);
+  db.prepare('UPDATE customers SET last_contact = ?, next_contact = ? WHERE id = ?')
+    .run(ts, proximo, c.id);
+  res.json({ ok: true, next_contact: proximo });
+});
+
+app.delete('/api/crm/nota/:id', (req, res) => {
+  db.prepare('DELETE FROM crm_notes WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// O funil em colunas, para arrastar a conversa até virar venda.
+app.get('/api/pipeline', (req, res) => {
+  const dias = Math.min(365, Math.max(7, parseInt(req.query.days, 10) || 60));
+  const desde = dia(Date.now() - dias * 864e5);
+  const cond = ['(a.stage IN ' + SQL_ABERTOS + ' OR a.day >= ?)']; const args = [desde];
+  if (req.query.member_id) { cond.push('a.member_id = ?'); args.push(Number(req.query.member_id)); }
+  const linhas = db.prepare(`SELECT a.*, t.name vendedor, s.code venda_code, s.total venda_total,
+      c.name cliente_nome
+    FROM atendimentos a
+    LEFT JOIN team_members t ON t.id = a.member_id
+    LEFT JOIN sales s ON s.id = a.sale_id
+    LEFT JOIN customers c ON c.id = a.customer_id
+    WHERE ${cond.join(' AND ')}
+    ORDER BY COALESCE(a.updated_at, a.created_at) DESC LIMIT 500`).all(...args);
+
+  const colunas = PIPE.map((p) => {
+    const itens = linhas.filter((l) => l.stage === p.id);
+    return { ...p, n: itens.length, valor: money(itens.reduce((s, i) => s + (i.valor || 0), 0)), itens };
+  });
+  const abertos = linhas.filter((l) => STAGES.indexOf(l.stage) < STAGES.indexOf('vendido'));
+  res.json({
+    dias, colunas,
+    abertos: abertos.length,
+    valor_aberto: money(abertos.reduce((s, i) => s + (i.valor || 0), 0)),
+  });
 });
 
 // ==================== RELATÓRIOS DE LUCRO ====================
@@ -2313,6 +2736,7 @@ app.get('/custos', page('custos.html'));
 app.get('/relatorios', page('relatorios.html'));
 app.get('/equipe', page('equipe.html'));
 app.get('/funil', page('funil.html'));
+app.get('/crm', page('crm.html'));
 app.get('/ajuda', page('ajuda.html'));
 app.get('/como-usar', page('ajuda.html'));
 

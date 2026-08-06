@@ -258,6 +258,19 @@ CREATE TABLE IF NOT EXISTS atendimentos (
   created_at  TEXT NOT NULL,
   updated_at  TEXT
 );
+-- CRM: cada conversa com o cliente vira uma linha da história dele.
+-- Compra o sistema já sabe; o que faltava era o que foi CONVERSADO.
+CREATE TABLE IF NOT EXISTS crm_notes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  member_id   INTEGER REFERENCES team_members(id),
+  kind        TEXT NOT NULL DEFAULT 'nota',  -- nota|direct|whatsapp|ligacao|visita|pos_venda|cobranca
+  body        TEXT NOT NULL DEFAULT '',
+  motivo      TEXT DEFAULT '',               -- qual régua gerou o contato
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_crm_notes_cli ON crm_notes(customer_id, created_at);
+
 CREATE INDEX IF NOT EXISTS idx_atend_dia ON atendimentos(day);
 CREATE INDEX IF NOT EXISTS idx_atend_membro ON atendimentos(member_id, day);
 CREATE INDEX IF NOT EXISTS idx_atend_stage ON atendimentos(stage);
@@ -339,6 +352,22 @@ ensureColumn('sales', 'seller_name', 'seller_name TEXT');
 ensureColumn('team_members', 'commission_pct', 'commission_pct REAL NOT NULL DEFAULT 0');
 // De qual atendimento essa venda nasceu (fecha o funil).
 ensureColumn('sales', 'atendimento_id', 'atendimento_id INTEGER');
+
+// ---- CRM: o que a loja sabe sobre a pessoa ----
+// Vender de novo para quem já comprou é o que escala a operação. Para
+// isso o sistema precisa lembrar o que a pessoa veste, quando ela some
+// e quando é a próxima conversa.
+ensureColumn('customers', 'birthday', 'birthday TEXT');          // AAAA-MM-DD ou MM-DD
+ensureColumn('customers', 'size_top', 'size_top TEXT');          // camiseta/moletom
+ensureColumn('customers', 'size_pants', 'size_pants TEXT');      // calça
+ensureColumn('customers', 'size_shoe', 'size_shoe TEXT');        // tênis
+ensureColumn('customers', 'tags', 'tags TEXT');                  // livre, separado por vírgula
+ensureColumn('customers', 'origin', 'origin TEXT');              // como chegou na loja
+ensureColumn('customers', 'owner_id', 'owner_id INTEGER');       // vendedor dono da conta
+ensureColumn('customers', 'next_contact', 'next_contact TEXT');  // AAAA-MM-DD do próximo toque
+ensureColumn('customers', 'last_contact', 'last_contact TEXT');  // quando falamos por último
+ensureColumn('customers', 'no_contact', 'no_contact INTEGER NOT NULL DEFAULT 0'); // pediu para não receber
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_customers_next ON customers(next_contact)'); } catch (_) {}
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_order ON sales(nuvemshop_order_id) WHERE nuvemshop_order_id IS NOT NULL'); } catch (_) {}
 
 // ---- Plano de contas padrão (criado uma vez) ----

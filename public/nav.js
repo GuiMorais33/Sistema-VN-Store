@@ -4,6 +4,7 @@
     { titulo: 'Operação', itens: [
       { href: '/',           ico: 'inicio',     label: 'Início',     match: (p) => p === '/' },
       { href: '/pdv',        ico: 'pdv',        label: 'PDV',        match: (p) => p.startsWith('/pdv') },
+      { href: '/crm',        ico: 'conversa',   label: 'CRM',        match: (p) => p.startsWith('/crm') },
       { href: '/funil',      ico: 'megafone',   label: 'Funil',      match: (p) => p.startsWith('/funil') },
       { href: '/produtos',   ico: 'estoque',    label: 'Estoque',    match: (p) => p.startsWith('/produtos') || p.startsWith('/estoque') },
       { href: '/clientes',   ico: 'clientes',   label: 'Clientes',   match: (p) => p.startsWith('/clientes') },

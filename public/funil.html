@@ -12,41 +12,43 @@
   @media (max-width:760px){.topo{grid-template-columns:repeat(2,1fr)}}
   .box{padding:var(--s4)}
   .box .big{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;
-    font-size:clamp(22px,3vw,30px);letter-spacing:-1px;margin-top:6px}
-  .box .sub{font-size:11.5px;color:var(--ink-3);margin-top:4px;line-height:1.45}
+    font-size:clamp(21px,2.8vw,28px);letter-spacing:-1px;margin-top:5px}
+  .box .sub{font-size:11px;color:var(--ink-3);margin-top:4px;line-height:1.45}
   .box.hi .big{color:var(--brand-hi)}
 
-  /* O funil desenhado: cada faixa é mais estreita que a anterior */
-  .funil{display:flex;flex-direction:column;gap:6px;margin-bottom:var(--s4)}
-  .fx{display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:var(--r);
-    border:1px solid var(--line);background:linear-gradient(180deg,var(--surface-2),var(--surface));
-    margin:0 auto;width:100%;transition:width .4s var(--ease)}
-  .fx .n{font-family:var(--font-mono);font-weight:700;font-size:19px;min-width:52px}
-  .fx .l{font-size:12px;color:var(--ink-2);flex:1}
-  .fx .t{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-3)}
-  .fx.a{border-color:rgba(47,210,79,.28)}
-  .fx.b .n{color:var(--warn)}
-  .fx.c .n{color:var(--brand-hi)}
-
   .bar{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center;margin-bottom:var(--s3)}
-  .bar select,.bar input{width:auto}
+  .bar select{width:auto}
 
-  .lista{display:flex;flex-direction:column;gap:6px}
-  .at{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;
-    padding:11px 13px;border:1px solid var(--line);border-radius:var(--r);
+  /* Quadro: rola dentro dele, nunca na página */
+  .quadro{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(255px,1fr);gap:var(--s3);
+    overflow-x:auto;padding-bottom:var(--s3);scroll-snap-type:x proximity}
+  .col{display:flex;flex-direction:column;gap:7px;min-width:0;scroll-snap-align:start}
+  .ch{display:flex;align-items:baseline;gap:7px;padding:9px 11px;border-radius:var(--r);
+    border:1px solid var(--line);background:var(--bg-elev);position:sticky;top:0;z-index:2}
+  .ch .t{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;flex:1;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ch .n{font-family:var(--font-mono);font-weight:700;font-size:13px}
+  .ch .v{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3);width:100%;margin-top:2px}
+  .col[data-s=novo] .ch{border-color:rgba(122,162,247,.32)}
+  .col[data-s=proposta] .ch{border-color:rgba(230,168,40,.3)}
+  .col[data-s=fechando] .ch{border-color:rgba(230,168,40,.45)}
+  .col[data-s=vendido] .ch{border-color:rgba(47,210,79,.35)}
+  .col[data-s=vendido] .ch .n{color:var(--brand-hi)}
+  .col[data-s=perdido] .ch{border-color:rgba(242,86,74,.26)}
+  .col[data-s=perdido] .ch .n{color:var(--crit)}
+
+  .ct{border:1px solid var(--line);border-radius:var(--r);padding:11px 12px;
     background:linear-gradient(180deg,var(--surface-2),var(--surface))}
-  .at .nm{font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-  .at .q{font-size:12px;color:var(--ink-2);margin-top:3px;line-height:1.4}
-  .at .s{font-size:11px;color:var(--ink-3);margin-top:3px}
-  .at .acts{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-  .at.perdido{opacity:.55}
-  .st{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;
-    border-radius:999px;background:var(--bg-elev);color:var(--ink-3)}
-  .st.atendimento{background:rgba(122,162,247,.12);color:#93b4ff}
-  .st.proposta{background:rgba(230,168,40,.13);color:var(--warn)}
-  .st.vendido{background:rgba(47,210,79,.13);color:var(--brand-hi)}
-  .st.perdido{background:rgba(242,86,74,.12);color:var(--crit)}
-  .cnl{font-size:10px;color:var(--ink-3);font-family:var(--font-mono)}
+  .ct .nm{font-weight:600;font-size:13px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .ct .q{font-size:12px;color:var(--ink-2);margin-top:4px;line-height:1.4}
+  .ct .s{font-size:10.5px;color:var(--ink-3);margin-top:5px;font-family:var(--font-mono)}
+  .ct .acts{display:flex;gap:4px;margin-top:9px;flex-wrap:wrap}
+  .ct.parado{border-color:rgba(230,168,40,.35)}
+  .cnl{font-size:9.5px;color:var(--ink-3);font-family:var(--font-mono);text-transform:uppercase}
+  .alerta-p{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:1px 6px;
+    border-radius:999px;background:rgba(230,168,40,.14);color:var(--warn)}
+  .colvazia{font-size:11.5px;color:var(--ink-3);text-align:center;padding:15px 8px;
+    border:1px dashed var(--line);border-radius:var(--r)}
 
   .dlg{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);min-width:min(430px,92vw)}
   .dlg h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;font-size:18px;transform:skewX(-5deg)}
@@ -62,43 +64,37 @@
 <body>
 <div class="app">
   <div class="pagehead">
-    <div><h1>Funil</h1><div class="ph-sub">Quem foi atendido · o que cada um quer · onde a conversa parou</div></div>
-    <div class="ph-actions"><button class="btn primary" id="novo" type="button">Registrar atendimento</button></div>
+    <div><h1>Funil</h1><div class="ph-sub">Cada conversa até virar venda · o que a pessoa quer · onde parou</div></div>
+    <div class="ph-actions">
+      <a class="btn ghost" href="/crm">CRM</a>
+      <button class="btn primary" id="novo" type="button">Registrar atendimento</button>
+    </div>
   </div>
 
   <div class="bar">
     <select id="fVend"><option value="">Todo mundo</option></select>
     <select id="fDias">
-      <option value="1">Hoje</option>
-      <option value="7">7 dias</option>
-      <option value="30" selected>30 dias</option>
-      <option value="90">90 dias</option>
-    </select>
-    <select id="fStage">
-      <option value="">Todos os estágios</option>
-      <option value="atendimento">Só em aberto</option>
-      <option value="proposta">Só com proposta</option>
-      <option value="vendido">Só fechados</option>
-      <option value="perdido">Só perdidos</option>
+      <option value="15">15 dias</option>
+      <option value="30">30 dias</option>
+      <option value="60" selected>60 dias</option>
+      <option value="180">6 meses</option>
     </select>
   </div>
 
   <div class="topo">
-    <div class="card box"><span class="label">Hoje</span><div class="big" id="kHoje">—</div>
-      <div class="sub">atendimentos registrados hoje</div></div>
-    <div class="card box"><span class="label">Atendimentos</span><div class="big" id="kAt">—</div>
-      <div class="sub" id="kAtSub">no período</div></div>
-    <div class="card box"><span class="label">Viram proposta</span><div class="big" id="kProp">—</div>
+    <div class="card box"><span class="label">Em aberto</span><div class="big" id="kAb">—</div>
+      <div class="sub">conversas vivas agora</div></div>
+    <div class="card box"><span class="label">Valor em jogo</span><div class="big" id="kVal">—</div>
+      <div class="sub">soma das propostas em aberto</div></div>
+    <div class="card box"><span class="label">Vira proposta</span><div class="big" id="kProp">—</div>
       <div class="sub" id="kPropSub">—</div></div>
-    <div class="card box hi"><span class="label">Fecharam</span><div class="big" id="kVend">—</div>
-      <div class="sub" id="kVendSub">—</div></div>
+    <div class="card box hi"><span class="label">Fecha</span><div class="big" id="kFech">—</div>
+      <div class="sub" id="kFechSub">—</div></div>
   </div>
 
-  <div class="sec"><h2>O funil</h2><span class="rule"></span><span class="meta" id="funMeta"></span></div>
-  <div class="funil" id="funil"></div>
-
-  <div class="sec"><h2>Atendimentos</h2><span class="rule"></span><span class="meta" id="listaMeta"></span></div>
-  <div class="lista" id="lista"></div>
+  <div class="sec"><h2>O quadro</h2><span class="rule"></span>
+    <span class="meta">arraste para o lado para ver todas as etapas</span></div>
+  <div class="quadro" id="quadro"></div>
 </div>
 
 <dialog id="dlg">
@@ -120,21 +116,17 @@
       </div></div>
     <div class="field"><label>O que a pessoa está comprando</label>
       <input id="aQuer" placeholder="Ex.: tênis 42, presente pro irmão, calça cargo preta">
-      <div class="hint">Meritocracia é o vendedor <b>saber o que cada lead quer</b>. Escreva com as palavras da pessoa.</div></div>
+      <div class="hint">Escreva com as palavras da pessoa — é o que faz a conversa voltar do jeito certo.</div></div>
     <div class="g2">
-      <div class="field"><label>Estágio</label><select id="aStage">
-        <option value="atendimento">Atendendo</option>
-        <option value="proposta">Mandei proposta</option>
-        <option value="vendido">Fechou</option>
-        <option value="perdido">Perdi</option>
-      </select></div>
-      <div class="field"><label>Valor da proposta (R$)</label>
+      <div class="field"><label>Etapa</label><select id="aStage"></select></div>
+      <div class="field"><label>Valor em jogo (R$)</label>
         <input id="aValor" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0,00"></div>
     </div>
     <div class="field" id="wrapMotivo" hidden><label>Por que perdeu</label>
       <input id="aMotivo" placeholder="Preço, tamanho, sumiu, comprou em outro lugar…"></div>
     <div class="dlg-foot">
       <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn danger" id="apagar" value="cancel" type="button" hidden>Apagar</button>
       <button class="btn primary" id="salvar" value="ok" type="submit">Salvar</button>
     </div>
   </form>
@@ -150,11 +142,10 @@ const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><d
 document.getElementById('novo').insertAdjacentHTML('afterbegin',ICO('mais',16));
 
 const CANAL={direct:'Direct',whatsapp:'WhatsApp',loja:'Loja',site:'Site',indicacao:'Indicação'};
-const STAGE={atendimento:'Atendendo',proposta:'Proposta',vendido:'Fechou',perdido:'Perdido'};
-const quando=(iso)=>{const d=new Date(iso),h=Math.round((Date.now()-d)/36e5);
-  if(h<1)return 'agora há pouco'; if(h<24)return h+'h atrás';
-  const dd=Math.round(h/24); return dd===1?'ontem':dd+' dias atrás';};
-let TIME=[];
+const dias=(iso)=>iso?Math.floor((Date.now()-new Date(iso))/864e5):0;
+const quando=(iso)=>{if(!iso)return '';const h=Math.round((Date.now()-new Date(iso))/36e5);
+  if(h<1)return 'agora'; if(h<24)return h+'h'; const d=Math.round(h/24);return d===1?'ontem':d+'d';};
+let TIME=[],COLS=[],DADOS=null;
 
 async function equipe(){
   const d=await api('/api/team');
@@ -165,71 +156,66 @@ async function equipe(){
 }
 
 async function carregar(){
-  const v=document.getElementById('fVend').value;
   const q=new URLSearchParams({days:document.getElementById('fDias').value});
+  const v=document.getElementById('fVend').value;
   if(v)q.set('member_id',v);
-  const st=document.getElementById('fStage').value;
-  if(st)q.set('stage',st);
-  const d=await api('/api/atendimentos?'+q);
-  const R=d.resumo;
+  const d=await api('/api/pipeline?'+q);
+  DADOS=d;COLS=d.colunas;
 
-  document.getElementById('kHoje').textContent=R.hoje;
-  document.getElementById('kAt').textContent=R.atendimentos;
-  document.getElementById('kAtSub').textContent=`nos últimos ${d.dias} dia(s)`;
-  document.getElementById('kProp').textContent=R.propostas;
-  document.getElementById('kPropSub').textContent=R.taxa_proposta!=null?R.taxa_proposta+'% dos atendimentos':'—';
-  document.getElementById('kVend').textContent=R.vendas;
-  document.getElementById('kVendSub').textContent=R.taxa_fechamento!=null?R.taxa_fechamento+'% das propostas':'—';
+  // O select de etapa vem da mesma definição do servidor.
+  const sel=document.getElementById('aStage');
+  if(!sel.options.length)sel.innerHTML=d.colunas.map(c=>`<option value="${c.id}">${esc(c.label)}</option>`).join('');
 
-  // O desenho do funil: a largura mostra o estreitamento de verdade.
-  const base=Math.max(1,R.atendimentos);
-  const larg=(n)=>Math.max(34,Math.round((n/base)*100))+'%';
-  document.getElementById('funil').innerHTML=R.atendimentos?`
-    <div class="fx a" style="width:${larg(R.atendimentos)}">
-      <span class="n">${R.atendimentos}</span><span class="l">atendidos</span></div>
-    <div class="fx b" style="width:${larg(R.propostas)}">
-      <span class="n">${R.propostas}</span><span class="l">viraram proposta</span>
-      <span class="t">${R.taxa_proposta!=null?R.taxa_proposta+'%':''}</span></div>
-    <div class="fx c" style="width:${larg(R.vendas)}">
-      <span class="n">${R.vendas}</span><span class="l">fecharam</span>
-      <span class="t">${R.taxa_fechamento!=null?R.taxa_fechamento+'%':''}</span></div>`
-    :vazio('grafico','Funil vazio','Registre os atendimentos e as taxas aparecem sozinhas.');
-  document.getElementById('funMeta').textContent=R.perdidos?`${R.perdidos} perdido(s)`:'';
+  const acha=(id)=>d.colunas.find(c=>c.id===id)||{n:0,valor:0};
+  const tot=d.colunas.reduce((s,c)=>s+c.n,0);
+  const prop=acha('proposta').n+acha('fechando').n+acha('vendido').n;
+  const vend=acha('vendido').n;
+  document.getElementById('kAb').textContent=d.abertos;
+  document.getElementById('kVal').textContent=BRL(d.valor_aberto);
+  document.getElementById('kProp').textContent=tot?Math.round((prop/tot)*100)+'%':'—';
+  document.getElementById('kPropSub').textContent=`${prop} de ${tot} atendimentos`;
+  document.getElementById('kFech').textContent=prop?Math.round((vend/prop)*100)+'%':'—';
+  document.getElementById('kFechSub').textContent=`${vend} de ${prop} propostas`;
 
-  const box=document.getElementById('lista');
-  document.getElementById('listaMeta').textContent=d.linhas.length?d.linhas.length+' registro(s)':'';
-  if(!d.linhas.length){
-    box.innerHTML=vazio('clientes','Nada aqui ainda',
-      'Toda pessoa que chama no direct, chega na loja ou pede preço é um atendimento.');
-    return;
-  }
-  box.innerHTML=d.linhas.map(a=>`<div class="at ${a.stage}">
-      <div>
-        <div class="nm">${esc(a.nome||a.instagram||'sem nome')}
-          <span class="st ${a.stage}">${STAGE[a.stage]||a.stage}</span>
-          <span class="cnl">${CANAL[a.canal]||a.canal}</span></div>
-        ${a.querendo?`<div class="q">${esc(a.querendo)}</div>`:''}
-        <div class="s">${a.vendedor?esc(a.vendedor)+' · ':''}${quando(a.created_at)}${
-          a.venda_code?' · venda '+esc(a.venda_code)+' · '+BRL(a.venda_total):
-          (a.valor>0?' · '+BRL(a.valor):'')}${a.motivo?' · '+esc(a.motivo):''}</div>
-      </div>
-      <div class="acts">
-        ${a.stage==='atendimento'?`<button class="btn sm ghost" data-up="${a.id}" data-to="proposta" type="button">Mandei proposta</button>`:''}
-        ${a.stage==='proposta'?`<button class="btn sm primary" data-up="${a.id}" data-to="vendido" type="button">Fechou</button>`:''}
-        ${a.stage!=='vendido'&&a.stage!=='perdido'?`<button class="btn sm ghost" data-up="${a.id}" data-to="perdido" type="button">Perdi</button>`:''}
-        <button class="btn sm ghost" data-ed="${a.id}" type="button">Abrir</button>
-      </div></div>`).join('');
+  document.getElementById('quadro').innerHTML=d.colunas.map(c=>`
+    <div class="col" data-s="${c.id}">
+      <div class="ch"><span class="t">${esc(c.label)}</span><span class="n">${c.n}</span>
+        ${c.valor>0?`<span class="v">${BRL(c.valor)}</span>`:''}</div>
+      ${c.itens.length?c.itens.map(a=>cartao(a,c)).join('')
+        :`<div class="colvazia">${esc(c.dica)}</div>`}
+    </div>`).join('');
 
-  box.querySelectorAll('[data-up]').forEach(b=>b.onclick=async()=>{
-    const to=b.dataset.to;
+  document.querySelectorAll('#quadro [data-mov]').forEach(b=>b.onclick=async()=>{
+    const to=b.dataset.para;
     let motivo;
-    if(to==='perdido'){motivo=prompt('Por que perdeu? (ajuda a achar padrão)');if(motivo===null)return;}
-    try{await api('/api/atendimentos/'+b.dataset.up,{method:'PATCH',
-      headers:{'Content-Type':'application/json'},body:JSON.stringify({stage:to,...(motivo!==undefined?{motivo}:{})})});
-      carregar();}catch(e){alert(e.message);}
+    if(to==='perdido'){motivo=prompt('Por que perdeu? (anotar ajuda a achar o padrão)');if(motivo===null)return;}
+    try{await api('/api/atendimentos/'+b.dataset.mov,{method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({stage:to,...(motivo!==undefined?{motivo}:{})})});carregar();}
+    catch(e){alert(e.message);}
   });
-  box.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>{
-    abrir(d.linhas.find(x=>String(x.id)===b.dataset.ed));});
+  document.querySelectorAll('#quadro [data-ed]').forEach(b=>b.onclick=()=>{
+    const todos=d.colunas.flatMap(c=>c.itens);
+    abrir(todos.find(x=>String(x.id)===b.dataset.ed));});
+}
+
+function cartao(a,col){
+  const i=COLS.findIndex(c=>c.id===col.id);
+  const prox=COLS[i+1];
+  const fim=col.id==='vendido'||col.id==='perdido';
+  const parado=!fim&&dias(a.updated_at||a.created_at)>=3;
+  return `<div class="ct${parado?' parado':''}">
+      <div class="nm">${esc(a.cliente_nome||a.nome||a.instagram||'sem nome')}
+        ${parado?`<span class="alerta-p">parado ${dias(a.updated_at||a.created_at)}d</span>`:''}</div>
+      ${a.querendo?`<div class="q">${esc(a.querendo)}</div>`:''}
+      <div class="s">${CANAL[a.canal]||a.canal}${a.vendedor?' · '+esc(a.vendedor):''}${
+        a.venda_code?' · '+esc(a.venda_code)+' '+BRL(a.venda_total):(a.valor>0?' · '+BRL(a.valor):'')}${
+        a.motivo?' · '+esc(a.motivo):''} · ${quando(a.updated_at||a.created_at)}</div>
+      <div class="acts">
+        ${prox&&prox.id!=='perdido'&&!fim?`<button class="btn sm ${prox.id==='vendido'?'primary':'ghost'}" data-mov="${a.id}" data-para="${prox.id}" type="button">${prox.id==='vendido'?'Fechou':'→ '+esc(prox.label)}</button>`:''}
+        ${!fim?`<button class="btn sm ghost" data-mov="${a.id}" data-para="perdido" type="button">Perdi</button>`:''}
+        <button class="btn sm ghost" data-ed="${a.id}" type="button">Abrir</button>
+      </div></div>`;
 }
 
 /* dialog */
@@ -250,12 +236,13 @@ function abrir(a){
   document.getElementById('aQuer').value=a?(a.querendo||''):'';
   document.getElementById('aValor').value=a&&a.valor?a.valor:'';
   document.getElementById('aMotivo').value=a?(a.motivo||''):'';
-  stageSel.value=a?a.stage:'atendimento';
+  stageSel.value=a?a.stage:'novo';
   document.getElementById('wrapMotivo').hidden=stageSel.value!=='perdido';
+  document.getElementById('apagar').hidden=!a;
   canal=a?a.canal:'direct';
   document.querySelectorAll('#aCanal .chip').forEach(x=>x.classList.toggle('on',x.dataset.c===canal));
-  // Atendimento sem dono não conta para o funil de ninguém. Então cai em
-  // quem o aparelho usou por último e, na falta disso, no primeiro da lista.
+  // Atendimento sem dono não conta no funil de ninguém: cai em quem o
+  // aparelho usou por último e, na falta, no primeiro da lista.
   const sel=document.getElementById('aVend');
   const ult=localStorage.getItem('vn_vendedor');
   sel.value=a&&a.member_id?a.member_id
@@ -281,8 +268,13 @@ document.getElementById('salvar').onclick=async e=>{
     dlg.close();carregar();
   }catch(err){alert(err.message);}
 };
+document.getElementById('apagar').onclick=async()=>{
+  if(!confirm('Apagar este atendimento? Ele some do funil e das taxas de conversão.'))return;
+  try{await api('/api/atendimentos/'+document.getElementById('aId').value,{method:'DELETE'});
+    dlg.close();carregar();}catch(e){alert(e.message);}
+};
 
-['fVend','fDias','fStage'].forEach(i=>document.getElementById(i).onchange=carregar);
+['fVend','fDias'].forEach(i=>document.getElementById(i).onchange=carregar);
 equipe().then(carregar);
 </script>
 </body>
