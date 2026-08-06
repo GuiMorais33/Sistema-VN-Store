@@ -4,13 +4,13 @@
     { titulo: 'Operação', itens: [
       { href: '/',           ico: 'inicio',     label: 'Início',     match: (p) => p === '/' || p.startsWith('/lembretes') },
       { href: '/pdv',        ico: 'pdv',        label: 'PDV',        match: (p) => p.startsWith('/pdv') },
-      { href: '/produtos',   ico: 'estoque',    label: 'Estoque',    match: (p) => p.startsWith('/produtos') || p.startsWith('/estoque') },
+      { href: '/produtos',   ico: 'estoque',    label: 'Estoque',    match: (p) => p.startsWith('/produtos') || p.startsWith('/estoque') || p.startsWith('/compras') },
       { href: '/clientes',   ico: 'clientes',   label: 'Clientes',   match: (p) => p.startsWith('/clientes') || p.startsWith('/crm') || p.startsWith('/funil') },
-      { href: '/compras',    ico: 'caixa_vazia',label: 'Compras',    match: (p) => p.startsWith('/compras') },
     ] },
     { titulo: 'Gestão', itens: [
       { href: '/financeiro', ico: 'financeiro', label: 'Financeiro', match: (p) => p.startsWith('/financeiro') || p.startsWith('/relatorios') },
       { href: '/equipe',     ico: 'clientes',   label: 'Equipe',     match: (p) => p.startsWith('/equipe') },
+      { href: '/agentes',    ico: 'agentes',    label: 'Agentes',    match: (p) => p.startsWith('/agentes') },
       { href: '/conectar',   ico: 'conectar',   label: 'Conectar',   match: (p) => p.startsWith('/conectar') },
       { href: '/ajuda',      ico: 'conversa',   label: 'Como usar',  match: (p) => p.startsWith('/ajuda') || p.startsWith('/como-usar') },
     ] },

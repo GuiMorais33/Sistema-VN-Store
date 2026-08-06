@@ -1460,6 +1460,7 @@ const CICLO_MIN = 7;        // ninguém compra streetwear a cada 3 dias
 const CICLO_PADRAO = 45;    // chute inicial, até a loja ter histórico
 const dia = (d) => new Date(d).toISOString().slice(0, 10);
 const diasEntre = (a, b) => Math.floor((new Date(b) - new Date(a)) / 864e5);
+const brl = (n) => 'R$ ' + money(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const SEGMENTOS = [
   { id: 'novo', label: 'Novos', dica: 'Primeira compra nos últimos 30 dias — é agora que vira cliente ou some' },
@@ -1470,24 +1471,6 @@ const SEGMENTOS = [
   { id: 'lead', label: 'Leads', dica: 'Foi atendido e nunca comprou' },
   { id: 'cadastro', label: 'Só cadastro', dica: 'Está no sistema e nunca comprou nem foi atendido' },
 ];
-
-// A régua: cada motivo tem urgência, e a fala que o vendedor manda.
-// Sem a fala pronta, ninguém executa.
-function falaDe(tipo, c, extra = {}) {
-  const nome = String(c.name || '').replace(/^@/, '').split(' ')[0];
-  const marca = extra.marca ? extra.marca : 'coisa nova';
-  switch (tipo) {
-    case 'cobranca': return `Oi ${nome}! Passando pra combinar o restinho da sua compra (${brl(extra.valor)}). Te mando o pix?`;
-    case 'agendado': return `Oi ${nome}! Como combinamos, tô te chamando. ${extra.nota || ''}`.trim();
-    case 'aniversario': return `${nome}, parabéns! 🎉 Separei uma condição especial pra você essa semana.`;
-    case 'pos_venda': return `E aí ${nome}, caiu bem ${extra.peca ? 'a ' + extra.peca : 'a peça'}? Qualquer coisa a gente resolve.`;
-    case 'esfriando': return `${nome}, chegou coisa nova da ${marca} e lembrei de você. Quer ver?`;
-    case 'sumido': return `${nome}, faz tempo! Tô com peça nova da ${marca}. Te mando as fotos?`;
-    case 'lead_parado': return `${nome}, conseguiu ver o que te mandei? Ainda tenho aqui.`;
-    default: return `Oi ${nome}!`;
-  }
-}
-const brl = (n) => 'R$ ' + money(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Junta tudo que o CRM precisa saber de cada pessoa, de uma vez só.
 function crmBase() {
@@ -1566,94 +1549,8 @@ function crmBase() {
   return { hoje, lista, cicloLoja, corteVip };
 }
 
-// A fila do dia. Uma linha por pessoa — a razão mais urgente vence.
-function reguaDeHoje(base) {
-  const { hoje, lista } = base;
-  const fiado = new Map(db.prepare(`SELECT customer_id cid, MIN(created_at) desde,
-      SUM(total) valor, COUNT(*) n FROM sales
-    WHERE payment_status = 'pendente' AND customer_id IS NOT NULL GROUP BY customer_id`)
-    .all().map((r) => [String(r.cid), r]));
-  // Conversa que ficou parada no funil também é motivo de contato.
-  const parados = new Map(db.prepare(`SELECT customer_id cid, MAX(COALESCE(updated_at, created_at)) mexeu
-    FROM atendimentos WHERE stage IN ${SQL_ABERTOS} AND customer_id IS NOT NULL GROUP BY customer_id`)
-    .all().map((r) => [String(r.cid), r]));
-
-  const desdeContato = (c) => (c.ultimo_contato ? diasEntre(c.ultimo_contato, Date.now()) : 9999);
-  const tarefas = [];
-  for (const c of lista) {
-    const k = String(c.id);
-    const f = fiado.get(k);
-    const t = (tipo, urgencia, porque, extra) => ({
-      tipo, urgencia, porque,
-      cliente_id: c.id, nome: c.name, instagram: c.instagram, phone: c.phone,
-      seg: c.seg, vip: c.vip, gasto: money(c.gasto), compras: c.compras, dias: c.dias,
-      fala: falaDe(tipo, c, extra || {}),
-    });
-
-    // "Adiar" é agendar para depois: enquanto a data não chega, a pessoa
-    // não aparece por motivo nenhum — senão o botão de adiar mentiria.
-    // A dívida continua visível no total a receber e no financeiro.
-    const adiado = c.next_contact && c.next_contact > hoje;
-
-    // 1. Dinheiro na rua vem antes de tudo — e não respeita opt-out.
-    if (f && diasEntre(f.desde, Date.now()) >= 7 && !adiado) {
-      tarefas.push(t('cobranca', 'alta', `${brl(f.valor)} em aberto há ${diasEntre(f.desde, Date.now())} dias`,
-        { valor: f.valor })); continue;
-    }
-    // Quem pediu para não ser incomodado só entra por cobrança.
-    if (c.no_contact || adiado) continue;
-
-    // 2. O que você mesmo agendou.
-    if (c.next_contact && c.next_contact <= hoje) {
-      tarefas.push(t('agendado', 'alta',
-        c.next_contact === hoje ? 'Você agendou para hoje' : `Agendado para ${c.next_contact} e ainda não foi feito`,
-        { nota: '' })); continue;
-    }
-    // 3. Aniversário na semana.
-    if (c.birthday) {
-      const md = String(c.birthday).slice(-5);
-      const falta = (() => {
-        const [m, d] = md.split('-').map(Number);
-        if (!m || !d) return null;
-        const hj = new Date(hoje + 'T00:00:00');
-        let alvo = new Date(hj.getFullYear(), m - 1, d);
-        if (alvo < hj) alvo = new Date(hj.getFullYear() + 1, m - 1, d);
-        return Math.round((alvo - hj) / 864e5);
-      })();
-      if (falta !== null && falta <= 7) {
-        tarefas.push(t('aniversario', falta === 0 ? 'alta' : 'media',
-          falta === 0 ? 'É hoje!' : `Faz aniversário em ${falta} dia(s)`)); continue;
-      }
-    }
-    // 4. Pós-venda: entre 5 e 12 dias da compra, uma vez só.
-    if (c.ultima && c.dias >= 5 && c.dias <= 12 && (!c.ultimo_pos || c.ultimo_pos < c.ultima)) {
-      tarefas.push(t('pos_venda', 'media', `Comprou há ${c.dias} dias e ninguém deu retorno`,
-        { peca: c.peca })); continue;
-    }
-    // 5. Conversa parada no funil há 3 dias.
-    const par = parados.get(k);
-    if (par && diasEntre(par.mexeu, Date.now()) >= 3) {
-      tarefas.push(t('lead_parado', 'media',
-        `Conversa parada há ${diasEntre(par.mexeu, Date.now())} dias no funil`)); continue;
-    }
-    // 6 e 7. Esfriou ou sumiu — e faz tempo que ninguém chamou.
-    if (c.seg === 'esfriando' && desdeContato(c) >= 15) {
-      tarefas.push(t('esfriando', 'media',
-        `Costuma comprar a cada ${c.ciclo} dias e já são ${c.dias}`, { marca: c.marca })); continue;
-    }
-    if (c.seg === 'sumido' && desdeContato(c) >= 30) {
-      tarefas.push(t('sumido', 'baixa',
-        `${c.dias} dias sem comprar (ritmo dele é ${c.ciclo})`, { marca: c.marca })); continue;
-    }
-  }
-  const peso = { alta: 0, media: 1, baixa: 2 };
-  tarefas.sort((a, b) => peso[a.urgencia] - peso[b.urgencia] || b.gasto - a.gasto);
-  return tarefas;
-}
-
 app.get('/api/crm', (req, res) => {
   const base = crmBase();
-  const tarefas = reguaDeHoje(base);
   const porSeg = new Map(SEGMENTOS.map((s) => [s.id, { ...s, n: 0, valor: 0 }]));
   for (const c of base.lista) {
     const s = porSeg.get(c.seg);
@@ -1683,8 +1580,6 @@ app.get('/api/crm', (req, res) => {
       ...p, n: pipeMap.get(p.id) ? pipeMap.get(p.id).n : 0,
       valor: pipeMap.get(p.id) ? money(pipeMap.get(p.id).valor) : 0,
     })),
-    hoje: tarefas.slice(0, 60),
-    total_tarefas: tarefas.length,
   });
 });
 
@@ -1818,6 +1713,156 @@ app.post('/api/crm/cliente/:id/contato', (req, res) => {
 
 app.delete('/api/crm/nota/:id', (req, res) => {
   db.prepare('DELETE FROM crm_notes WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ==================== MAPA DA ESTRATÉGIA ====================
+// O quadro mostra as conversas de hoje; o mapa mostra o CAMINHO que a
+// loja construiu para uma pessoa chegar até ali. O desenho é do dono —
+// o sistema só preenche os números que ele sabe de onde tirar.
+const FONTES = [
+  { id: '', label: 'Você digita o número' },
+  { id: 'canal:direct', label: 'Atendimentos vindos do Direct' },
+  { id: 'canal:whatsapp', label: 'Atendimentos vindos do WhatsApp' },
+  { id: 'canal:loja', label: 'Atendimentos na loja' },
+  { id: 'canal:site', label: 'Atendimentos vindos do site' },
+  { id: 'canal:indicacao', label: 'Atendimentos por indicação' },
+  { id: 'etapa:atendidos', label: 'Todo mundo atendido' },
+  { id: 'etapa:proposta', label: 'Chegaram a receber proposta' },
+  { id: 'etapa:vendido', label: 'Fecharam a compra' },
+  { id: 'venda:pdv', label: 'Vendas no balcão' },
+  { id: 'venda:site', label: 'Vendas pelo site' },
+  { id: 'cliente:novo', label: 'Clientes que compraram pela 1ª vez' },
+];
+
+// Desenho inicial: o caminho comum de uma loja de streetwear. Serve para
+// ele ter o que editar em vez de encarar uma tela em branco.
+function semearMapa() {
+  if (db.prepare('SELECT COUNT(*) n FROM funnel_levels').get().n > 0) return;
+  const ts = now();
+  const nivel = db.prepare('INSERT INTO funnel_levels (ordem, label, created_at) VALUES (?,?,?)');
+  const no = db.prepare(`INSERT INTO funnel_nodes (level_id, ordem, label, fonte, valor, meta, nota, created_at)
+    VALUES (?,?,?,?,?,?,?,?)`);
+  const plano = [
+    ['Descoberta', [['Anúncio', ''], ['Reels e orgânico', ''], ['Indicação', 'canal:indicacao']]],
+    ['Perfil no Instagram', [['Visitas ao perfil', ''], ['Cliques na bio', '']]],
+    ['Conversa', [['Direct', 'canal:direct'], ['WhatsApp', 'canal:whatsapp'], ['Veio na loja', 'canal:loja']]],
+    ['Proposta', [['Mandou peça ou preço', 'etapa:proposta']]],
+    ['Venda', [['Fechou', 'etapa:vendido'], ['Pelo site', 'venda:site']]],
+  ];
+  db.transaction(() => {
+    plano.forEach(([label, nos], i) => {
+      const lid = nivel.run(i, label, ts).lastInsertRowid;
+      nos.forEach(([nome, fonte], j) => no.run(lid, j, nome, fonte, null, null, '', ts));
+    });
+  })();
+}
+
+function numeroDaFonte(fonte, desdeISO, desdeDia) {
+  if (!fonte) return null;
+  const [tipo, chave] = String(fonte).split(':');
+  if (tipo === 'canal') {
+    return db.prepare('SELECT COUNT(*) n FROM atendimentos WHERE canal = ? AND day >= ?').get(chave, desdeDia).n;
+  }
+  if (tipo === 'etapa') {
+    if (chave === 'atendidos') return db.prepare('SELECT COUNT(*) n FROM atendimentos WHERE day >= ?').get(desdeDia).n;
+    if (chave === 'proposta') {
+      return db.prepare(`SELECT COUNT(*) n FROM atendimentos WHERE stage IN ${SQL_PROPOSTA} AND day >= ?`).get(desdeDia).n;
+    }
+    if (chave === 'vendido') return db.prepare("SELECT COUNT(*) n FROM atendimentos WHERE stage = 'vendido' AND day >= ?").get(desdeDia).n;
+  }
+  if (tipo === 'venda') {
+    return db.prepare(`SELECT COUNT(*) n FROM sales WHERE channel = ? AND payment_status <> 'cancelado' AND created_at >= ?`)
+      .get(chave, desdeISO).n;
+  }
+  if (tipo === 'cliente' && chave === 'novo') {
+    return db.prepare(`SELECT COUNT(*) n FROM (
+      SELECT customer_id FROM sales WHERE customer_id IS NOT NULL AND payment_status <> 'cancelado'
+      GROUP BY customer_id HAVING MIN(created_at) >= ?)`).get(desdeISO).n;
+  }
+  return null;
+}
+
+app.get('/api/mapa', (req, res) => {
+  semearMapa();
+  const dias = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
+  const desdeISO = new Date(Date.now() - dias * 864e5).toISOString();
+  const desdeDia = desdeISO.slice(0, 10);
+
+  const niveis = db.prepare('SELECT * FROM funnel_levels ORDER BY ordem, id').all();
+  const nos = db.prepare('SELECT * FROM funnel_nodes ORDER BY ordem, id').all();
+
+  const montado = niveis.map((n) => {
+    const meus = nos.filter((x) => x.level_id === n.id).map((x) => {
+      const auto = numeroDaFonte(x.fonte, desdeISO, desdeDia);
+      const valor = auto != null ? auto : (x.valor != null ? x.valor : null);
+      return {
+        id: x.id, label: x.label, fonte: x.fonte || '', nota: x.nota || '',
+        meta: x.meta, valor, automatico: auto != null, manual: x.valor,
+        pct_meta: x.meta > 0 && valor != null ? Math.round((valor / x.meta) * 100) : null,
+      };
+    });
+    const soma = meus.reduce((s, x) => s + (x.valor || 0), 0);
+    const temNumero = meus.some((x) => x.valor != null);
+    return { id: n.id, label: n.label, ordem: n.ordem, nos: meus, total: temNumero ? soma : null };
+  });
+
+  // A conversão entre um nível e o seguinte — é o que mostra onde vaza.
+  for (let i = 0; i < montado.length - 1; i += 1) {
+    const a = montado[i].total, b = montado[i + 1].total;
+    montado[i].conversao = (a > 0 && b != null) ? Math.round((b / a) * 1000) / 10 : null;
+  }
+  res.json({ dias, fontes: FONTES, niveis: montado });
+});
+
+app.post('/api/mapa/nivel', (req, res) => {
+  const b = req.body || {};
+  const label = String(b.label || '').trim();
+  if (!label) return res.status(400).json({ error: 'Dê um nome para a etapa.' });
+  if (b.id) {
+    db.prepare('UPDATE funnel_levels SET label = ?, ordem = COALESCE(?, ordem) WHERE id = ?')
+      .run(label, b.ordem != null ? Number(b.ordem) : null, b.id);
+    return res.json({ ok: true, id: Number(b.id) });
+  }
+  const prox = db.prepare('SELECT COALESCE(MAX(ordem),-1)+1 n FROM funnel_levels').get().n;
+  const id = db.prepare('INSERT INTO funnel_levels (ordem, label, created_at) VALUES (?,?,?)')
+    .run(b.ordem != null ? Number(b.ordem) : prox, label, now()).lastInsertRowid;
+  res.json({ ok: true, id });
+});
+
+app.delete('/api/mapa/nivel/:id', (req, res) => {
+  db.transaction(() => {
+    db.prepare('DELETE FROM funnel_nodes WHERE level_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM funnel_levels WHERE id = ?').run(req.params.id);
+  })();
+  res.json({ ok: true });
+});
+
+app.post('/api/mapa/no', (req, res) => {
+  const b = req.body || {};
+  const label = String(b.label || '').trim();
+  if (!label) return res.status(400).json({ error: 'Dê um nome para o caminho.' });
+  const fonte = FONTES.some((f) => f.id === (b.fonte || '')) ? (b.fonte || '') : '';
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : null; };
+  // Número digitado só faz sentido quando não vem automático.
+  const valor = fonte ? null : num(b.valor);
+  if (b.id) {
+    db.prepare('UPDATE funnel_nodes SET label=?, fonte=?, valor=?, meta=?, nota=? WHERE id=?')
+      .run(label, fonte, valor, num(b.meta), String(b.nota || '').trim(), b.id);
+    return res.json({ ok: true, id: Number(b.id) });
+  }
+  const lid = Number(b.level_id);
+  if (!db.prepare('SELECT 1 FROM funnel_levels WHERE id = ?').get(lid)) {
+    return res.status(400).json({ error: 'Etapa não encontrada.' });
+  }
+  const prox = db.prepare('SELECT COALESCE(MAX(ordem),-1)+1 n FROM funnel_nodes WHERE level_id = ?').get(lid).n;
+  const id = db.prepare(`INSERT INTO funnel_nodes (level_id, ordem, label, fonte, valor, meta, nota, created_at)
+    VALUES (?,?,?,?,?,?,?,?)`).run(lid, prox, label, fonte, valor, num(b.meta), String(b.nota || '').trim(), now()).lastInsertRowid;
+  res.json({ ok: true, id });
+});
+
+app.delete('/api/mapa/no/:id', (req, res) => {
+  db.prepare('DELETE FROM funnel_nodes WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 
@@ -2573,8 +2618,9 @@ app.get('/funil', page('clientes.html'));
 app.get('/produtos', page('produtos.html'));
 app.get('/estoque', page('produtos.html'));
 app.get('/financeiro', page('financeiro.html'));
+app.get('/agentes', page('agentes.html'));
 app.get('/lembretes', page('index.html'));   // virou o painel do Início
-app.get('/compras', page('compras.html'));
+app.get('/compras', page('produtos.html'));   // virou a aba Entradas
 app.get('/custos', page('custos.html'));
 app.get('/relatorios', page('financeiro.html'));   // virou a aba Lucro
 app.get('/equipe', page('equipe.html'));

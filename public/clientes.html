@@ -27,27 +27,43 @@
   .kpi.hi .big{color:var(--brand-hi)}
   .kpi.warn .big{color:var(--warn)}
 
-  /* Fila de hoje */
-  .fila{display:flex;flex-direction:column;gap:7px}
-  .tf{border:1px solid var(--line);border-radius:var(--r);padding:13px 14px;
-    background:linear-gradient(180deg,var(--surface-2),var(--surface));border-left:3px solid var(--ink-3)}
-  .tf.alta{border-left-color:var(--crit)}
-  .tf.media{border-left-color:var(--warn)}
-  .tf .cab{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .tf .nm{font-weight:700;font-size:14px;cursor:pointer}
-  .tf .nm:hover{color:var(--brand-hi)}
-  .tf .pq{font-size:12px;color:var(--ink-2);margin-top:5px;line-height:1.45}
-  .tf .fala{margin-top:9px;padding:10px 12px;border-radius:10px;background:var(--bg-elev);
-    border:1px solid var(--line-soft);font-size:12.5px;line-height:1.5;color:var(--ink)}
-  .tf .acts{display:flex;gap:5px;margin-top:10px;flex-wrap:wrap}
-  .mot{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;
-    border-radius:999px;background:var(--bg-elev);color:var(--ink-3)}
-  .mot.cobranca{background:rgba(242,86,74,.14);color:var(--crit)}
-  .mot.agendado{background:rgba(122,162,247,.14);color:#93b4ff}
-  .mot.aniversario{background:rgba(230,168,40,.14);color:var(--warn)}
-  .mot.pos_venda{background:rgba(47,210,79,.13);color:var(--brand-hi)}
-  .vip{font-size:9px;font-weight:900;letter-spacing:.6px;padding:2px 6px;border-radius:999px;
-    background:linear-gradient(90deg,#8a6410,var(--warn));color:#1a1204}
+
+  /* ---- Mapa da estratégia: como um estranho vira cliente ---- */
+  .seg{display:inline-flex;gap:3px;background:var(--bg-elev);border:1px solid var(--line);border-radius:10px;padding:3px}
+  .seg button{padding:6px 13px;border-radius:8px;border:none;background:none;color:var(--ink-3);
+    font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font-body)}
+  .seg button.sel{background:rgba(47,210,79,.13);color:var(--brand-hi)}
+  .mapa{display:flex;flex-direction:column;gap:0;margin-bottom:var(--s5)}
+  .niv{border:1px solid var(--line);border-radius:var(--r2);padding:12px 14px;
+    background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+  .niv .nh{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:9px}
+  .niv .nh .t{font-family:var(--font-disp);font-weight:900;font-size:14px;letter-spacing:.6px;
+    text-transform:uppercase;transform:skewX(-6deg);flex:1;min-width:0}
+  .niv .nh .tot{font-family:var(--font-mono);font-weight:700;font-size:16px;color:var(--brand-hi)}
+  .niv .nh .ib{background:none;border:none;color:var(--ink-3);cursor:pointer;padding:2px 4px;font-size:11px}
+  .niv .nh .ib:hover{color:var(--ink)}
+  .nos{display:flex;gap:7px;flex-wrap:wrap}
+  .no{flex:1 1 145px;min-width:135px;border:1px solid var(--line);border-radius:var(--r);
+    padding:9px 11px;background:var(--bg-elev);cursor:pointer;transition:border-color .2s var(--ease)}
+  .no:hover{border-color:var(--brand)}
+  .no .l{font-size:11.5px;font-weight:600;color:var(--ink-2);line-height:1.3}
+  .no .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;
+    font-size:19px;margin-top:4px;letter-spacing:-.5px}
+  .no .v.vazio{color:var(--ink-3);font-size:15px}
+  .no .f{font-size:9px;text-transform:uppercase;letter-spacing:.4px;margin-top:3px;color:var(--ink-3);font-weight:700}
+  .no .f.auto{color:var(--brand-hi)}
+  .no .mt{font-size:10px;color:var(--ink-3);margin-top:3px;font-family:var(--font-mono)}
+  .no .mt.ok{color:var(--brand-hi)} .no .mt.baixo{color:var(--warn)}
+  .no.mais{display:grid;place-items:center;border-style:dashed;color:var(--ink-3);
+    font-size:12px;font-weight:600;flex:0 0 auto;min-width:52px}
+  .seta{display:flex;align-items:center;justify-content:center;gap:8px;padding:7px 0;color:var(--ink-3);
+    font-size:11.5px;font-family:var(--font-mono)}
+  .seta .l{width:1px;height:14px;background:var(--line-str)}
+  .seta b{font-weight:700;color:var(--ink-2)}
+  .seta.vaza b{color:var(--warn)}
+  .pos{font-family:var(--font-disp);font-weight:900;font-size:13px;color:var(--ink-3);
+    min-width:26px;text-align:right;transform:skewX(-6deg)}
+  .cli:first-child .pos{color:var(--brand-hi)}
 
   /* Chips de segmento — o filtro é o próprio panorama */
   .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:var(--s3)}
@@ -59,7 +75,7 @@
   .chip[data-s=esfriando].on,.chip[data-s=sumido].on{border-color:var(--warn);color:var(--warn);background:rgba(230,168,40,.1)}
   .chip[data-s=esfriando].on b,.chip[data-s=sumido].on b{color:var(--warn)}
 
-  .cli{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;
+  .cli{display:grid;grid-template-columns:26px 34px minmax(0,1fr) auto;gap:10px;align-items:center;
     padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);cursor:pointer;
     background:linear-gradient(180deg,var(--surface-2),var(--surface))}
   .cli:hover{border-color:var(--brand)}
@@ -153,42 +169,49 @@
 <body>
 <div class="app">
   <div class="pagehead">
-    <div><h1>Clientes</h1><div class="ph-sub">Com quem falar hoje · as conversas em andamento · a ficha de cada um</div></div>
+    <div><h1>Clientes</h1><div class="ph-sub">A base inteira · o mapa da estratégia · a ficha de cada um</div></div>
   </div>
 
   <div class="abas">
-    <button class="aba on" data-aba="hoje" type="button">Hoje <span class="n" id="nHoje">0</span></button>
+    <button class="aba on" data-aba="crm" type="button">CRM</button>
     <button class="aba" data-aba="funil" type="button">Funil <span class="n" id="nFunil">0</span></button>
-    <button class="aba" data-aba="lista" type="button">Todos</button>
   </div>
 
-  <!-- HOJE -->
-  <div data-p="hoje">
+  <!-- CRM: a base inteira, em ordem de quem mais levou -->
+  <div data-p="crm">
     <div class="kpis" id="kpis"></div>
-    <div class="sec"><h2>Quem chamar hoje</h2><span class="rule"></span><span class="meta" id="hojeMeta"></span></div>
-    <div class="fila" id="fila"></div>
-  </div>
-
-  <!-- FUNIL -->
-  <div data-p="funil" hidden>
-    <div class="acao">
-      <button class="btn primary" id="novoAt" type="button">Registrar atendimento</button>
-      <select id="fVend"><option value="">Todo mundo</option></select>
-      <span class="meta" id="funMeta"></span>
-    </div>
-    <div class="quadro" id="quadro"></div>
-  </div>
-
-  <!-- TODOS -->
-  <div data-p="lista" hidden>
     <div class="acao">
       <input type="search" id="busca" placeholder="Nome, @, telefone ou etiqueta…"
         autocapitalize="off" autocorrect="off" spellcheck="false">
       <button class="btn primary" id="novoCli" type="button">Novo cliente</button>
     </div>
     <div class="chips" id="chips"></div>
+    <div class="sec"><h2>Ranking</h2><span class="rule"></span><span class="meta" id="rankMeta"></span></div>
     <div class="lista" id="clientes"></div>
   </div>
+
+  <!-- FUNIL: o mapa da estratégia em cima, as conversas de hoje embaixo -->
+  <div data-p="funil" hidden>
+    <div class="acao">
+      <div class="seg" id="perMapa">
+        <button data-d="7" type="button">7 dias</button>
+        <button data-d="30" class="sel" type="button">30 dias</button>
+        <button data-d="90" type="button">90 dias</button>
+      </div>
+      <button class="btn sm ghost" id="novoNivel" type="button">Nova etapa</button>
+      <span class="meta">o desenho é seu; os números o sistema preenche quando sabe de onde tirar</span>
+    </div>
+    <div class="mapa" id="mapa"></div>
+
+    <div class="sec"><h2>As conversas de agora</h2><span class="rule"></span>
+      <span class="meta" id="funMeta"></span></div>
+    <div class="acao">
+      <button class="btn primary" id="novoAt" type="button">Registrar atendimento</button>
+      <select id="fVend"><option value="">Todo mundo</option></select>
+    </div>
+    <div class="quadro" id="quadro"></div>
+  </div>
+
 </div>
 
 <dialog id="dlgFicha">
@@ -229,7 +252,7 @@
       <div class="field"><label>Aniversário</label><input id="eBday" type="date">
         <div class="hint">Vira lembrete uma semana antes.</div></div>
       <div class="field"><label>Próximo contato</label><input id="eNext" type="date">
-        <div class="hint">No dia, a pessoa aparece em <b>Hoje</b>.</div></div>
+        <div class="hint">No dia, ela aparece com o aviso <b>falar hoje</b> na lista.</div></div>
     </div>
     <div class="g2">
       <div class="field"><label>Vendedor responsável</label><select id="eDono"></select></div>
@@ -241,7 +264,7 @@
       <div class="hint">Separadas por vírgula. Servem para achar depois.</div></div>
     <div class="field"><label>Observação</label><input id="eObs" placeholder="O que for útil lembrar"></div>
     <label class="sw"><input type="checkbox" id="eNoContact">
-      <span><b>Não quer receber contato</b> — sai da fila de hoje. Cobrança de fiado continua aparecendo.</span></label>
+      <span><b>Não quer receber contato</b> — fica marcado na ficha e na lista, para ninguém do time chamar sem querer.</span></label>
     <div class="dlg-foot">
       <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
       <button class="btn primary" id="eSalvar" value="ok" type="submit">Salvar</button>
@@ -269,7 +292,7 @@
       <option value="7">1 semana</option><option value="15">15 dias</option>
       <option value="30">1 mês</option><option value="60">2 meses</option>
     </select>
-      <div class="hint">Agendar é o que faz a pessoa voltar na fila no dia certo.</div></div>
+      <div class="hint">No dia marcado, a pessoa aparece com o aviso <b>falar hoje</b> na lista.</div></div>
     <div class="dlg-foot">
       <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
       <button class="btn primary" id="cSalvar" value="ok" type="submit">Salvar</button>
@@ -312,6 +335,31 @@
   </form>
 </dialog>
 
+<dialog id="dlgNo">
+  <form class="dlg" method="dialog">
+    <h3 id="noT">Caminho do mapa</h3>
+    <input type="hidden" id="noId"><input type="hidden" id="noLevel">
+    <div class="field"><label>Nome *</label>
+      <input id="noLabel" placeholder="Ex.: Anúncio, Reels, Direct, Visitas ao perfil"></div>
+    <div class="field"><label>De onde vem o número</label>
+      <select id="noFonte"></select>
+      <div class="hint">O sistema calcula sozinho o que ele mede. O que vem de fora
+        (impressões do anúncio, visitas ao perfil) você digita.</div></div>
+    <div class="field" id="wrapValor"><label>Número</label>
+      <input id="noValor" type="number" step="1" min="0" inputmode="numeric" placeholder="0"></div>
+    <div class="field"><label>Meta (opcional)</label>
+      <input id="noMeta" type="number" step="1" min="0" inputmode="numeric" placeholder="quanto você quer">
+      </div>
+    <div class="field"><label>Anotação</label>
+      <input id="noNota" placeholder="A estratégia deste caminho"></div>
+    <div class="dlg-foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn danger" id="noApagar" value="cancel" type="button" hidden>Remover</button>
+      <button class="btn primary" id="noSalvar" value="ok" type="submit">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
 <script src="/icons.js"></script>
 <script src="/nav.js"></script>
 <script>
@@ -319,6 +367,8 @@ const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigit
 const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
 const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
+const NUM=(n)=>Number(n||0).toLocaleString('pt-BR');
+const HOJE=new Date().toISOString().slice(0,10);
 const iniciais=(n)=>String(n||'').replace(/^@/,'').trim().split(/\s+/).slice(0,2).map(p=>p[0]||'').join('').toUpperCase();
 const SEG={novo:'Novo',ativo:'Ativo',esfriando:'Esfriando',sumido:'Sumido',perdido:'Perdido',lead:'Lead',cadastro:'Cadastro'};
 const MOT={cobranca:'Cobrança',agendado:'Agendado',aniversario:'Aniversário',pos_venda:'Pós-venda',
@@ -336,11 +386,12 @@ const zap=(fone,texto)=>{const d=soDigitos(fone);if(!d)return null;
 let TIME=[],COLS=[],SEGS=[],segAtivo='todos';
 
 /* abas — a que abre vem do endereço, para os atalhos antigos continuarem valendo */
+let funilCarregado=false;
 function aba(nome){
   document.querySelectorAll('.aba').forEach(x=>x.classList.toggle('on',x.dataset.aba===nome));
   document.querySelectorAll('[data-p]').forEach(p=>p.hidden=p.dataset.p!==nome);
-  if(nome==='funil')quadro();
-  if(nome==='lista')listar();
+  // O mapa e o quadro só carregam quando a aba abre.
+  if(nome==='funil'&&!funilCarregado){funilCarregado=true;mapa();quadro();}
 }
 document.querySelectorAll('.aba').forEach(b=>b.onclick=()=>aba(b.dataset.aba));
 
@@ -358,7 +409,7 @@ async function equipe(){
   if(ult&&TIME.some(m=>String(m.id)===ult))document.getElementById('cVend').value=ult;
 }
 
-/* ---------------- HOJE ---------------- */
+/* ---------------- CRM: os números e os grupos ---------------- */
 async function painel(){
   const d=await api('/api/crm');
   SEGS=d.segmentos;
@@ -373,48 +424,8 @@ async function painel(){
       <div class="sub">a loja recompra a cada ${d.ciclo_loja} dias</div></div>
     <div class="card kpi warn"><span class="label">Em risco</span><div class="big">${N.em_risco}</div>
       <div class="sub">esfriando ou sumidos</div></div>`;
-
-  document.getElementById('nHoje').textContent=d.total_tarefas;
-  document.getElementById('hojeMeta').textContent=d.total_tarefas>d.hoje.length
-    ? `mostrando ${d.hoje.length} de ${d.total_tarefas}` : '';
-  const fila=document.getElementById('fila');
-  if(!d.hoje.length){
-    fila.innerHTML=vazio('ok','Ninguém para chamar hoje',
-      'Quando alguém esfriar, fizer aniversário, ficar devendo ou passar do ritmo de compra, aparece aqui.');
-  }else{
-    fila.innerHTML=d.hoje.map(t=>{
-      const w=zap(t.phone,t.fala);
-      return `<div class="tf ${t.urgencia}">
-        <div class="cab">
-          <span class="nm" data-cli="${t.cliente_id}">${esc(t.nome)}</span>
-          <span class="mot ${t.tipo}">${MOT[t.tipo]||t.tipo}</span>
-          ${t.vip?'<span class="vip">VIP</span>':''}
-          <span class="sgt ${t.seg}">${SEG[t.seg]||t.seg}</span>
-        </div>
-        <div class="pq">${esc(t.porque)} · ${t.compras} compra(s) · ${BRL(t.gasto)}</div>
-        <div class="fala">${esc(t.fala)}</div>
-        <div class="acts">
-          ${w?`<a class="btn sm primary" href="${w}" target="_blank" rel="noopener">WhatsApp</a>`:''}
-          <button class="btn sm ghost" data-copiar="${t.cliente_id}" type="button">Copiar</button>
-          <button class="btn sm ghost" data-falei="${t.cliente_id}" type="button">Já falei</button>
-          <button class="btn sm ghost" data-adiar="${t.cliente_id}" type="button"
-            title="${t.tipo==='cobranca'?'Só silencia o lembrete — a dívida continua no Financeiro':'Volta a aparecer em 7 dias'}">Adiar 7 dias</button>
-        </div></div>`;}).join('');
-    fila.querySelectorAll('[data-cli]').forEach(b=>b.onclick=()=>ficha(b.dataset.cli));
-    fila.querySelectorAll('[data-copiar]').forEach(b=>b.onclick=async()=>{
-      const t=d.hoje.find(x=>String(x.cliente_id)===b.dataset.copiar);
-      try{await navigator.clipboard.writeText(t.fala);b.textContent='Copiado';
-        setTimeout(()=>{b.textContent='Copiar';},1600);}catch(_){alert(t.fala);}
-    });
-    fila.querySelectorAll('[data-falei]').forEach(b=>b.onclick=()=>{
-      const t=d.hoje.find(x=>String(x.cliente_id)===b.dataset.falei);abrirContato(t.cliente_id,t.nome,t.tipo);});
-    fila.querySelectorAll('[data-adiar]').forEach(b=>b.onclick=async()=>{
-      try{await api('/api/crm/cliente/'+b.dataset.adiar+'/contato',{method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({kind:'nota',body:'Adiado',adiar_dias:7})});painel();}catch(e){alert(e.message);}
-    });
-  }
   chips();
+  listar();
 }
 
 /* ---------------- TODOS ---------------- */
@@ -433,11 +444,16 @@ async function listar(){
   const d=await api('/api/crm/clientes?'+new URLSearchParams({q,seg:segAtivo}));
   const box=document.getElementById('clientes');
   if(!d.clientes.length){box.innerHTML=vazio('clientes','Ninguém aqui','Tente outro grupo ou outra busca.');return;}
-  box.innerHTML=d.clientes.map(c=>`<div class="cli" data-cli="${c.id}">
+  document.getElementById('rankMeta').textContent=
+    `${d.total} pessoa(s)${segAtivo!=='todos'?' neste grupo':''} · em ordem de quanto já levaram`;
+  box.innerHTML=d.clientes.map((c,i)=>`<div class="cli" data-cli="${c.id}">
+      <span class="pos">${i+1}º</span>
       <span class="av">${esc(iniciais(c.nome))}</span>
       <div><div class="nm">${esc(c.nome)}
         ${c.vip?'<span class="vip">VIP</span>':''}
-        <span class="sgt ${c.seg}">${SEG[c.seg]||c.seg}</span></div>
+        <span class="sgt ${c.seg}">${SEG[c.seg]||c.seg}</span>
+        ${c.next_contact&&c.next_contact<=HOJE?'<span class="mot agendado">falar hoje</span>':''}
+        ${c.no_contact?'<span class="mot">não contatar</span>':''}</div>
         <div class="s">${c.compras} compra(s)${c.dias!=null?' · última há '+c.dias+' dias':''}${
           c.marca?' · gosta de '+esc(c.marca):''}${c.aberto>0?' · deve '+BRL(c.aberto):''}</div></div>
       <div class="vl">${BRL(c.gasto)}<small>ticket ${BRL(c.ticket)}</small></div>
@@ -500,6 +516,114 @@ function cartao(a,col){
       </div></div>`;
 }
 document.getElementById('fVend').onchange=quadro;
+
+/* ---------------- MAPA DA ESTRATÉGIA ---------------- */
+// O quadro mostra as conversas de agora; o mapa mostra o caminho que a
+// loja construiu para alguém chegar até elas.
+let diasMapa=30, FONTES=[], MAPA=null;
+async function mapa(){
+  const d=await api('/api/mapa?days='+diasMapa);
+  MAPA=d; FONTES=d.fontes;
+  const box=document.getElementById('mapa');
+  if(!d.niveis.length){
+    box.innerHTML=vazio('grafico','Mapa vazio','Clique em "Nova etapa" para desenhar o caminho da sua loja.');
+    return;
+  }
+  box.innerHTML=d.niveis.map((n,i)=>{
+    const nos=n.nos.map(x=>{
+      const vazio=x.valor==null;
+      const meta=x.pct_meta!=null
+        ? `<div class="mt ${x.pct_meta>=100?'ok':(x.pct_meta>=60?'':'baixo')}">${x.pct_meta}% da meta de ${NUM(x.meta)}</div>`:'';
+      return `<div class="no" data-no="${x.id}" title="${esc(x.nota||'')}">
+        <div class="l">${esc(x.label)}</div>
+        <div class="v${vazio?' vazio':''}">${vazio?'—':NUM(x.valor)}</div>
+        <div class="f${x.automatico?' auto':''}">${x.automatico?'automático':'você digita'}</div>
+        ${meta}</div>`;
+    }).join('');
+    const seta=n.conversao!=null
+      ? `<div class="seta${n.conversao<100?'':''}"><span class="l"></span>
+           <span><b>${String(n.conversao).replace('.',',')}%</b> seguem</span><span class="l"></span></div>`
+      : '<div class="seta"><span class="l"></span><span>↓</span><span class="l"></span></div>';
+    return `<div class="niv">
+        <div class="nh"><span class="t">${esc(n.label)}</span>
+          ${n.total!=null?`<span class="tot">${NUM(n.total)}</span>`:''}
+          <button class="ib" data-ednivel="${n.id}" type="button">renomear</button>
+          <button class="ib" data-rmnivel="${n.id}" type="button">remover</button></div>
+        <div class="nos">${nos}
+          <div class="no mais" data-addno="${n.id}">+</div></div>
+      </div>` + (i<d.niveis.length-1?seta:'');
+  }).join('');
+
+  box.querySelectorAll('[data-no]').forEach(b=>b.onclick=()=>{
+    const no=d.niveis.flatMap(n=>n.nos).find(x=>String(x.id)===b.dataset.no);
+    abrirNo(no,null);});
+  box.querySelectorAll('[data-addno]').forEach(b=>b.onclick=()=>abrirNo(null,b.dataset.addno));
+  box.querySelectorAll('[data-ednivel]').forEach(b=>b.onclick=async()=>{
+    const n=d.niveis.find(x=>String(x.id)===b.dataset.ednivel);
+    const label=prompt('Nome da etapa:',n.label);
+    if(!label)return;
+    try{await api('/api/mapa/nivel',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:n.id,label})});mapa();}catch(e){alert(e.message);}
+  });
+  box.querySelectorAll('[data-rmnivel]').forEach(b=>b.onclick=async()=>{
+    const n=d.niveis.find(x=>String(x.id)===b.dataset.rmnivel);
+    if(!confirm(`Remover a etapa "${n.label}" e tudo que está nela?`))return;
+    try{await api('/api/mapa/nivel/'+n.id,{method:'DELETE'});mapa();}catch(e){alert(e.message);}
+  });
+}
+document.getElementById('perMapa').onclick=e=>{
+  const b=e.target.closest('button');if(!b)return;
+  document.querySelectorAll('#perMapa button').forEach(x=>x.classList.remove('sel'));
+  b.classList.add('sel');diasMapa=parseInt(b.dataset.d,10);mapa();
+};
+document.getElementById('novoNivel').onclick=async()=>{
+  const label=prompt('Nome da nova etapa (ex.: Descoberta, Perfil, Conversa):');
+  if(!label)return;
+  try{await api('/api/mapa/nivel',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({label})});mapa();}catch(e){alert(e.message);}
+};
+
+const dlgNo=document.getElementById('dlgNo');
+function abrirNo(no,levelId){
+  document.getElementById('noT').textContent=no?'Caminho do mapa':'Novo caminho';
+  document.getElementById('noId').value=no?no.id:'';
+  document.getElementById('noLevel').value=levelId||'';
+  document.getElementById('noLabel').value=no?no.label:'';
+  document.getElementById('noNota').value=no?(no.nota||''):'';
+  document.getElementById('noMeta').value=no&&no.meta?no.meta:'';
+  const sel=document.getElementById('noFonte');
+  sel.innerHTML=FONTES.map(f=>`<option value="${f.id}">${esc(f.label)}</option>`).join('');
+  sel.value=no?no.fonte:'';
+  document.getElementById('noValor').value=no&&no.manual!=null?no.manual:'';
+  document.getElementById('noApagar').hidden=!no;
+  trocaFonte();
+  dlgNo.showModal();
+}
+function trocaFonte(){
+  const auto=document.getElementById('noFonte').value!=='';
+  document.getElementById('wrapValor').hidden=auto;
+}
+document.getElementById('noFonte').onchange=trocaFonte;
+document.getElementById('noSalvar').onclick=async e=>{
+  e.preventDefault();
+  const label=document.getElementById('noLabel').value.trim();
+  if(!label)return alert('Dê um nome para o caminho.');
+  const id=document.getElementById('noId').value;
+  const corpo={label,fonte:document.getElementById('noFonte').value,
+    valor:parseFloat(document.getElementById('noValor').value),
+    meta:parseFloat(document.getElementById('noMeta').value),
+    nota:document.getElementById('noNota').value.trim()};
+  if(id)corpo.id=id; else corpo.level_id=document.getElementById('noLevel').value;
+  try{
+    await api('/api/mapa/no',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
+    dlgNo.close();mapa();
+  }catch(err){alert(err.message);}
+};
+document.getElementById('noApagar').onclick=async()=>{
+  if(!confirm('Remover este caminho do mapa?'))return;
+  try{await api('/api/mapa/no/'+document.getElementById('noId').value,{method:'DELETE'});
+    dlgNo.close();mapa();}catch(e){alert(e.message);}
+};
 
 /* ---------------- FICHA ---------------- */
 const dlgFicha=document.getElementById('dlgFicha');
@@ -614,7 +738,7 @@ document.getElementById('eSalvar').onclick=async e=>{
     dlgEdit.close();
     painel();
     if(alvo&&dlgFicha.open)await ficha(alvo);
-    if(!document.querySelector('[data-p="lista"]').hidden)listar();
+    listar();
   }catch(err){alert(err.message);}
 };
 
@@ -642,7 +766,7 @@ document.getElementById('cSalvar').onclick=async e=>{
     dlgContato.close();
     if(dlgFicha.open)await ficha(id);
     painel();
-    if(!document.querySelector('[data-p="lista"]').hidden)listar();
+    listar();
   }catch(err){alert(err.message);}
 };
 
@@ -702,8 +826,8 @@ document.getElementById('aApagar').onclick=async()=>{
 };
 
 // /funil abre direto no quadro; qualquer outro caminho abre em Hoje.
-const inicial=location.pathname.startsWith('/funil')?'funil':'hoje';
-equipe().then(painel).then(()=>{if(inicial!=='hoje')aba(inicial);});
+const inicial=location.pathname.startsWith('/funil')?'funil':'crm';
+equipe().then(painel).then(()=>{if(inicial!=='crm')aba(inicial);});
 </script>
 </body>
 </html>

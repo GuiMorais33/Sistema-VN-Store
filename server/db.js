@@ -258,6 +258,29 @@ CREATE TABLE IF NOT EXISTS atendimentos (
   created_at  TEXT NOT NULL,
   updated_at  TEXT
 );
+-- O mapa da estratégia: como um estranho vira cliente nesta loja.
+-- Cada nível é uma etapa da jornada (descoberta, perfil, conversa…) e
+-- cada nó é um caminho dentro dela (anúncio, reels, direct…). O desenho
+-- é seu; os números o sistema preenche quando sabe de onde tirar.
+CREATE TABLE IF NOT EXISTS funnel_levels (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  ordem      INTEGER NOT NULL DEFAULT 0,
+  label      TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS funnel_nodes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  level_id   INTEGER NOT NULL REFERENCES funnel_levels(id) ON DELETE CASCADE,
+  ordem      INTEGER NOT NULL DEFAULT 0,
+  label      TEXT NOT NULL,
+  fonte      TEXT DEFAULT '',   -- '' = você digita | canal:x | etapa:x | venda:x
+  valor      REAL,              -- o número, quando não é automático
+  meta       REAL,              -- quanto você quer que passe por aqui
+  nota       TEXT DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_fnodes_level ON funnel_nodes(level_id, ordem);
+
 -- CRM: cada conversa com o cliente vira uma linha da história dele.
 -- Compra o sistema já sabe; o que faltava era o que foi CONVERSADO.
 CREATE TABLE IF NOT EXISTS crm_notes (
