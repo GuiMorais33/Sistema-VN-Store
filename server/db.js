@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const db = new Database(join(__dirname, '..', 'vnstore.db'));
+// DB_FILE existe para teste rodar em banco separado. Em produção fica
+// vazio e o banco é sempre o vnstore.db da pasta do sistema.
+const db = new Database(process.env.DB_FILE || join(__dirname, '..', 'vnstore.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
@@ -217,6 +219,49 @@ CREATE TABLE IF NOT EXISTS goals (
 );
 CREATE INDEX IF NOT EXISTS idx_goals_ym ON goals(ym);
 
+-- O sonho do vendedor. A meta não sai de planilha, sai daqui: a pessoa
+-- diz o que quer conquistar e quanto custa, e a conta desce sozinha até
+-- quantos atendimentos por dia isso dá.
+CREATE TABLE IF NOT EXISTS dreams (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id     INTEGER NOT NULL UNIQUE REFERENCES team_members(id),
+  titulo        TEXT NOT NULL,                  -- "a entrada da moto"
+  valor         REAL NOT NULL,                  -- quanto custa
+  prazo_meses   INTEGER NOT NULL DEFAULT 12,    -- em quanto tempo ele quer
+  comissao_pct  REAL NOT NULL DEFAULT 0,        -- 3 = 3% do que vender
+  por_dia       INTEGER NOT NULL DEFAULT 10,    -- ritmo que ELE escolheu
+  -- Ticket e conversão saem do histórico dele. Estes campos só existem
+  -- para quem ainda não tem histórico e precisa chutar um começo.
+  ticket_manual REAL,
+  fech_manual   REAL,
+  prop_manual   REAL,
+  active        INTEGER NOT NULL DEFAULT 1,
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT
+);
+
+-- Funil: cada pessoa atendida, o que ela quer e onde a conversa parou.
+-- Sem isso não existe taxa de conversão própria — só palpite.
+CREATE TABLE IF NOT EXISTS atendimentos (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id   INTEGER REFERENCES team_members(id),
+  customer_id INTEGER REFERENCES customers(id),
+  nome        TEXT DEFAULT '',
+  instagram   TEXT DEFAULT '',
+  canal       TEXT NOT NULL DEFAULT 'direct',        -- direct|whatsapp|loja|site|indicacao
+  querendo    TEXT DEFAULT '',                       -- o que a pessoa está comprando
+  stage       TEXT NOT NULL DEFAULT 'atendimento',   -- atendimento|proposta|vendido|perdido
+  motivo      TEXT DEFAULT '',                       -- por que perdeu
+  sale_id     INTEGER,
+  valor       REAL NOT NULL DEFAULT 0,               -- valor da proposta
+  day         TEXT NOT NULL,                         -- AAAA-MM-DD
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_atend_dia ON atendimentos(day);
+CREATE INDEX IF NOT EXISTS idx_atend_membro ON atendimentos(member_id, day);
+CREATE INDEX IF NOT EXISTS idx_atend_stage ON atendimentos(stage);
+
 -- Fechamento de caixa do dia: o que o sistema esperava x o que foi contado.
 CREATE TABLE IF NOT EXISTS cash_closings (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -290,6 +335,10 @@ ensureColumn('financial_entries', 'paid_at', 'paid_at TEXT');
 // Quem vendeu — sem isso não dá para medir meta de ninguém.
 ensureColumn('sales', 'seller_id', 'seller_id INTEGER');
 ensureColumn('sales', 'seller_name', 'seller_name TEXT');
+// Quanto a pessoa ganha em cima do que vende — é a régua do sonho.
+ensureColumn('team_members', 'commission_pct', 'commission_pct REAL NOT NULL DEFAULT 0');
+// De qual atendimento essa venda nasceu (fecha o funil).
+ensureColumn('sales', 'atendimento_id', 'atendimento_id INTEGER');
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_order ON sales(nuvemshop_order_id) WHERE nuvemshop_order_id IS NOT NULL'); } catch (_) {}
 
 // ---- Plano de contas padrão (criado uma vez) ----

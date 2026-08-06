@@ -109,6 +109,11 @@
         <select id="vend"></select>
       </div>
 
+      <div class="field" id="wrapAtend" hidden>
+        <label for="atend">De qual atendimento</label>
+        <select id="atend"></select>
+      </div>
+
       <div class="field cust-wrap">
         <label for="cust">Cliente</label>
         <input id="cust" type="text" placeholder="Nome ou @instagram…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
@@ -273,10 +278,31 @@ document.addEventListener('click',e=>{if(!e.target.closest('#cust')&&!e.target.c
     // Lembra de quem estava no balcão neste aparelho.
     const ult=localStorage.getItem('vn_vendedor');
     if(ult&&vs.some(m=>String(m.id)===ult))sel.value=ult;
-    sel.onchange=()=>localStorage.setItem('vn_vendedor',sel.value);
+    sel.onchange=()=>{localStorage.setItem('vn_vendedor',sel.value);atendimentos();};
     document.getElementById('wrapVend').hidden=false;
+    atendimentos();
   }catch(_){}
 })();
+
+// Fecha o funil: se essa venda veio de um atendimento que já estava
+// aberto, dá para amarrar os dois aqui e a conversão sai certa.
+async function atendimentos(){
+  const w=document.getElementById('wrapAtend'),sel=document.getElementById('atend');
+  const v=document.getElementById('vend').value;
+  w.hidden=true;sel.innerHTML='';
+  if(!v)return;
+  try{
+    // Vale o que é dele e também o que ficou sem dono — senão um
+    // atendimento anotado às pressas não teria como ser fechado aqui.
+    const d=await api('/api/atendimentos?days=30');
+    const abertos=d.linhas.filter(a=>(a.stage==='atendimento'||a.stage==='proposta')
+      &&(!a.member_id||String(a.member_id)===String(v)));
+    if(!abertos.length)return;
+    sel.innerHTML='<option value="">— venda nova —</option>'+abertos.map(a=>
+      `<option value="${a.id}">${esc(a.nome||a.instagram||'sem nome')}${a.querendo?' — '+esc(a.querendo):''}</option>`).join('');
+    w.hidden=false;
+  }catch(_){}
+}
 
 /* controles */
 document.getElementById('seg').onclick=e=>{const b=e.target.closest('.seg-b');if(!b)return;
@@ -297,6 +323,7 @@ async function finalizar(){
     const r=await api('/api/sales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       items,customer_id:S.cliente?S.cliente.id:null,payment_method:S.pay,payment_status:S.status,
       seller_id:document.getElementById('vend').value||null,
+      atendimento_id:document.getElementById('atend').value||null,
       discount:parseFloat(document.getElementById('disc').value)||0})});
     const vend=r.vendedor?' · '+r.vendedor:'';
     const sit=r.payment_status==='pendente'?'Fiado — foi para Contas a receber':'Pago';
@@ -307,6 +334,7 @@ async function finalizar(){
     S.cart.clear();S.pay='';limparCliente();
     document.querySelectorAll('.pay').forEach(p=>p.classList.remove('sel'));
     document.getElementById('disc').value='';renderCart();
+    atendimentos();
     await carregar(document.getElementById('search').value.trim());
   }catch(e){toast('Não deu pra lançar',e.message,true);}
   finally{btn.textContent='Finalizar venda';btn.disabled=!S.cart.size;}

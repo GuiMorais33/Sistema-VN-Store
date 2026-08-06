@@ -77,7 +77,7 @@
       <a href="#compras">Compras e custos</a>
       <a href="#lembretes">Lembretes</a>
       <a href="#financeiro">Financeiro</a>
-      <a href="#equipe">Equipe e metas</a>
+      <a href="#equipe">Equipe, metas e sonhos</a>
       <a href="#relatorios">Relatórios</a>
       <a href="#automatico">O que roda sozinho</a>
       <a href="#agentes">Os agentes</a>
@@ -446,6 +446,53 @@
 
         <p>Vendas sem vendedor marcado aparecem à parte, no topo do ranking, para você saber quanto
           ficou sem dono.</p>
+
+        <h3>O sonho de cada um</h3>
+        <p>Meta que a pessoa não escolheu, a pessoa abandona no meio. Então a meta não começa pelo
+          faturamento da loja — começa por <b>um número que o vendedor escolheu</b>. A pergunta é
+          essa, e é para você fazer, não adivinhar:</p>
+        <p style="font-size:16px"><b>“O que você quer conquistar em 12 meses que hoje parece
+          impossível?”</b></p>
+        <p>Ele responde o que é e quanto custa. Daí a conta desce sozinha até virar tarefa de hoje:</p>
+        <ul>
+          <li><b>Sonho ÷ comissão dele</b> = quanto precisa vender</li>
+          <li><b>÷ ticket médio dele</b> = quantas vendas</li>
+          <li><b>÷ quanto ele fecha</b> = quantas propostas</li>
+          <li><b>÷ quanto vira proposta</b> = quantos atendimentos</li>
+          <li><b>÷ atendimentos por dia</b> = em quantos dias úteis o sonho sai</li>
+        </ul>
+        <p>A conta é de baixo para cima; a execução é ao contrário — ele atende, manda proposta,
+          fecha. O cartão mostra <b>quanto de comissão ele já juntou</b> desde que escreveu o sonho, e
+          um contador de <b>quantos atendimentos ele fez hoje</b> contra o ritmo que ele escolheu.</p>
+
+        <div class="aviso dica"><span class="ico" id="d10"></span>
+          <div><b>Não existe prazo, existe ritmo.</b> Quem faz 10 atendimentos por dia chega em metade
+          do tempo de quem faz 5. Se no ritmo atual o sonho passar do prazo que ele quer, o cartão
+          diz <b>qual ritmo faria caber</b> — e aí a conversa deixa de ser cobrança e vira conta.</div></div>
+
+        <p><b>Ticket e conversão são dele</b>, tirados do histórico dele — não da média do time. Cada
+          linha da conta tem uma etiqueta dizendo de onde o número veio: <b>dele</b>, <b>média da
+          loja</b> (enquanto não houver histórico próprio), <b>à mão</b> (você digitou) ou <b>sem
+          histórico</b>. Enquanto faltar número, a conta não fecha — o sistema prefere dizer o que
+          falta a inventar um resultado.</p>
+        <p>Dois botões fecham o ciclo: <b>Virar meta do mês</b> transforma a conta na meta daquele mês,
+          e <b>Cartaz</b> imprime a conta em uma folha para colar na parede. A conta tem que ficar
+          onde ele vê todo dia, não escondida numa planilha.</p>
+
+        <h3>Funil: onde os números nascem</h3>
+        <p>Sem registrar quem foi atendido, "taxa de conversão" é chute. Na aba <b>Funil</b>, cada
+          pessoa que chama no direct, chega na loja ou pede preço vira uma linha, com <b>o que ela
+          está comprando</b> escrito com as palavras dela. Depois é só empurrar: <b>Mandei
+          proposta</b> → <b>Fechou</b>, ou <b>Perdi</b> com o motivo.</p>
+        <ul>
+          <li>Toda venda do PDV com vendedor marcado <b>já entra no funil como fechada</b>, mesmo que
+            ninguém tenha registrado o atendimento antes — senão a taxa de fechamento sairia menor do
+            que a verdade.</li>
+          <li>Se o atendimento já estava aberto, escolha ele no PDV em <b>De qual atendimento</b> e os
+            dois se amarram.</li>
+          <li>Atendimento perdido com motivo anotado vira padrão: depois de um mês você enxerga se
+            está perdendo por preço, por tamanho ou por demora.</li>
+        </ul>
       </section>
 
       <!-- RELATÓRIOS -->
@@ -568,7 +615,7 @@
 const icones={i1:'conectar',i2:'inicio',i3:'pdv',i4:'estoque',i5:'clientes',i6:'sino',
   i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa',i12:'caixa_vazia',i13:'grafico',i14:'clientes'};
 Object.entries(icones).forEach(([id,n])=>{const e=document.getElementById(id);if(e)e.innerHTML=ICO(n,17);});
-['d1','d2','d3','d4','d5','d6','d7'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['d1','d2','d3','d4','d5','d6','d7','d8','d9','d10'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
 ['a1','a2','a4'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
 
 // Marca a seção visível no índice

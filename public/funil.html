@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070907">
+<title>VN Store — Funil</title>
+<link rel="icon" href="/logo.webp">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .topo{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--s3);margin-bottom:var(--s4)}
+  @media (max-width:760px){.topo{grid-template-columns:repeat(2,1fr)}}
+  .box{padding:var(--s4)}
+  .box .big{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;
+    font-size:clamp(22px,3vw,30px);letter-spacing:-1px;margin-top:6px}
+  .box .sub{font-size:11.5px;color:var(--ink-3);margin-top:4px;line-height:1.45}
+  .box.hi .big{color:var(--brand-hi)}
+
+  /* O funil desenhado: cada faixa é mais estreita que a anterior */
+  .funil{display:flex;flex-direction:column;gap:6px;margin-bottom:var(--s4)}
+  .fx{display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:var(--r);
+    border:1px solid var(--line);background:linear-gradient(180deg,var(--surface-2),var(--surface));
+    margin:0 auto;width:100%;transition:width .4s var(--ease)}
+  .fx .n{font-family:var(--font-mono);font-weight:700;font-size:19px;min-width:52px}
+  .fx .l{font-size:12px;color:var(--ink-2);flex:1}
+  .fx .t{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-3)}
+  .fx.a{border-color:rgba(47,210,79,.28)}
+  .fx.b .n{color:var(--warn)}
+  .fx.c .n{color:var(--brand-hi)}
+
+  .bar{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center;margin-bottom:var(--s3)}
+  .bar select,.bar input{width:auto}
+
+  .lista{display:flex;flex-direction:column;gap:6px}
+  .at{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;
+    padding:11px 13px;border:1px solid var(--line);border-radius:var(--r);
+    background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+  .at .nm{font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .at .q{font-size:12px;color:var(--ink-2);margin-top:3px;line-height:1.4}
+  .at .s{font-size:11px;color:var(--ink-3);margin-top:3px}
+  .at .acts{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+  .at.perdido{opacity:.55}
+  .st{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;
+    border-radius:999px;background:var(--bg-elev);color:var(--ink-3)}
+  .st.atendimento{background:rgba(122,162,247,.12);color:#93b4ff}
+  .st.proposta{background:rgba(230,168,40,.13);color:var(--warn)}
+  .st.vendido{background:rgba(47,210,79,.13);color:var(--brand-hi)}
+  .st.perdido{background:rgba(242,86,74,.12);color:var(--crit)}
+  .cnl{font-size:10px;color:var(--ink-3);font-family:var(--font-mono)}
+
+  .dlg{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);min-width:min(430px,92vw)}
+  .dlg h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;font-size:18px;transform:skewX(-5deg)}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+  @media (max-width:520px){.g2{grid-template-columns:1fr}}
+  .dlg-foot{display:flex;gap:var(--s2);justify-content:flex-end}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--bg-elev);
+    color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer}
+  .chip.on{border-color:var(--brand);color:var(--brand-hi);background:rgba(47,210,79,.1)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="pagehead">
+    <div><h1>Funil</h1><div class="ph-sub">Quem foi atendido · o que cada um quer · onde a conversa parou</div></div>
+    <div class="ph-actions"><button class="btn primary" id="novo" type="button">Registrar atendimento</button></div>
+  </div>
+
+  <div class="bar">
+    <select id="fVend"><option value="">Todo mundo</option></select>
+    <select id="fDias">
+      <option value="1">Hoje</option>
+      <option value="7">7 dias</option>
+      <option value="30" selected>30 dias</option>
+      <option value="90">90 dias</option>
+    </select>
+    <select id="fStage">
+      <option value="">Todos os estágios</option>
+      <option value="atendimento">Só em aberto</option>
+      <option value="proposta">Só com proposta</option>
+      <option value="vendido">Só fechados</option>
+      <option value="perdido">Só perdidos</option>
+    </select>
+  </div>
+
+  <div class="topo">
+    <div class="card box"><span class="label">Hoje</span><div class="big" id="kHoje">—</div>
+      <div class="sub">atendimentos registrados hoje</div></div>
+    <div class="card box"><span class="label">Atendimentos</span><div class="big" id="kAt">—</div>
+      <div class="sub" id="kAtSub">no período</div></div>
+    <div class="card box"><span class="label">Viram proposta</span><div class="big" id="kProp">—</div>
+      <div class="sub" id="kPropSub">—</div></div>
+    <div class="card box hi"><span class="label">Fecharam</span><div class="big" id="kVend">—</div>
+      <div class="sub" id="kVendSub">—</div></div>
+  </div>
+
+  <div class="sec"><h2>O funil</h2><span class="rule"></span><span class="meta" id="funMeta"></span></div>
+  <div class="funil" id="funil"></div>
+
+  <div class="sec"><h2>Atendimentos</h2><span class="rule"></span><span class="meta" id="listaMeta"></span></div>
+  <div class="lista" id="lista"></div>
+</div>
+
+<dialog id="dlg">
+  <form class="dlg" method="dialog">
+    <h3 id="dlgT">Registrar atendimento</h3>
+    <input type="hidden" id="aId">
+    <div class="g2">
+      <div class="field"><label>Quem *</label><input id="aNome" placeholder="Nome ou @"
+        autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+      <div class="field"><label>Vendedor</label><select id="aVend"></select></div>
+    </div>
+    <div class="field"><label>Por onde chegou</label>
+      <div class="chips" id="aCanal">
+        <button class="chip on" type="button" data-c="direct">Direct</button>
+        <button class="chip" type="button" data-c="whatsapp">WhatsApp</button>
+        <button class="chip" type="button" data-c="loja">Loja</button>
+        <button class="chip" type="button" data-c="site">Site</button>
+        <button class="chip" type="button" data-c="indicacao">Indicação</button>
+      </div></div>
+    <div class="field"><label>O que a pessoa está comprando</label>
+      <input id="aQuer" placeholder="Ex.: tênis 42, presente pro irmão, calça cargo preta">
+      <div class="hint">Meritocracia é o vendedor <b>saber o que cada lead quer</b>. Escreva com as palavras da pessoa.</div></div>
+    <div class="g2">
+      <div class="field"><label>Estágio</label><select id="aStage">
+        <option value="atendimento">Atendendo</option>
+        <option value="proposta">Mandei proposta</option>
+        <option value="vendido">Fechou</option>
+        <option value="perdido">Perdi</option>
+      </select></div>
+      <div class="field"><label>Valor da proposta (R$)</label>
+        <input id="aValor" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0,00"></div>
+    </div>
+    <div class="field" id="wrapMotivo" hidden><label>Por que perdeu</label>
+      <input id="aMotivo" placeholder="Preço, tamanho, sumiu, comprou em outro lugar…"></div>
+    <div class="dlg-foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn primary" id="salvar" value="ok" type="submit">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/icons.js"></script>
+<script src="/nav.js"></script>
+<script>
+const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
+const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
+document.getElementById('novo').insertAdjacentHTML('afterbegin',ICO('mais',16));
+
+const CANAL={direct:'Direct',whatsapp:'WhatsApp',loja:'Loja',site:'Site',indicacao:'Indicação'};
+const STAGE={atendimento:'Atendendo',proposta:'Proposta',vendido:'Fechou',perdido:'Perdido'};
+const quando=(iso)=>{const d=new Date(iso),h=Math.round((Date.now()-d)/36e5);
+  if(h<1)return 'agora há pouco'; if(h<24)return h+'h atrás';
+  const dd=Math.round(h/24); return dd===1?'ontem':dd+' dias atrás';};
+let TIME=[];
+
+async function equipe(){
+  const d=await api('/api/team');
+  TIME=d.membros.filter(m=>m.active&&m.vende);
+  const opts=TIME.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
+  document.getElementById('fVend').innerHTML='<option value="">Todo mundo</option>'+opts;
+  document.getElementById('aVend').innerHTML='<option value="">— sem vendedor —</option>'+opts;
+}
+
+async function carregar(){
+  const v=document.getElementById('fVend').value;
+  const q=new URLSearchParams({days:document.getElementById('fDias').value});
+  if(v)q.set('member_id',v);
+  const st=document.getElementById('fStage').value;
+  if(st)q.set('stage',st);
+  const d=await api('/api/atendimentos?'+q);
+  const R=d.resumo;
+
+  document.getElementById('kHoje').textContent=R.hoje;
+  document.getElementById('kAt').textContent=R.atendimentos;
+  document.getElementById('kAtSub').textContent=`nos últimos ${d.dias} dia(s)`;
+  document.getElementById('kProp').textContent=R.propostas;
+  document.getElementById('kPropSub').textContent=R.taxa_proposta!=null?R.taxa_proposta+'% dos atendimentos':'—';
+  document.getElementById('kVend').textContent=R.vendas;
+  document.getElementById('kVendSub').textContent=R.taxa_fechamento!=null?R.taxa_fechamento+'% das propostas':'—';
+
+  // O desenho do funil: a largura mostra o estreitamento de verdade.
+  const base=Math.max(1,R.atendimentos);
+  const larg=(n)=>Math.max(34,Math.round((n/base)*100))+'%';
+  document.getElementById('funil').innerHTML=R.atendimentos?`
+    <div class="fx a" style="width:${larg(R.atendimentos)}">
+      <span class="n">${R.atendimentos}</span><span class="l">atendidos</span></div>
+    <div class="fx b" style="width:${larg(R.propostas)}">
+      <span class="n">${R.propostas}</span><span class="l">viraram proposta</span>
+      <span class="t">${R.taxa_proposta!=null?R.taxa_proposta+'%':''}</span></div>
+    <div class="fx c" style="width:${larg(R.vendas)}">
+      <span class="n">${R.vendas}</span><span class="l">fecharam</span>
+      <span class="t">${R.taxa_fechamento!=null?R.taxa_fechamento+'%':''}</span></div>`
+    :vazio('grafico','Funil vazio','Registre os atendimentos e as taxas aparecem sozinhas.');
+  document.getElementById('funMeta').textContent=R.perdidos?`${R.perdidos} perdido(s)`:'';
+
+  const box=document.getElementById('lista');
+  document.getElementById('listaMeta').textContent=d.linhas.length?d.linhas.length+' registro(s)':'';
+  if(!d.linhas.length){
+    box.innerHTML=vazio('clientes','Nada aqui ainda',
+      'Toda pessoa que chama no direct, chega na loja ou pede preço é um atendimento.');
+    return;
+  }
+  box.innerHTML=d.linhas.map(a=>`<div class="at ${a.stage}">
+      <div>
+        <div class="nm">${esc(a.nome||a.instagram||'sem nome')}
+          <span class="st ${a.stage}">${STAGE[a.stage]||a.stage}</span>
+          <span class="cnl">${CANAL[a.canal]||a.canal}</span></div>
+        ${a.querendo?`<div class="q">${esc(a.querendo)}</div>`:''}
+        <div class="s">${a.vendedor?esc(a.vendedor)+' · ':''}${quando(a.created_at)}${
+          a.venda_code?' · venda '+esc(a.venda_code)+' · '+BRL(a.venda_total):
+          (a.valor>0?' · '+BRL(a.valor):'')}${a.motivo?' · '+esc(a.motivo):''}</div>
+      </div>
+      <div class="acts">
+        ${a.stage==='atendimento'?`<button class="btn sm ghost" data-up="${a.id}" data-to="proposta" type="button">Mandei proposta</button>`:''}
+        ${a.stage==='proposta'?`<button class="btn sm primary" data-up="${a.id}" data-to="vendido" type="button">Fechou</button>`:''}
+        ${a.stage!=='vendido'&&a.stage!=='perdido'?`<button class="btn sm ghost" data-up="${a.id}" data-to="perdido" type="button">Perdi</button>`:''}
+        <button class="btn sm ghost" data-ed="${a.id}" type="button">Abrir</button>
+      </div></div>`).join('');
+
+  box.querySelectorAll('[data-up]').forEach(b=>b.onclick=async()=>{
+    const to=b.dataset.to;
+    let motivo;
+    if(to==='perdido'){motivo=prompt('Por que perdeu? (ajuda a achar padrão)');if(motivo===null)return;}
+    try{await api('/api/atendimentos/'+b.dataset.up,{method:'PATCH',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({stage:to,...(motivo!==undefined?{motivo}:{})})});
+      carregar();}catch(e){alert(e.message);}
+  });
+  box.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>{
+    abrir(d.linhas.find(x=>String(x.id)===b.dataset.ed));});
+}
+
+/* dialog */
+const dlg=document.getElementById('dlg');
+let canal='direct';
+document.getElementById('aCanal').onclick=(e)=>{
+  const c=e.target.closest('[data-c]');if(!c)return;
+  canal=c.dataset.c;
+  document.querySelectorAll('#aCanal .chip').forEach(x=>x.classList.toggle('on',x===c));
+};
+const stageSel=document.getElementById('aStage');
+stageSel.onchange=()=>{document.getElementById('wrapMotivo').hidden=stageSel.value!=='perdido';};
+
+function abrir(a){
+  document.getElementById('dlgT').textContent=a?'Atendimento':'Registrar atendimento';
+  document.getElementById('aId').value=a?a.id:'';
+  document.getElementById('aNome').value=a?(a.nome||a.instagram||''):'';
+  document.getElementById('aQuer').value=a?(a.querendo||''):'';
+  document.getElementById('aValor').value=a&&a.valor?a.valor:'';
+  document.getElementById('aMotivo').value=a?(a.motivo||''):'';
+  stageSel.value=a?a.stage:'atendimento';
+  document.getElementById('wrapMotivo').hidden=stageSel.value!=='perdido';
+  canal=a?a.canal:'direct';
+  document.querySelectorAll('#aCanal .chip').forEach(x=>x.classList.toggle('on',x.dataset.c===canal));
+  // Atendimento sem dono não conta para o funil de ninguém. Então cai em
+  // quem o aparelho usou por último e, na falta disso, no primeiro da lista.
+  const sel=document.getElementById('aVend');
+  const ult=localStorage.getItem('vn_vendedor');
+  sel.value=a&&a.member_id?a.member_id
+    :(ult&&TIME.some(m=>String(m.id)===ult)?ult:(TIME[0]?String(TIME[0].id):''));
+  dlg.showModal();
+  setTimeout(()=>document.getElementById('aNome').focus(),40);
+}
+document.getElementById('novo').onclick=()=>abrir(null);
+document.getElementById('salvar').onclick=async e=>{
+  e.preventDefault();
+  const nome=document.getElementById('aNome').value.trim();
+  if(!nome)return alert('Diga quem foi atendido — nome ou @.');
+  const id=document.getElementById('aId').value;
+  const corpo={nome,instagram:nome.startsWith('@')?nome:'',canal,
+    querendo:document.getElementById('aQuer').value.trim(),
+    stage:stageSel.value,valor:parseFloat(document.getElementById('aValor').value)||0,
+    motivo:document.getElementById('aMotivo').value.trim(),
+    member_id:document.getElementById('aVend').value||null};
+  try{
+    if(id)await api('/api/atendimentos/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
+    else await api('/api/atendimentos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
+    if(corpo.member_id)localStorage.setItem('vn_vendedor',corpo.member_id);
+    dlg.close();carregar();
+  }catch(err){alert(err.message);}
+};
+
+['fVend','fDias','fStage'].forEach(i=>document.getElementById(i).onchange=carregar);
+equipe().then(carregar);
+</script>
+</body>
+</html>

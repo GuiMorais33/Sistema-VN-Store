@@ -76,6 +76,62 @@
     border-radius:var(--r);background:var(--bg-elev);font-size:12px;line-height:1.45;color:var(--ink-2);cursor:pointer}
   .sw input{width:17px;height:17px;flex:none;margin-top:1px;accent-color:var(--brand)}
   .sw b{color:var(--ink)}
+
+  /* ---- Sonho: a conta que vira meta ---- */
+  .sonhos{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:var(--s3)}
+  .sn{padding:var(--s4);display:flex;flex-direction:column;gap:0}
+  .sn .quem{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.7px;font-weight:700}
+  .sn .tit{font-family:var(--font-disp);font-weight:900;font-size:20px;transform:skewX(-6deg);
+    margin-top:3px;line-height:1.15}
+  .sn .vlr{font-family:var(--font-mono);font-weight:700;font-size:13px;color:var(--ink-2);margin-top:4px}
+  .sn .ganho{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;
+    font-size:24px;color:var(--brand-hi);margin-top:11px;letter-spacing:-.5px}
+  .sn .gsub{font-size:11.5px;color:var(--ink-3);margin-top:2px}
+
+  /* A escada, do jeito que se escreve no papel */
+  .escada{margin-top:13px;border-top:1px solid var(--line-soft);padding-top:11px;
+    display:flex;flex-direction:column;gap:5px}
+  .lin{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;align-items:baseline;
+    font-family:var(--font-mono);font-size:12.5px}
+  .lin .op{color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lin .rs{font-weight:700;white-space:nowrap}
+  .lin.fim .rs{color:var(--brand-hi);font-size:14px}
+  .fonte{font-size:9px;text-transform:uppercase;letter-spacing:.4px;padding:1px 5px;border-radius:999px;
+    background:var(--bg-elev);color:var(--ink-3);font-family:var(--font-sans);font-weight:700;margin-left:5px}
+  .fonte.proprio{background:rgba(47,210,79,.12);color:var(--brand-hi)}
+  .fonte.loja{background:rgba(230,168,40,.13);color:var(--warn)}
+  .fonte.manual{background:rgba(122,162,247,.13);color:#93b4ff}
+  .fonte.falta{background:rgba(242,86,74,.12);color:var(--crit)}
+
+  .ritmo-av{margin-top:12px;padding:10px 12px;border-radius:var(--r);border:1px solid var(--line);
+    background:var(--bg-elev);font-size:12px;line-height:1.5;color:var(--ink-2)}
+  .ritmo-av b{color:var(--ink)}
+  .ritmo-av.late{border-color:rgba(230,168,40,.32)}
+  .hojeb{display:flex;align-items:center;gap:9px;margin-top:11px}
+  .hojeb .pts{display:flex;gap:3px;flex-wrap:wrap;flex:1}
+  .hojeb .p{width:11px;height:11px;border-radius:3px;background:var(--bg-elev);border:1px solid var(--line-soft)}
+  .hojeb .p.on{background:var(--brand);border-color:var(--brand);box-shadow:0 0 7px var(--glow)}
+  .hojeb .cnt{font-family:var(--font-mono);font-size:12px;font-weight:700;white-space:nowrap}
+  .sn .acts{display:flex;gap:5px;margin-top:13px;flex-wrap:wrap}
+  .sn.vazio{align-items:flex-start;justify-content:center;min-height:190px}
+  .sn.vazio .perg{font-size:13.5px;line-height:1.55;color:var(--ink-2);margin-top:8px}
+  .sn.vazio .perg b{color:var(--ink)}
+
+  /* Cartaz para imprimir e colar na parede */
+  #cartaz{display:none}
+  @media print{
+    .sidebar,.app{display:none !important}
+    #cartaz{display:block !important;background:#fff;color:#000;padding:0;font-family:Georgia,serif}
+    #cartaz .ct-quem{font-size:15pt;letter-spacing:2pt;text-transform:uppercase}
+    #cartaz .ct-tit{font-size:34pt;font-weight:900;line-height:1.1;margin:6pt 0 2pt}
+    #cartaz .ct-val{font-size:19pt;margin-bottom:20pt}
+    #cartaz .ct-l{font-size:16pt;font-family:monospace;margin:7pt 0;
+      display:flex;justify-content:space-between;gap:18pt;border-bottom:1px dotted #bbb;padding-bottom:5pt}
+    #cartaz .ct-l b{font-weight:700}
+    #cartaz .ct-big{font-size:26pt;font-weight:900;margin-top:22pt;line-height:1.25}
+    #cartaz .ct-pe{margin-top:26pt;font-size:12pt;color:#444;border-top:2px solid #000;padding-top:9pt}
+    @page{margin:16mm}
+  }
 </style>
 </head>
 <body>
@@ -88,6 +144,7 @@
   <div class="bar">
     <input type="month" id="mes">
     <button class="btn sm ghost" id="metaLoja" type="button">Meta da loja</button>
+    <a class="btn sm ghost" href="/funil">Ver o funil</a>
   </div>
 
   <div class="topo">
@@ -104,6 +161,10 @@
       <div class="sub" id="ritmoSub">—</div>
     </div>
   </div>
+
+  <div class="sec"><h2>O sonho de cada um</h2><span class="rule"></span>
+    <span class="meta">a meta nasce daqui, não da planilha</span></div>
+  <div class="sonhos" id="sonhos"></div>
 
   <div class="sec"><h2>Ranking do mês</h2><span class="rule"></span><span class="meta" id="rankMeta"></span></div>
   <div class="grid" id="ranking"></div>
@@ -158,6 +219,53 @@
     </div>
   </form>
 </dialog>
+
+<dialog id="dlgSonho">
+  <form class="dlg" method="dialog">
+    <h3 id="dlgSonhoT">O sonho</h3>
+    <input type="hidden" id="sMid">
+    <div class="sw" style="cursor:default">
+      <span>O sonho é <b>dele</b>. Pergunte, não adivinhe:<br>
+        <b>“O que você quer conquistar em 12 meses que hoje parece impossível?”</b></span></div>
+    <div class="field"><label>O que é *</label>
+      <input id="sTitulo" placeholder="Ex.: a entrada da moto, o intercâmbio, o quarto novo"></div>
+    <div class="g2">
+      <div class="field"><label>Quanto custa (R$) *</label>
+        <input id="sValor" type="number" step="0.01" min="0" inputmode="decimal" placeholder="12000"></div>
+      <div class="field"><label>Em quantos meses</label>
+        <input id="sPrazo" type="number" step="1" min="1" max="60" inputmode="numeric" value="12"></div>
+    </div>
+    <div class="g2">
+      <div class="field"><label>Comissão dele (%) *</label>
+        <input id="sCom" type="number" step="0.1" min="0.1" max="100" inputmode="decimal" placeholder="3">
+        <div class="hint">Quanto ele ganha em cima do que vende.</div></div>
+      <div class="field"><label>Atendimentos por dia</label>
+        <input id="sDia" type="number" step="1" min="1" max="200" inputmode="numeric" value="10">
+        <div class="hint">O ritmo que <b>ele</b> escolheu.</div></div>
+    </div>
+    <details>
+      <summary style="cursor:pointer;font-size:12px;color:var(--ink-3);padding:4px 0">
+        Ticket e conversão (só mexa se ainda não houver histórico)</summary>
+      <div class="g2" style="margin-top:var(--s3)">
+        <div class="field"><label>Ticket médio (R$)</label>
+          <input id="sTicket" type="number" step="0.01" min="0" inputmode="decimal" placeholder="do histórico dele"></div>
+        <div class="field"><label>Fecha % das propostas</label>
+          <input id="sFech" type="number" step="1" min="0" max="100" inputmode="numeric" placeholder="do histórico dele"></div>
+      </div>
+      <div class="field"><label>Vira proposta em % dos atendimentos</label>
+        <input id="sProp" type="number" step="1" min="0" max="100" inputmode="numeric" placeholder="do histórico dele"></div>
+      <div class="hint">Vazio = o sistema usa os números <b>dele</b>. Só preencha para começar,
+        e apague depois que ele tiver histórico próprio.</div>
+    </details>
+    <div class="dlg-foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn danger" id="apagarSonho" value="cancel" type="button" hidden>Apagar</button>
+      <button class="btn primary" id="salvarSonho" value="ok" type="submit">Salvar sonho</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="cartaz"></div>
 
 <script src="/icons.js"></script>
 <script src="/nav.js"></script>
@@ -241,7 +349,157 @@ async function carregar(){
       const p=d.pessoas.find(x=>String(x.id)===b.dataset.meta);abrirMeta(p);});
   }
   time();
+  sonhos();
 }
+
+/* ---------- O sonho: a conta que o post ensina ---------- */
+const NUM=(n)=>Number(n||0).toLocaleString('pt-BR');
+const FONTE={proprio:['proprio','dele'],loja:['loja','média da loja'],
+  manual:['manual','à mão'],falta:['falta','sem histórico']};
+const selo=(f)=>{const x=FONTE[f]||FONTE.falta;return `<span class="fonte ${x[0]}">${x[1]}</span>`;};
+let SONHOS=null;
+
+function linha(op,rs,extra,fim){
+  return `<div class="lin${fim?' fim':''}"><span class="op">${op}${extra||''}</span><span class="rs">${rs}</span></div>`;
+}
+
+function cardSonho(p){
+  const s=p.sonho,c=p.conta;
+  const pd=c.pronto?c.por_dia:s.por_dia;
+  const feitos=p.hoje.atendimentos;
+  const pts=Array.from({length:Math.min(24,pd)},(_,i)=>`<span class="p${i<feitos?' on':''}"></span>`).join('');
+
+  let escada,aviso;
+  if(c.pronto){
+    escada=linha(`${BRL(s.valor)} ÷ ${s.comissao_pct}%`,BRL(c.faturar))
+      +linha(`${BRL(c.faturar)} ÷ ${BRL(c.ticket)}`,NUM(c.vendas)+' vendas',selo(c.fontes.ticket))
+      +linha(`${NUM(c.vendas)} ÷ ${c.fechamento}%`,NUM(c.propostas)+' propostas',selo(c.fontes.fechamento))
+      +linha(`${NUM(c.propostas)} ÷ ${c.proposta}%`,NUM(c.atendimentos)+' atendimentos',selo(c.fontes.proposta))
+      +linha(`${pd} por dia`,NUM(c.dias)+' dias úteis','',true);
+    aviso=c.no_prazo
+      ? `<div class="ritmo-av">Nesse ritmo o sonho sai em <b>${c.meses} mês(es)</b> — dentro dos
+         ${s.prazo_meses} que ele quer. Meta do mês equivalente: <b>${BRL(c.meta_mes)}</b>.</div>`
+      : `<div class="ritmo-av late">Nesse ritmo o sonho sai em <b>${c.meses} mês(es)</b>.
+         Para sair em ${s.prazo_meses}, o ritmo tem que ser <b>${NUM(c.por_dia_no_prazo)} por dia</b>.
+         Não existe prazo — existe ritmo.</div>`;
+  }else{
+    const falta=[];
+    if(!(c.ticket>0))falta.push('ticket médio');
+    if(!(c.fechamento>0))falta.push('taxa de fechamento');
+    if(!(c.proposta>0))falta.push('taxa de proposta');
+    escada=linha(`${BRL(s.valor)} ÷ ${s.comissao_pct}%`,BRL(s.valor/(s.comissao_pct/100)));
+    aviso=`<div class="ritmo-av late">A conta para aí: falta <b>${falta.join(' e ')}</b>.
+      Registre os atendimentos no <a href="/funil">funil</a> — em poucos dias os números dele aparecem.
+      Ou preencha à mão em <b>Editar sonho</b> para começar.</div>`;
+  }
+
+  return `<div class="card sn">
+      <div class="quem">${esc(p.nome)}${p.instagram?' · '+esc(p.instagram):''}</div>
+      <div class="tit">${esc(s.titulo)}</div>
+      <div class="vlr">${BRL(s.valor)} · ${s.comissao_pct}% de comissão · ${s.prazo_meses} meses</div>
+      <div class="ganho">${BRL(s.ganho)}</div>
+      <div class="gsub">de ${BRL(s.valor)} · faltam ${BRL(s.falta)} · ${BRL(s.comissao_mes)} de comissão neste mês</div>
+      <div class="prog"><i class="${tom(Math.max(1,s.pct))}" style="width:${s.pct}%"></i></div>
+      <div class="escada">${escada}</div>
+      ${aviso}
+      <div class="hojeb"><span class="pts">${pts}</span>
+        <span class="cnt" style="color:${feitos>=pd?'var(--brand-hi)':'var(--ink-3)'}">hoje ${feitos}/${pd}</span></div>
+      <div class="acts">
+        <button class="btn sm ghost" data-sonho="${p.id}" type="button">Editar sonho</button>
+        ${c.pronto?`<button class="btn sm ghost" data-vmeta="${p.id}" type="button">Virar meta do mês</button>
+        <button class="btn sm ghost" data-cartaz="${p.id}" type="button">Cartaz</button>`:''}
+      </div>
+    </div>`;
+}
+
+function cardVazio(p){
+  return `<div class="card sn vazio">
+      <div class="quem">${esc(p.nome)}${p.instagram?' · '+esc(p.instagram):''}</div>
+      <div class="perg">Ainda não tem sonho escrito.<br>
+        <b>“O que você quer conquistar em 12 meses que hoje parece impossível?”</b></div>
+      <div class="acts"><button class="btn sm primary" data-sonho="${p.id}" type="button">Escrever o sonho</button></div>
+    </div>`;
+}
+
+async function sonhos(){
+  const d=await api('/api/sonhos');
+  SONHOS=d;
+  const box=document.getElementById('sonhos');
+  if(!d.pessoas.length){
+    box.innerHTML='<div style="grid-column:1/-1">'+vazio('clientes','Nenhum vendedor ainda',
+      'Adicione a equipe e marque quem vende no balcão.')+'</div>';
+    return;
+  }
+  box.innerHTML=d.pessoas.map(p=>p.sonho?cardSonho(p):cardVazio(p)).join('');
+  box.querySelectorAll('[data-sonho]').forEach(b=>b.onclick=()=>
+    abrirSonho(d.pessoas.find(x=>String(x.id)===b.dataset.sonho)));
+  box.querySelectorAll('[data-vmeta]').forEach(b=>b.onclick=async()=>{
+    const p=d.pessoas.find(x=>String(x.id)===b.dataset.vmeta);
+    if(!confirm(`Usar ${BRL(p.conta.meta_mes)} como meta de ${p.nome} neste mês?`))return;
+    try{await api('/api/sonhos/'+p.id+'/meta',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ym:document.getElementById('mes').value||mesAtual()})});
+      carregar();}catch(e){alert(e.message);}
+  });
+  box.querySelectorAll('[data-cartaz]').forEach(b=>b.onclick=()=>
+    cartaz(d.pessoas.find(x=>String(x.id)===b.dataset.cartaz)));
+}
+
+// Regra 3 do post: a conta fica na parede, não na planilha.
+function cartaz(p){
+  const s=p.sonho,c=p.conta;
+  document.getElementById('cartaz').innerHTML=`
+    <div class="ct-quem">${esc(p.nome)}</div>
+    <div class="ct-tit">${esc(s.titulo)}</div>
+    <div class="ct-val">${BRL(s.valor)}</div>
+    <div class="ct-l"><span>${BRL(s.valor)} ÷ ${s.comissao_pct}%</span><b>${BRL(c.faturar)}</b></div>
+    <div class="ct-l"><span>${BRL(c.faturar)} ÷ ${BRL(c.ticket)}</span><b>${NUM(c.vendas)} vendas</b></div>
+    <div class="ct-l"><span>${NUM(c.vendas)} ÷ ${c.fechamento}%</span><b>${NUM(c.propostas)} propostas</b></div>
+    <div class="ct-l"><span>${NUM(c.propostas)} ÷ ${c.proposta}%</span><b>${NUM(c.atendimentos)} atendimentos</b></div>
+    <div class="ct-big">${NUM(c.por_dia)} atendimentos por dia.<br>${NUM(c.dias)} dias úteis.</div>
+    <div class="ct-pe">Não existe prazo. Existe ritmo.<br>
+      Quanto mais você faz, mais rápido isso sai do papel. — VN Store</div>`;
+  window.print();
+}
+
+const dlgSonho=document.getElementById('dlgSonho');
+function abrirSonho(p){
+  if(!p)return;
+  const s=p.sonho;
+  document.getElementById('dlgSonhoT').textContent=(s?'Sonho de ':'O sonho de ')+p.nome;
+  document.getElementById('sMid').value=p.id;
+  document.getElementById('sTitulo').value=s?s.titulo:'';
+  document.getElementById('sValor').value=s?s.valor:'';
+  document.getElementById('sPrazo').value=s?s.prazo_meses:12;
+  document.getElementById('sCom').value=s?s.comissao_pct:(p.comissao_pct||'');
+  document.getElementById('sDia').value=s?s.por_dia:10;
+  document.getElementById('sTicket').value=s&&s.ticket_manual?s.ticket_manual:'';
+  document.getElementById('sFech').value=s&&s.fech_manual?s.fech_manual:'';
+  document.getElementById('sProp').value=s&&s.prop_manual?s.prop_manual:'';
+  document.getElementById('apagarSonho').hidden=!s;
+  dlgSonho.showModal();
+}
+document.getElementById('salvarSonho').onclick=async e=>{
+  e.preventDefault();
+  const num=(id)=>{const v=parseFloat(document.getElementById(id).value);return Number.isFinite(v)?v:null;};
+  const titulo=document.getElementById('sTitulo').value.trim();
+  if(!titulo)return alert('Escreva o que a pessoa quer conquistar.');
+  const valor=num('sValor');
+  if(!(valor>0))return alert('Quanto custa esse sonho?');
+  const com=num('sCom');
+  if(!(com>0))return alert('Informe a comissão dele em % (ex.: 3).');
+  try{
+    await api('/api/sonhos',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({member_id:document.getElementById('sMid').value,titulo,valor,comissao_pct:com,
+        prazo_meses:num('sPrazo')||12,por_dia:num('sDia')||10,
+        ticket_manual:num('sTicket'),fech_manual:num('sFech'),prop_manual:num('sProp')})});
+    dlgSonho.close();carregar();
+  }catch(err){alert(err.message);}
+};
+document.getElementById('apagarSonho').onclick=async()=>{
+  if(!confirm('Apagar o sonho dessa pessoa? A conta e o acompanhamento somem.'))return;
+  try{await api('/api/sonhos/'+document.getElementById('sMid').value,{method:'DELETE'});
+    dlgSonho.close();carregar();}catch(e){alert(e.message);}
+};
 
 async function time(){
   const d=await api('/api/team');

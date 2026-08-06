@@ -948,7 +948,7 @@ app.post('/api/customers/detectar-instagram', (req, res) => {
 
 // ==================== VENDA (PDV) ====================
 app.post('/api/sales', async (req, res) => {
-  const { items = [], customer_id = null, new_customer = null, customer_name = '', payment_method = '', payment_status = 'pago', discount = 0, seller_id = null } = req.body || {};
+  const { items = [], customer_id = null, new_customer = null, customer_name = '', payment_method = '', payment_status = 'pago', discount = 0, seller_id = null, atendimento_id = null } = req.body || {};
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Adicione ao menos um item à venda.' });
 
   // Cliente: usa existente, cria novo, ou anônimo.
@@ -1030,6 +1030,20 @@ app.post('/api/sales', async (req, res) => {
           ts.slice(0, 10), custId, ts,
         );
       }
+    }
+    // Funil: toda venda é um atendimento que fechou. Se veio de um
+    // atendimento aberto, ele fecha; se ninguém registrou, a venda vira
+    // a própria linha — senão a taxa de fechamento sairia menor do que é.
+    if (atendimento_id) {
+      db.prepare(`UPDATE atendimentos SET stage='vendido', sale_id=?, valor=?, member_id=COALESCE(member_id,?), updated_at=? WHERE id=?`)
+        .run(id, total, vendedor ? vendedor.id : null, ts, atendimento_id);
+      db.prepare('UPDATE sales SET atendimento_id = ? WHERE id = ?').run(atendimento_id, id);
+    } else if (vendedor) {
+      const aid = db.prepare(`INSERT INTO atendimentos
+        (member_id, customer_id, nome, canal, stage, sale_id, valor, day, created_at)
+        VALUES (?,?,?, 'loja', 'vendido', ?,?,?,?)`)
+        .run(vendedor.id, custId, custName || '', id, total, ts.slice(0, 10), ts).lastInsertRowid;
+      db.prepare('UPDATE sales SET atendimento_id = ? WHERE id = ?').run(aid, id);
     }
     // Caixa: só entra quando PAGO. Fiado vira conta a receber (a própria venda pendente).
     if (status === 'pago') {
@@ -1280,6 +1294,273 @@ app.post('/api/metas', (req, res) => {
     db.prepare('INSERT INTO goals (member_id, ym, target, note, created_at) VALUES (?,?,?,?,?)')
       .run(mid, ym, alvo, b.note || '', now());
   }
+  res.json({ ok: true });
+});
+
+// ==================== SONHO → META ====================
+// A meta não nasce de planilha, nasce de uma pergunta: o que a pessoa
+// quer conquistar e quanto custa. Daí a conta desce sozinha:
+//   sonho ÷ comissão   = quanto precisa vender
+//   vender ÷ ticket    = quantas vendas
+//   vendas ÷ fechamento= quantas propostas
+//   propostas ÷ taxa   = quantos atendimentos
+//   atendimentos ÷ dia = quantos dias úteis
+// A regra que faz isso valer: ticket e conversão são DELE, tirados do
+// histórico dele — não da média do time.
+
+// A loja abre de segunda a sábado.
+const DIAS_UTEIS_MES = 26;
+
+// Taxas próprias da pessoa. Quando ela ainda não tem histórico, cai para
+// a média da loja — e o retorno diz de onde veio, para ninguém confundir
+// número real com estimativa.
+function taxasDe(memberId, dias = 180) {
+  const desde = new Date(Date.now() - dias * 864e5).toISOString();
+  const desdeDia = desde.slice(0, 10);
+
+  const meu = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(total),0) v FROM sales
+    WHERE seller_id = ? AND payment_status = 'pago' AND created_at >= ?`).get(memberId, desde);
+  const loja = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(total),0) v FROM sales
+    WHERE payment_status = 'pago' AND created_at >= ?`).get(desde);
+
+  const fMeu = db.prepare(`SELECT COUNT(*) atend,
+      SUM(CASE WHEN stage IN ('proposta','vendido') THEN 1 ELSE 0 END) prop,
+      SUM(CASE WHEN stage = 'vendido' THEN 1 ELSE 0 END) vend
+    FROM atendimentos WHERE member_id = ? AND day >= ?`).get(memberId, desdeDia);
+  const fLoja = db.prepare(`SELECT COUNT(*) atend,
+      SUM(CASE WHEN stage IN ('proposta','vendido') THEN 1 ELSE 0 END) prop,
+      SUM(CASE WHEN stage = 'vendido' THEN 1 ELSE 0 END) vend
+    FROM atendimentos WHERE day >= ?`).get(desdeDia);
+
+  // Poucos dados mentem mais do que ajudam: só vale como "dele" com massa.
+  const MIN = 5;
+  const ticket = meu.n >= MIN ? { v: money(meu.v / meu.n), fonte: 'proprio' }
+    : loja.n >= MIN ? { v: money(loja.v / loja.n), fonte: 'loja' }
+    : { v: 0, fonte: 'falta' };
+  const fech = (fMeu.prop || 0) >= MIN ? { v: Math.round((fMeu.vend / fMeu.prop) * 100), fonte: 'proprio' }
+    : (fLoja.prop || 0) >= MIN ? { v: Math.round((fLoja.vend / fLoja.prop) * 100), fonte: 'loja' }
+    : { v: 0, fonte: 'falta' };
+  const prop = (fMeu.atend || 0) >= MIN ? { v: Math.round((fMeu.prop / fMeu.atend) * 100), fonte: 'proprio' }
+    : (fLoja.atend || 0) >= MIN ? { v: Math.round((fLoja.prop / fLoja.atend) * 100), fonte: 'loja' }
+    : { v: 0, fonte: 'falta' };
+
+  return { ticket, fechamento: fech, proposta: prop, vendas_periodo: meu.n, funil: fMeu };
+}
+
+// A escada. Devolve null quando falta algum número — melhor não mostrar
+// conta do que mostrar conta inventada.
+function escadaDoSonho(s, t) {
+  const ticket = s.ticket_manual > 0 ? s.ticket_manual : t.ticket.v;
+  const fech = s.fech_manual > 0 ? s.fech_manual : t.fechamento.v;
+  const prop = s.prop_manual > 0 ? s.prop_manual : t.proposta.v;
+  // De onde veio cada número — número digitado à mão não pode aparecer
+  // como "sem histórico", senão a conta parece pior do que é.
+  const fontes = {
+    ticket: s.ticket_manual > 0 ? 'manual' : t.ticket.fonte,
+    fechamento: s.fech_manual > 0 ? 'manual' : t.fechamento.fonte,
+    proposta: s.prop_manual > 0 ? 'manual' : t.proposta.fonte,
+  };
+  if (!(s.comissao_pct > 0) || !(ticket > 0) || !(fech > 0) || !(prop > 0)) {
+    return { pronto: false, ticket, fechamento: fech, proposta: prop, fontes };
+  }
+  const faturar = money(s.valor / (s.comissao_pct / 100));
+  const vendas = Math.ceil(faturar / ticket);
+  const propostas = Math.ceil(vendas / (fech / 100));
+  const atendimentos = Math.ceil(propostas / (prop / 100));
+  const porDia = Math.max(1, s.por_dia || 1);
+  const dias = Math.ceil(atendimentos / porDia);
+  const prazo = Math.max(1, s.prazo_meses || 12);
+  return {
+    pronto: true, ticket, fechamento: fech, proposta: prop, fontes,
+    faturar, vendas, propostas, atendimentos,
+    por_dia: porDia, dias,
+    meses: Math.round((dias / DIAS_UTEIS_MES) * 10) / 10,
+    // Não existe prazo, existe ritmo: para sair quando ele quer, é isso por dia.
+    por_dia_no_prazo: Math.ceil(atendimentos / (prazo * DIAS_UTEIS_MES)),
+    no_prazo: dias <= prazo * DIAS_UTEIS_MES,
+    meta_mes: money(faturar / prazo),
+  };
+}
+
+app.get('/api/sonhos', (req, res) => {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const ym = hoje.slice(0, 7);
+  const membros = db.prepare('SELECT * FROM team_members WHERE active = 1 AND vende = 1 ORDER BY name').all();
+  const sonhos = db.prepare('SELECT * FROM dreams WHERE active = 1').all();
+  const porMembro = new Map(sonhos.map((s) => [String(s.member_id), s]));
+
+  const lista = membros.map((m) => {
+    const t = taxasDe(m.id);
+    const s = porMembro.get(String(m.id)) || null;
+    const hojeF = db.prepare(`SELECT COUNT(*) atend,
+        SUM(CASE WHEN stage IN ('proposta','vendido') THEN 1 ELSE 0 END) prop,
+        SUM(CASE WHEN stage = 'vendido' THEN 1 ELSE 0 END) vend
+      FROM atendimentos WHERE member_id = ? AND day = ?`).get(m.id, hoje);
+    const base = {
+      id: m.id, nome: m.name, funcao: m.role, instagram: m.instagram,
+      comissao_pct: m.commission_pct || 0,
+      taxas: t,
+      hoje: { atendimentos: hojeF.atend || 0, propostas: hojeF.prop || 0, vendas: hojeF.vend || 0 },
+    };
+    if (!s) return { ...base, sonho: null };
+
+    // Quanto do sonho já está no bolso: comissão do que ele vendeu e
+    // recebeu desde que o sonho foi escrito.
+    const desde = db.prepare(`SELECT COALESCE(SUM(total),0) v FROM sales
+      WHERE seller_id = ? AND payment_status = 'pago' AND created_at >= ?`).get(m.id, s.created_at).v;
+    const ganho = money(desde * (s.comissao_pct / 100));
+    const noMes = db.prepare(`SELECT COALESCE(SUM(total),0) v FROM sales
+      WHERE seller_id = ? AND payment_status = 'pago' AND created_at >= ?`).get(m.id, `${ym}-01T00:00:00`).v;
+    const conta = escadaDoSonho(s, t);
+    return {
+      ...base,
+      sonho: {
+        id: s.id, titulo: s.titulo, valor: money(s.valor), prazo_meses: s.prazo_meses,
+        comissao_pct: s.comissao_pct, por_dia: s.por_dia, desde: s.created_at,
+        ticket_manual: s.ticket_manual, fech_manual: s.fech_manual, prop_manual: s.prop_manual,
+        ganho, falta: money(Math.max(0, s.valor - ganho)),
+        pct: s.valor > 0 ? Math.min(100, Math.round((ganho / s.valor) * 100)) : 0,
+        comissao_mes: money(noMes * (s.comissao_pct / 100)),
+      },
+      conta,
+    };
+  });
+  res.json({ dias_uteis_mes: DIAS_UTEIS_MES, pessoas: lista });
+});
+
+app.post('/api/sonhos', (req, res) => {
+  const b = req.body || {};
+  const mid = Number(b.member_id);
+  const m = mid ? db.prepare('SELECT * FROM team_members WHERE id = ?').get(mid) : null;
+  if (!m) return res.status(400).json({ error: 'Escolha de quem é o sonho.' });
+  const titulo = String(b.titulo || '').trim();
+  if (!titulo) return res.status(400).json({ error: 'Escreva o que a pessoa quer conquistar.' });
+  const valor = money(b.valor);
+  if (!(valor > 0)) return res.status(400).json({ error: 'Quanto custa esse sonho?' });
+  const com = money(b.comissao_pct);
+  if (!(com > 0) || com > 100) return res.status(400).json({ error: 'Informe a comissão em % (ex.: 3).' });
+
+  const opc = (v) => { const n = money(v); return n > 0 ? n : null; };
+  const dados = [titulo, valor, Math.max(1, parseInt(b.prazo_meses, 10) || 12), com,
+    Math.max(1, parseInt(b.por_dia, 10) || 10), opc(b.ticket_manual), opc(b.fech_manual), opc(b.prop_manual)];
+
+  const ex = db.prepare('SELECT id FROM dreams WHERE member_id = ?').get(mid);
+  if (ex) {
+    db.prepare(`UPDATE dreams SET titulo=?, valor=?, prazo_meses=?, comissao_pct=?, por_dia=?,
+      ticket_manual=?, fech_manual=?, prop_manual=?, active=1, updated_at=? WHERE id=?`).run(...dados, now(), ex.id);
+  } else {
+    db.prepare(`INSERT INTO dreams (member_id, titulo, valor, prazo_meses, comissao_pct, por_dia,
+      ticket_manual, fech_manual, prop_manual, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .run(mid, ...dados, now());
+  }
+  // A comissão vive na pessoa: é ela que paga o sonho.
+  db.prepare('UPDATE team_members SET commission_pct = ? WHERE id = ?').run(com, mid);
+  res.json({ ok: true });
+});
+
+app.delete('/api/sonhos/:memberId', (req, res) => {
+  db.prepare('DELETE FROM dreams WHERE member_id = ?').run(req.params.memberId);
+  res.json({ ok: true });
+});
+
+// Transforma a conta do sonho na meta do mês, para os dois números
+// falarem a mesma língua.
+app.post('/api/sonhos/:memberId/meta', (req, res) => {
+  const mid = Number(req.params.memberId);
+  const s = db.prepare('SELECT * FROM dreams WHERE member_id = ? AND active = 1').get(mid);
+  if (!s) return res.status(404).json({ error: 'Essa pessoa ainda não tem sonho escrito.' });
+  const conta = escadaDoSonho(s, taxasDe(mid));
+  if (!conta.pronto) return res.status(400).json({ error: 'A conta ainda não fecha — falta ticket ou conversão.' });
+  const ym = /^\d{4}-\d{2}$/.test(req.body?.ym || '') ? req.body.ym : new Date().toISOString().slice(0, 7);
+  const ex = db.prepare('SELECT id FROM goals WHERE ym = ? AND member_id = ?').get(ym, mid);
+  if (ex) db.prepare('UPDATE goals SET target = ?, note = ? WHERE id = ?').run(conta.meta_mes, s.titulo, ex.id);
+  else db.prepare('INSERT INTO goals (member_id, ym, target, note, created_at) VALUES (?,?,?,?,?)')
+    .run(mid, ym, conta.meta_mes, s.titulo, now());
+  res.json({ ok: true, meta: conta.meta_mes });
+});
+
+// ==================== FUNIL DE ATENDIMENTO ====================
+// Cada pessoa atendida vira uma linha. É o que transforma "achismo de
+// conversão" em número — e o que mostra o que cada lead está comprando.
+const CANAIS = ['direct', 'whatsapp', 'loja', 'site', 'indicacao'];
+const STAGES = ['atendimento', 'proposta', 'vendido', 'perdido'];
+
+app.get('/api/atendimentos', (req, res) => {
+  const dias = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
+  const desde = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10);
+  const cond = ['a.day >= ?']; const args = [desde];
+  if (req.query.member_id) { cond.push('a.member_id = ?'); args.push(Number(req.query.member_id)); }
+  if (req.query.stage && STAGES.includes(req.query.stage)) { cond.push('a.stage = ?'); args.push(req.query.stage); }
+  const linhas = db.prepare(`SELECT a.*, t.name AS vendedor, s.code AS venda_code, s.total AS venda_total
+    FROM atendimentos a
+    LEFT JOIN team_members t ON t.id = a.member_id
+    LEFT JOIN sales s ON s.id = a.sale_id
+    WHERE ${cond.join(' AND ')}
+    ORDER BY a.created_at DESC LIMIT 400`).all(...args);
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const resumo = db.prepare(`SELECT COUNT(*) atend,
+      SUM(CASE WHEN stage IN ('proposta','vendido') THEN 1 ELSE 0 END) prop,
+      SUM(CASE WHEN stage = 'vendido' THEN 1 ELSE 0 END) vend,
+      SUM(CASE WHEN stage = 'perdido' THEN 1 ELSE 0 END) perd
+    FROM atendimentos WHERE day >= ?${req.query.member_id ? ' AND member_id = ?' : ''}`)
+    .get(...(req.query.member_id ? [desde, Number(req.query.member_id)] : [desde]));
+  const doDia = db.prepare(`SELECT COUNT(*) n FROM atendimentos WHERE day = ?${req.query.member_id ? ' AND member_id = ?' : ''}`)
+    .get(...(req.query.member_id ? [hoje, Number(req.query.member_id)] : [hoje])).n;
+
+  res.json({
+    dias,
+    resumo: {
+      atendimentos: resumo.atend || 0, propostas: resumo.prop || 0,
+      vendas: resumo.vend || 0, perdidos: resumo.perd || 0, hoje: doDia,
+      taxa_proposta: resumo.atend ? Math.round((resumo.prop / resumo.atend) * 100) : null,
+      taxa_fechamento: resumo.prop ? Math.round((resumo.vend / resumo.prop) * 100) : null,
+    },
+    linhas,
+  });
+});
+
+app.post('/api/atendimentos', (req, res) => {
+  const b = req.body || {};
+  const mid = b.member_id ? Number(b.member_id) : null;
+  if (mid && !db.prepare('SELECT 1 FROM team_members WHERE id = ?').get(mid)) {
+    return res.status(400).json({ error: 'Vendedor não encontrado.' });
+  }
+  const nome = String(b.nome || '').trim();
+  const insta = limpaInsta(b.instagram || (nome.startsWith('@') ? nome : ''));
+  if (!nome && !insta) return res.status(400).json({ error: 'Diga quem foi atendido (nome ou @).' });
+  const canal = CANAIS.includes(b.canal) ? b.canal : 'direct';
+  const stage = STAGES.includes(b.stage) ? b.stage : 'atendimento';
+  const ts = now();
+  const id = db.prepare(`INSERT INTO atendimentos
+    (member_id, customer_id, nome, instagram, canal, querendo, stage, valor, day, created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`)
+    .run(mid, b.customer_id ? Number(b.customer_id) : null, nome, insta, canal,
+      String(b.querendo || '').trim(), stage, money(b.valor), ts.slice(0, 10), ts).lastInsertRowid;
+  res.json({ ok: true, atendimento: db.prepare('SELECT * FROM atendimentos WHERE id = ?').get(id) });
+});
+
+app.patch('/api/atendimentos/:id', (req, res) => {
+  const a = db.prepare('SELECT * FROM atendimentos WHERE id = ?').get(req.params.id);
+  if (!a) return res.status(404).json({ error: 'Atendimento não encontrado.' });
+  const b = req.body || {};
+  const stage = STAGES.includes(b.stage) ? b.stage : a.stage;
+  db.prepare(`UPDATE atendimentos SET stage=?, motivo=?, querendo=?, valor=?, nome=?, instagram=?, canal=?,
+    member_id=?, updated_at=? WHERE id=?`)
+    .run(stage,
+      b.motivo !== undefined ? String(b.motivo).trim() : a.motivo,
+      b.querendo !== undefined ? String(b.querendo).trim() : a.querendo,
+      b.valor !== undefined ? money(b.valor) : a.valor,
+      b.nome !== undefined ? String(b.nome).trim() : a.nome,
+      b.instagram !== undefined ? limpaInsta(b.instagram) : a.instagram,
+      CANAIS.includes(b.canal) ? b.canal : a.canal,
+      b.member_id !== undefined ? (b.member_id ? Number(b.member_id) : null) : a.member_id,
+      now(), a.id);
+  res.json({ ok: true, atendimento: db.prepare('SELECT * FROM atendimentos WHERE id = ?').get(a.id) });
+});
+
+app.delete('/api/atendimentos/:id', (req, res) => {
+  db.prepare('DELETE FROM atendimentos WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 
@@ -2031,6 +2312,7 @@ app.get('/compras', page('compras.html'));
 app.get('/custos', page('custos.html'));
 app.get('/relatorios', page('relatorios.html'));
 app.get('/equipe', page('equipe.html'));
+app.get('/funil', page('funil.html'));
 app.get('/ajuda', page('ajuda.html'));
 app.get('/como-usar', page('ajuda.html'));
 
