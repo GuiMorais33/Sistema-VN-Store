@@ -518,138 +518,8 @@ app.post('/api/sync', async (req, res) => {
   }
 });
 
-// Diagnóstico: mostra como a SUA loja organiza os produtos de verdade
-// (campos preenchidos, categorias, tags) para alinhar o sistema ao real.
-app.get('/api/debug/estrutura', async (req, res) => {
-  if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
-  try {
-    const sample = await nuvem.listAllProducts({ publishedOnly: true, maxPages: 1 });
-    const cats = await nuvem.listAllCategories();
 
-    // O que está de fato preenchido nos produtos?
-    let comBrand = 0, comTags = 0, comCategorias = 0;
-    const tagsVistas = new Set();
-    for (const p of sample) {
-      const brand = typeof p.brand === 'string' ? p.brand.trim() : '';
-      if (brand) comBrand += 1;
-      const tags = typeof p.tags === 'string' ? p.tags.split(',').map((t) => t.trim()).filter(Boolean) : (Array.isArray(p.tags) ? p.tags : []);
-      if (tags.length) { comTags += 1; tags.forEach((t) => tagsVistas.add(t)); }
-      if ((p.categories || []).length) comCategorias += 1;
-    }
 
-    // Árvore de categorias (pai → filhas), que é como o site costuma
-    // organizar "Marcas" e "Categorias".
-    const byId = new Map(cats.map((c) => [c.id, c]));
-    const arvore = cats.map((c) => ({
-      id: c.id,
-      nome: nameOf(c.name),
-      pai: c.parent ? (byId.get(c.parent) ? nameOf(byId.get(c.parent).name) : c.parent) : null,
-    }));
-    const raizes = arvore.filter((c) => !c.pai).map((r) => ({
-      nome: r.nome,
-      filhas: arvore.filter((c) => c.pai === r.nome).map((c) => c.nome),
-    }));
-
-    res.json({
-      analisados: sample.length,
-      campos_preenchidos: { brand: comBrand, tags: comTags, categorias: comCategorias },
-      total_categorias: cats.length,
-      arvore_categorias: raizes,
-      tags_encontradas: [...tagsVistas].slice(0, 40),
-      exemplos: sample.slice(0, 3).map((p) => ({
-        nome: nameOf(p.name),
-        brand: p.brand ?? null,
-        tags: p.tags ?? null,
-        categorias: (p.categories || []).map((c) => nameOf(c.name)),
-        variacoes: (p.variants || []).slice(0, 3).map((v) => ({
-          valores: (v.values || []).map((x) => nameOf(x)), preco: v.price, estoque: v.stock,
-        })),
-      })),
-    });
-  } catch (err) {
-    res.status(502).json({ error: err.message });
-  }
-});
-
-// Diagnóstico do ranking: mostra por que alguém está no topo.
-app.get('/api/debug/clientes', (req, res) => {
-  const topo = db.prepare(`SELECT c.id, c.name, c.nuvemshop_customer_id AS ns_id, c.email, c.phone,
-      COUNT(s.id) vendas,
-      COALESCE(SUM(CASE WHEN s.payment_status='pago' THEN s.total ELSE 0 END),0) pago,
-      COUNT(DISTINCT s.ns_customer_id) ids_distintos_nos_pedidos
-    FROM customers c LEFT JOIN sales s ON s.customer_id = c.id
-    GROUP BY c.id ORDER BY pago DESC LIMIT 8`).all();
-
-  // Como está o vínculo dos pedidos do site?
-  const pedidos = db.prepare(`SELECT
-      COUNT(*) total,
-      SUM(CASE WHEN customer_id IS NULL THEN 1 ELSE 0 END) sem_cliente,
-      SUM(CASE WHEN ns_customer_id IS NULL THEN 1 ELSE 0 END) sem_id_da_loja
-    FROM sales WHERE channel='site'`).get();
-
-  // Nomes que o sistema considera "genéricos"
-  const genericos = db.prepare('SELECT id, name, nuvemshop_customer_id AS ns_id FROM customers').all()
-    .filter((c) => !nomeUtil(c.name))
-    .map((c) => ({ ...c, vendas: db.prepare('SELECT COUNT(*) n FROM sales WHERE customer_id = ?').get(c.id).n }));
-
-  // Amostra dos pedidos do 1º do ranking
-  const primeiro = topo[0];
-  const amostra = primeiro ? db.prepare(`SELECT code, customer_name, ns_customer_id, total, created_at
-    FROM sales WHERE customer_id = ? ORDER BY total DESC LIMIT 6`).all(primeiro.id) : [];
-
-  res.json({ topo_do_ranking: topo, pedidos_do_site: pedidos, cadastros_genericos: genericos,
-    amostra_do_primeiro: amostra });
-});
-
-// Raio-x do estoque: de onde vem o valor e se existe produto repetido.
-app.get('/api/debug/estoque', (req, res) => {
-  const contagem = db.prepare(`SELECT
-      (SELECT COUNT(*) FROM products) produtos,
-      (SELECT COUNT(*) FROM variants) variacoes,
-      (SELECT COUNT(*) FROM products WHERE on_demand=1) produtos_sob_encomenda`).get();
-
-  const valores = db.prepare(`SELECT
-      COALESCE(SUM(v.stock),0) pecas_no_site,
-      COALESCE(SUM(${REAL}),0) pecas_em_maos,
-      ROUND(COALESCE(SUM(v.stock * v.price),0),2) valor_venda_pela_grade_do_site,
-      ROUND(COALESCE(SUM(${REAL} * v.price),0),2) valor_venda_real,
-      ROUND(COALESCE(SUM(${REAL} * v.cost),0),2) valor_custo_real
-    FROM variants v LEFT JOIN products p ON p.id = v.product_id
-    WHERE v.stock_management = 1`).get();
-
-  // Mesmo produto cadastrado duas vezes (nome igual, ids diferentes).
-  const nomesRepetidos = db.prepare(`SELECT lower(trim(name)) nome, COUNT(*) vezes,
-      GROUP_CONCAT(id) ids, GROUP_CONCAT(COALESCE(nuvemshop_product_id,'local')) ids_na_loja
-    FROM products GROUP BY nome HAVING vezes > 1 ORDER BY vezes DESC LIMIT 20`).all();
-
-  // Variação repetida dentro do mesmo produto (ex.: dois "42").
-  const variacoesRepetidas = db.prepare(`SELECT p.id produto_id, p.name produto,
-      lower(trim(v.variant_name)) variacao, COUNT(*) vezes, GROUP_CONCAT(v.id) ids
-    FROM variants v JOIN products p ON p.id = v.product_id
-    GROUP BY p.id, variacao HAVING vezes > 1 ORDER BY vezes DESC LIMIT 20`).all();
-
-  // Variação órfã: sobrou sem produto (entraria no valor sem aparecer na lista).
-  const orfas = db.prepare(`SELECT COUNT(*) n, ROUND(COALESCE(SUM(v.stock*v.price),0),2) valor
-    FROM variants v LEFT JOIN products p ON p.id = v.product_id WHERE p.id IS NULL`).get();
-
-  // Quem mais pesa no valor — é aqui que a grade de tênis aparece.
-  const maiores = db.prepare(`SELECT p.name produto, p.on_demand sob_encomenda,
-      COUNT(v.id) variacoes, COALESCE(SUM(v.stock),0) no_site, COALESCE(SUM(${REAL}),0) em_maos,
-      ROUND(COALESCE(SUM(v.stock * v.price),0),2) valor_pela_grade,
-      ROUND(COALESCE(SUM(${REAL} * v.price),0),2) valor_real
-    FROM products p JOIN variants v ON v.product_id = p.id
-    WHERE v.stock_management = 1
-    GROUP BY p.id ORDER BY valor_pela_grade DESC LIMIT 15`).all();
-
-  res.json({
-    contagem, valores,
-    diferenca_grade_menos_real: money(valores.valor_venda_pela_grade_do_site - valores.valor_venda_real),
-    produtos_com_nome_repetido: nomesRepetidos,
-    variacoes_repetidas: variacoesRepetidas,
-    variacoes_orfas: orfas,
-    maiores_do_estoque: maiores,
-  });
-});
 
 // Limpa os dados LOCAIS (catálogo, vendas, clientes, financeiro).
 // Não toca em nada na Nuvemshop — serve para começar do zero, limpo.
@@ -938,9 +808,6 @@ function detectarInstagram() {
   db.transaction(() => { for (const c of alvo) { const i = limpaInsta(c.name); if (i) { upd.run(i, c.id); n += 1; } } })();
   return n;
 }
-app.post('/api/customers/detectar-instagram', (req, res) => {
-  res.json({ ok: true, atualizados: detectarInstagram() });
-});
 
 // ==================== VENDA (PDV) ====================
 app.post('/api/sales', async (req, res) => {
@@ -1073,12 +940,6 @@ app.post('/api/sales', async (req, res) => {
   });
 });
 
-// ==================== CONTAS A RECEBER (fiado) ====================
-app.get('/api/receivables', (req, res) => {
-  const rows = db.prepare(`SELECT id, code, customer_id, customer_name, total, payment_method, created_at FROM sales WHERE payment_status='pendente' ORDER BY created_at ASC`).all();
-  const total = db.prepare(`SELECT COALESCE(SUM(total),0) AS n FROM sales WHERE payment_status='pendente'`).get().n;
-  res.json({ total: money(total), count: rows.length, items: rows });
-});
 
 // Baixa (marca como pago) — aí sim entra no caixa.
 app.post('/api/sales/:id/settle', (req, res) => {
@@ -2226,7 +2087,6 @@ function lancarFixas() {
   })();
   return pend.length;
 }
-app.post('/api/fixed-expenses/rodar', (req, res) => res.json({ ok: true, lancadas: lancarFixas() }));
 
 // ==================== FECHAMENTO DE CAIXA ====================
 // Confere o que o sistema esperava receber com o que você contou.
@@ -2285,17 +2145,6 @@ app.post('/api/financial/entry', (req, res) => {
   const when = b.date ? new Date(b.date + 'T12:00:00').toISOString() : now();
   db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, created_at)
     VALUES (?,?,?,?,?,?)`).run(kind, catName, cid, (b.description || '').trim() || catName, amount, when);
-  res.json({ ok: true });
-});
-// Compatibilidade com a versão anterior
-app.post('/api/financial/expense', (req, res) => {
-  req.body = { ...(req.body || {}), type: 'despesa' };
-  const b = req.body;
-  const amount = money(b.amount);
-  if (!amount || amount <= 0) return res.status(400).json({ error: 'Informe um valor maior que zero.' });
-  const catName = (b.category || '').trim() || 'Outras despesas';
-  db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, created_at)
-    VALUES ('despesa',?,?,?,?,?)`).run(catName, categoryId(catName, 'despesa'), b.description || catName, amount, now());
   res.json({ ok: true });
 });
 
@@ -2545,14 +2394,6 @@ app.post('/api/import-customers', async (req, res) => {
   }
 });
 
-// Disparo manual (a tela usa para "atualizar agora")
-app.post('/api/import-orders', async (req, res) => {
-  if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
-  try {
-    const r = await sincronizarPedidos(parseInt((req.body || {}).days, 10) || 45);
-    res.json({ ok: true, ...r });
-  } catch (err) { res.status(502).json({ error: err.message }); }
-});
 
 // ==================== VISÃO OPERACIONAL ====================
 // O que precisa de ação agora, juntando site e balcão, e os números
@@ -2726,17 +2567,17 @@ app.get('/login', page('login.html'));
 app.get('/conectar', page('conectar.html'));
 app.get('/pdv', page('pdv.html'));
 app.get('/clientes', page('clientes.html'));
+// Atalhos antigos continuam valendo — a tela de clientes absorveu os dois.
+app.get('/crm', page('clientes.html'));
+app.get('/funil', page('clientes.html'));
 app.get('/produtos', page('produtos.html'));
 app.get('/estoque', page('produtos.html'));
 app.get('/financeiro', page('financeiro.html'));
-app.get('/agentes', page('agentes.html'));
-app.get('/lembretes', page('lembretes.html'));
+app.get('/lembretes', page('index.html'));   // virou o painel do Início
 app.get('/compras', page('compras.html'));
 app.get('/custos', page('custos.html'));
-app.get('/relatorios', page('relatorios.html'));
+app.get('/relatorios', page('financeiro.html'));   // virou a aba Lucro
 app.get('/equipe', page('equipe.html'));
-app.get('/funil', page('funil.html'));
-app.get('/crm', page('crm.html'));
 app.get('/ajuda', page('ajuda.html'));
 app.get('/como-usar', page('ajuda.html'));
 

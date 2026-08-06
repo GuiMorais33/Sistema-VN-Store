@@ -8,92 +8,306 @@
 <link rel="icon" href="/logo.webp">
 <link rel="stylesheet" href="/theme.css">
 <style>
-  .bar{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center;margin-bottom:var(--s4)}
-  .bar .search-wrap{flex:1;min-width:220px}
-  .layout{display:grid;grid-template-columns:1fr 348px;gap:var(--s4);align-items:start}
-  @media (max-width:900px){.layout{grid-template-columns:1fr}}
+  .abas{display:flex;gap:4px;margin-bottom:var(--s4);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .aba{padding:10px 15px;background:none;border:none;border-bottom:2px solid transparent;color:var(--ink-3);
+    font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
+  .aba.on{color:var(--brand-hi);border-bottom-color:var(--brand)}
+  .aba .n{font-family:var(--font-mono);font-size:11px;margin-left:5px;padding:1px 6px;border-radius:999px;
+    background:var(--bg-elev);color:var(--ink-3)}
+  .aba.on .n{background:rgba(47,210,79,.14);color:var(--brand-hi)}
+  .acao{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center;margin-bottom:var(--s3)}
+  .acao input,.acao select{width:auto}
+  .acao input[type=search]{min-width:min(250px,100%);flex:1}
 
-  .rank{display:flex;flex-direction:column;gap:6px}
-  .r-item{display:grid;grid-template-columns:34px 1fr auto;gap:var(--s3);align-items:center;
-    padding:11px var(--s4);border:1px solid var(--line);border-radius:var(--r);cursor:pointer;
-    background:linear-gradient(180deg,var(--surface-2),var(--surface));transition:var(--t-fast)}
-  .r-item:hover{border-color:rgba(47,210,79,.35);transform:translateY(-1px)}
-  .r-item.sel{border-color:var(--brand);box-shadow:0 0 0 1px rgba(47,210,79,.2)}
-  .pos{font-family:var(--font-disp);font-weight:900;font-size:17px;color:var(--ink-3);text-align:center;transform:skewX(-6deg)}
-  .r-item:nth-child(1) .pos{color:var(--brand-hi)}
-  .r-item:nth-child(2) .pos,.r-item:nth-child(3) .pos{color:var(--ink-2)}
-  .who .nm{font-weight:600;font-size:13.5px}
-  .ig{font-family:var(--font-mono);font-size:11.5px;color:var(--brand-hi);display:inline-flex;align-items:center;gap:3px}
-  .ig svg{opacity:.8}
-  .selo{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 6px;border-radius:999px;
-    background:rgba(47,210,79,.1);color:var(--brand-hi);vertical-align:middle;margin-left:5px}
-  .who .s{font-size:11px;color:var(--ink-3);font-family:var(--font-mono);margin-top:2px}
-  .val{text-align:right}
-  .val .sp{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:14.5px}
-  .val .pd{font-size:10.5px;font-weight:700;color:var(--warn);margin-top:2px}
-  .val .or{font-size:10.5px;color:var(--ink-3);margin-top:2px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:var(--s3);margin-bottom:var(--s4)}
+  .kpi{padding:var(--s4)}
+  .kpi .big{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;
+    font-size:clamp(20px,2.6vw,27px);letter-spacing:-.5px;margin-top:5px}
+  .kpi .sub{font-size:11px;color:var(--ink-3);margin-top:3px;line-height:1.4}
+  .kpi.hi .big{color:var(--brand-hi)}
+  .kpi.warn .big{color:var(--warn)}
 
-  .det{position:sticky;top:var(--s4);padding:var(--s4)}
-  .det h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;letter-spacing:.5px;font-size:18px;transform:skewX(-5deg);
-    overflow-wrap:anywhere}
-  .det .contact{font-family:var(--font-mono);color:var(--ink-3);font-size:11.5px;margin-top:4px;overflow-wrap:anywhere}
-  .det-top{display:flex;gap:var(--s2);align-items:flex-start;justify-content:space-between}
-  .det-top .btn{flex:none}
-  .stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:var(--s3) 0}
-  .stat{background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:10px;padding:10px}
-  .stat .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-3);font-weight:700}
-  .stat .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:16px;margin-top:3px}
-  .stat .v.g{color:var(--brand-hi)} .stat .v.w{color:var(--warn)}
-  .stat .sub{font-size:10px;color:var(--ink-3);font-family:var(--font-mono);margin-top:2px}
-  .hist{display:flex;flex-direction:column;gap:5px;margin-top:6px;max-height:44vh;overflow-y:auto}
-  .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 10px;
-    background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:10px;font-size:12.5px}
-  .h .c{font-family:var(--font-mono);color:var(--ink-3);font-size:10.5px;margin-top:2px}
-  .h .r{font-family:var(--font-mono);font-weight:700}
-  .bst{font-size:9px;font-weight:700;text-transform:uppercase;padding:2px 6px;border-radius:999px;margin-left:5px}
-  .bst.pago{color:var(--ok);background:rgba(53,192,138,.1)}
-  .bst.pendente{color:var(--warn);background:rgba(232,163,23,.1)}
+  /* Fila de hoje */
+  .fila{display:flex;flex-direction:column;gap:7px}
+  .tf{border:1px solid var(--line);border-radius:var(--r);padding:13px 14px;
+    background:linear-gradient(180deg,var(--surface-2),var(--surface));border-left:3px solid var(--ink-3)}
+  .tf.alta{border-left-color:var(--crit)}
+  .tf.media{border-left-color:var(--warn)}
+  .tf .cab{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tf .nm{font-weight:700;font-size:14px;cursor:pointer}
+  .tf .nm:hover{color:var(--brand-hi)}
+  .tf .pq{font-size:12px;color:var(--ink-2);margin-top:5px;line-height:1.45}
+  .tf .fala{margin-top:9px;padding:10px 12px;border-radius:10px;background:var(--bg-elev);
+    border:1px solid var(--line-soft);font-size:12.5px;line-height:1.5;color:var(--ink)}
+  .tf .acts{display:flex;gap:5px;margin-top:10px;flex-wrap:wrap}
+  .mot{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;
+    border-radius:999px;background:var(--bg-elev);color:var(--ink-3)}
+  .mot.cobranca{background:rgba(242,86,74,.14);color:var(--crit)}
+  .mot.agendado{background:rgba(122,162,247,.14);color:#93b4ff}
+  .mot.aniversario{background:rgba(230,168,40,.14);color:var(--warn)}
+  .mot.pos_venda{background:rgba(47,210,79,.13);color:var(--brand-hi)}
+  .vip{font-size:9px;font-weight:900;letter-spacing:.6px;padding:2px 6px;border-radius:999px;
+    background:linear-gradient(90deg,#8a6410,var(--warn));color:#1a1204}
 
-  .dlg{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);min-width:min(380px,90vw)}
+  /* Chips de segmento — o filtro é o próprio panorama */
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:var(--s3)}
+  .chip{padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--bg-elev);
+    color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;display:flex;gap:6px;align-items:center}
+  .chip b{font-family:var(--font-mono);color:var(--ink-3)}
+  .chip.on{border-color:var(--brand);color:var(--brand-hi);background:rgba(47,210,79,.1)}
+  .chip.on b{color:var(--brand-hi)}
+  .chip[data-s=esfriando].on,.chip[data-s=sumido].on{border-color:var(--warn);color:var(--warn);background:rgba(230,168,40,.1)}
+  .chip[data-s=esfriando].on b,.chip[data-s=sumido].on b{color:var(--warn)}
+
+  .cli{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;
+    padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);cursor:pointer;
+    background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+  .cli:hover{border-color:var(--brand)}
+  .av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-disp);
+    font-weight:900;font-size:13px;color:var(--brand-hi);background:rgba(47,210,79,.12);
+    border:1px solid rgba(47,210,79,.3);transform:skewX(-5deg)}
+  .cli .nm{font-weight:600;font-size:13.5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .cli .s{font-size:11px;color:var(--ink-3);margin-top:2px}
+  .cli .vl{font-family:var(--font-mono);font-weight:700;font-size:13px;text-align:right;white-space:nowrap}
+  .cli .vl small{display:block;font-size:10px;color:var(--ink-3);font-weight:400}
+  .sgt{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 6px;border-radius:999px;
+    background:var(--bg-elev);color:var(--ink-3)}
+  .sgt.ativo,.sgt.novo{background:rgba(47,210,79,.12);color:var(--brand-hi)}
+  .sgt.esfriando,.sgt.sumido{background:rgba(230,168,40,.13);color:var(--warn)}
+  .sgt.perdido{background:rgba(242,86,74,.12);color:var(--crit)}
+  .sgt.lead{background:rgba(122,162,247,.12);color:#93b4ff}
+  .lista{display:flex;flex-direction:column;gap:5px}
+
+  /* Funil: quadro que rola dentro dele, nunca na página */
+  .quadro{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(250px,1fr);gap:var(--s3);
+    overflow-x:auto;padding-bottom:var(--s3);scroll-snap-type:x proximity}
+  .col{display:flex;flex-direction:column;gap:7px;min-width:0;scroll-snap-align:start}
+  .ch{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;padding:9px 11px;border-radius:var(--r);
+    border:1px solid var(--line);background:var(--bg-elev)}
+  .ch .t{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;flex:1;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ch .n{font-family:var(--font-mono);font-weight:700;font-size:13px}
+  .ch .v{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3);width:100%}
+  .col[data-s=novo] .ch{border-color:rgba(122,162,247,.32)}
+  .col[data-s=proposta] .ch,.col[data-s=fechando] .ch{border-color:rgba(230,168,40,.34)}
+  .col[data-s=vendido] .ch{border-color:rgba(47,210,79,.35)}
+  .col[data-s=vendido] .ch .n{color:var(--brand-hi)}
+  .col[data-s=perdido] .ch{border-color:rgba(242,86,74,.26)}
+  .col[data-s=perdido] .ch .n{color:var(--crit)}
+  .ct{border:1px solid var(--line);border-radius:var(--r);padding:11px 12px;
+    background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+  .ct .nm{font-weight:600;font-size:13px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .ct .q{font-size:12px;color:var(--ink-2);margin-top:4px;line-height:1.4}
+  .ct .s{font-size:10.5px;color:var(--ink-3);margin-top:5px;font-family:var(--font-mono)}
+  .ct .acts{display:flex;gap:4px;margin-top:9px;flex-wrap:wrap}
+  .ct.parado{border-color:rgba(230,168,40,.35)}
+  .alerta-p{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:1px 6px;
+    border-radius:999px;background:rgba(230,168,40,.14);color:var(--warn)}
+  .colvazia{font-size:11.5px;color:var(--ink-3);text-align:center;padding:15px 8px;
+    border:1px dashed var(--line);border-radius:var(--r)}
+
+  /* Ficha */
+  .ficha{padding:0;display:flex;flex-direction:column;max-width:min(760px,96vw);width:100%;
+    max-height:92vh;border:1px solid var(--line);border-radius:var(--r2);background:var(--surface)}
+  .fh{padding:var(--s4) var(--s5);border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:flex-start}
+  .fh .t{flex:1;min-width:0}
+  .fh h3{margin:0;font-family:var(--font-disp);font-size:21px;transform:skewX(-5deg);
+    text-transform:uppercase;line-height:1.15}
+  .fh .sub{font-size:12px;color:var(--ink-3);margin-top:4px;display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+  .fb{padding:var(--s4) var(--s5);overflow:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:var(--s4)}
+  .ff{padding:var(--s3) var(--s5);border-top:1px solid var(--line);display:flex;gap:var(--s2);
+    justify-content:flex-end;flex-wrap:wrap}
+  .n4{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+  @media (max-width:560px){.n4{grid-template-columns:repeat(2,1fr)}}
+  .nb{background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:10px;padding:9px 10px}
+  .nb .l{font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-3);font-weight:700}
+  .nb .v{font-family:var(--font-mono);font-weight:700;font-size:14px;margin-top:2px}
+  .tags{display:flex;gap:5px;flex-wrap:wrap}
+  .tg{font-size:11px;padding:3px 9px;border-radius:999px;background:var(--bg-elev);
+    border:1px solid var(--line-soft);color:var(--ink-2)}
+  .devendo{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;
+    border:1px solid rgba(230,168,40,.35);border-radius:var(--r);background:rgba(230,168,40,.06);
+    font-size:12.5px;margin-bottom:6px}
+  .tl{display:flex;flex-direction:column;position:relative;padding-left:19px}
+  .tl::before{content:'';position:absolute;left:5px;top:6px;bottom:6px;width:1px;background:var(--line)}
+  .ev{position:relative;padding:9px 0}
+  .ev::before{content:'';position:absolute;left:-17px;top:14px;width:9px;height:9px;border-radius:50%;
+    background:var(--ink-3);border:2px solid var(--surface)}
+  .ev.venda::before{background:var(--brand)}
+  .ev.conversa::before{background:#93b4ff}
+  .ev .h{font-size:12.5px;font-weight:600}
+  .ev .d{font-size:11.5px;color:var(--ink-3);margin-top:2px;line-height:1.45}
+  .ev .q{font-size:10.5px;color:var(--ink-3);font-family:var(--font-mono)}
+
+  .dlg{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);min-width:min(430px,92vw)}
   .dlg h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;font-size:18px;transform:skewX(-5deg)}
-  .dlg-foot{display:flex;gap:var(--s2);justify-content:flex-end;margin-top:var(--s1)}
+  .dlg-foot{display:flex;gap:var(--s2);justify-content:flex-end}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+  .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s3)}
+  @media (max-width:560px){.g2,.g3{grid-template-columns:1fr}}
+  .sw{display:flex;gap:9px;align-items:flex-start;padding:11px 12px;border:1px solid var(--line);
+    border-radius:var(--r);background:var(--bg-elev);font-size:12px;line-height:1.45;color:var(--ink-2);cursor:pointer}
+  .sw input{width:17px;height:17px;flex:none;margin-top:1px;accent-color:var(--brand)}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="pagehead">
-    <div><h1>Clientes</h1><div class="ph-sub">Ranking por tudo que levaram · pago e fiado</div></div>
-    <div class="ph-actions">
-      <a class="btn ghost" href="/crm">Abrir o CRM</a>
-      <button class="btn primary" id="novo" type="button">Novo cliente</button>
-    </div>
+    <div><h1>Clientes</h1><div class="ph-sub">Com quem falar hoje · as conversas em andamento · a ficha de cada um</div></div>
   </div>
 
-  <div class="bar">
-    <div class="search-wrap"><input id="q" type="search" placeholder="Buscar por nome, @instagram, telefone ou e-mail…"></div>
+  <div class="abas">
+    <button class="aba on" data-aba="hoje" type="button">Hoje <span class="n" id="nHoje">0</span></button>
+    <button class="aba" data-aba="funil" type="button">Funil <span class="n" id="nFunil">0</span></button>
+    <button class="aba" data-aba="lista" type="button">Todos</button>
   </div>
 
-  <div class="layout">
-    <div>
-      <div class="sec" style="margin-top:0"><h2>Quem mais levou</h2><span class="rule"></span><span class="meta" id="tot"></span></div>
-      <div class="rank" id="rank"></div>
+  <!-- HOJE -->
+  <div data-p="hoje">
+    <div class="kpis" id="kpis"></div>
+    <div class="sec"><h2>Quem chamar hoje</h2><span class="rule"></span><span class="meta" id="hojeMeta"></span></div>
+    <div class="fila" id="fila"></div>
+  </div>
+
+  <!-- FUNIL -->
+  <div data-p="funil" hidden>
+    <div class="acao">
+      <button class="btn primary" id="novoAt" type="button">Registrar atendimento</button>
+      <select id="fVend"><option value="">Todo mundo</option></select>
+      <span class="meta" id="funMeta"></span>
     </div>
-    <aside class="card det" id="det"></aside>
+    <div class="quadro" id="quadro"></div>
+  </div>
+
+  <!-- TODOS -->
+  <div data-p="lista" hidden>
+    <div class="acao">
+      <input type="search" id="busca" placeholder="Nome, @, telefone ou etiqueta…"
+        autocapitalize="off" autocorrect="off" spellcheck="false">
+      <button class="btn primary" id="novoCli" type="button">Novo cliente</button>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="lista" id="clientes"></div>
   </div>
 </div>
 
-<dialog id="dlg">
+<dialog id="dlgFicha">
+  <div class="ficha">
+    <div class="fh">
+      <span class="av" id="fAv"></span>
+      <div class="t"><h3 id="fNome">—</h3><div class="sub" id="fSub"></div></div>
+      <button class="btn sm ghost" id="fFechar" type="button">Fechar</button>
+    </div>
+    <div class="fb" id="fCorpo"></div>
+    <div class="ff">
+      <button class="btn ghost" id="fEditar" type="button">Editar ficha</button>
+      <button class="btn primary" id="fContato" type="button">Registrar contato</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dlgEdit">
   <form class="dlg" method="dialog">
-    <h3 id="dlgTitle">Novo cliente</h3>
-    <div class="field"><label>Nome *</label><input id="nName" required placeholder="Nome ou @ do Instagram"></div>
-    <div class="field"><label>Instagram</label><input id="nInsta" placeholder="@fulano" autocapitalize="off" autocorrect="off" spellcheck="false">
-      <div class="hint">É como a loja reconhece o cliente. Pode colar o link do perfil.</div></div>
-    <div class="field"><label>Telefone / WhatsApp</label><input id="nPhone" inputmode="tel"></div>
-    <div class="field"><label>E-mail</label><input id="nMail" type="email"></div>
-    <div class="field"><label>Observação</label><input id="nNote" placeholder="Ex.: prefere retirar na loja"></div>
+    <h3 id="eT">Ficha do cliente</h3>
+    <input type="hidden" id="eId">
+    <div class="g2">
+      <div class="field"><label>Nome *</label><input id="eNome" placeholder="Nome ou @"></div>
+      <div class="field"><label>Instagram</label><input id="eInsta" placeholder="@fulano"
+        autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+    </div>
+    <div class="g2">
+      <div class="field"><label>Telefone / WhatsApp</label><input id="eFone" inputmode="tel"></div>
+      <div class="field"><label>E-mail</label><input id="eMail" inputmode="email"
+        autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+    </div>
+    <div class="g3">
+      <div class="field"><label>Camiseta</label><input id="eTop" placeholder="M"></div>
+      <div class="field"><label>Calça</label><input id="ePants" placeholder="42"></div>
+      <div class="field"><label>Tênis</label><input id="eShoe" placeholder="41"></div>
+    </div>
+    <div class="g2">
+      <div class="field"><label>Aniversário</label><input id="eBday" type="date">
+        <div class="hint">Vira lembrete uma semana antes.</div></div>
+      <div class="field"><label>Próximo contato</label><input id="eNext" type="date">
+        <div class="hint">No dia, a pessoa aparece em <b>Hoje</b>.</div></div>
+    </div>
+    <div class="g2">
+      <div class="field"><label>Vendedor responsável</label><select id="eDono"></select></div>
+      <div class="field"><label>Como chegou</label><input id="eOrigem" list="origens" placeholder="Indicação, direct, loja…">
+        <datalist id="origens"><option value="Direct"><option value="WhatsApp"><option value="Loja">
+          <option value="Site"><option value="Indicação"><option value="Anúncio"></datalist></div>
+    </div>
+    <div class="field"><label>Etiquetas</label><input id="eTags" placeholder="atacado, revenda, tamanho grande">
+      <div class="hint">Separadas por vírgula. Servem para achar depois.</div></div>
+    <div class="field"><label>Observação</label><input id="eObs" placeholder="O que for útil lembrar"></div>
+    <label class="sw"><input type="checkbox" id="eNoContact">
+      <span><b>Não quer receber contato</b> — sai da fila de hoje. Cobrança de fiado continua aparecendo.</span></label>
     <div class="dlg-foot">
       <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
-      <button class="btn primary" id="save" value="ok" type="submit">Salvar</button>
+      <button class="btn primary" id="eSalvar" value="ok" type="submit">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgContato">
+  <form class="dlg" method="dialog">
+    <h3 id="cT">Registrar contato</h3>
+    <input type="hidden" id="cId">
+    <div class="g2">
+      <div class="field"><label>Como falou</label><select id="cKind">
+        <option value="direct">Direct</option><option value="whatsapp">WhatsApp</option>
+        <option value="ligacao">Ligação</option><option value="visita">Veio na loja</option>
+        <option value="pos_venda">Pós-venda</option><option value="cobranca">Cobrança</option>
+        <option value="nota">Só uma anotação</option>
+      </select></div>
+      <div class="field"><label>Quem falou</label><select id="cVend"></select></div>
+    </div>
+    <div class="field"><label>O que rolou</label><input id="cBody" placeholder="Respondeu, pediu foto, vai pensar…"></div>
+    <div class="field"><label>Falar de novo em</label><select id="cQuando">
+      <option value="">Não agendar</option>
+      <option value="1">Amanhã</option><option value="3">3 dias</option>
+      <option value="7">1 semana</option><option value="15">15 dias</option>
+      <option value="30">1 mês</option><option value="60">2 meses</option>
+    </select>
+      <div class="hint">Agendar é o que faz a pessoa voltar na fila no dia certo.</div></div>
+    <div class="dlg-foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn primary" id="cSalvar" value="ok" type="submit">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgAt">
+  <form class="dlg" method="dialog">
+    <h3 id="atT">Registrar atendimento</h3>
+    <input type="hidden" id="aId">
+    <div class="g2">
+      <div class="field"><label>Quem *</label><input id="aNome" placeholder="Nome ou @"
+        autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+      <div class="field"><label>Vendedor</label><select id="aVend"></select></div>
+    </div>
+    <div class="field"><label>Por onde chegou</label>
+      <div class="chips" id="aCanal" style="margin-bottom:0">
+        <button class="chip on" type="button" data-c="direct">Direct</button>
+        <button class="chip" type="button" data-c="whatsapp">WhatsApp</button>
+        <button class="chip" type="button" data-c="loja">Loja</button>
+        <button class="chip" type="button" data-c="site">Site</button>
+        <button class="chip" type="button" data-c="indicacao">Indicação</button>
+      </div></div>
+    <div class="field"><label>O que a pessoa está comprando</label>
+      <input id="aQuer" placeholder="Ex.: tênis 42, presente pro irmão, calça cargo preta">
+      <div class="hint">Escreva com as palavras da pessoa — é o que faz a conversa voltar do jeito certo.</div></div>
+    <div class="g2">
+      <div class="field"><label>Etapa</label><select id="aStage"></select></div>
+      <div class="field"><label>Valor em jogo (R$)</label>
+        <input id="aValor" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0,00"></div>
+    </div>
+    <div class="field" id="wrapMotivo" hidden><label>Por que perdeu</label>
+      <input id="aMotivo" placeholder="Preço, tamanho, sumiu, comprou em outro lugar…"></div>
+    <div class="dlg-foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn danger" id="aApagar" value="cancel" type="button" hidden>Apagar</button>
+      <button class="btn primary" id="aSalvar" value="ok" type="submit">Salvar</button>
     </div>
   </form>
 </dialog>
@@ -102,100 +316,394 @@
 <script src="/nav.js"></script>
 <script>
 const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-const D=(s)=>s?new Date(s).toLocaleDateString('pt-BR'):'—';
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
 const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
-const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const nrm=(s)=>String(s||'').trim().toLowerCase().replace(/^@+/,'');
-document.querySelector('.search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
-document.getElementById('novo').insertAdjacentHTML('afterbegin',ICO('mais',16));
-let sel=null;
+const iniciais=(n)=>String(n||'').replace(/^@/,'').trim().split(/\s+/).slice(0,2).map(p=>p[0]||'').join('').toUpperCase();
+const SEG={novo:'Novo',ativo:'Ativo',esfriando:'Esfriando',sumido:'Sumido',perdido:'Perdido',lead:'Lead',cadastro:'Cadastro'};
+const MOT={cobranca:'Cobrança',agendado:'Agendado',aniversario:'Aniversário',pos_venda:'Pós-venda',
+  esfriando:'Esfriando',sumido:'Sumido',lead_parado:'Parado'};
+const KIND={nota:'Anotação',direct:'Direct',whatsapp:'WhatsApp',ligacao:'Ligação',visita:'Veio na loja',
+  pos_venda:'Pós-venda',cobranca:'Cobrança',venda:'Compra',conversa:'Conversa'};
+const CANAL={direct:'Direct',whatsapp:'WhatsApp',loja:'Loja',site:'Site',indicacao:'Indicação'};
+const quando=(iso)=>{if(!iso)return '';const d=new Date(iso),h=Math.round((Date.now()-d)/36e5);
+  if(h<1)return 'agora há pouco'; if(h<24)return h+'h atrás';
+  const dd=Math.round(h/24); return dd===1?'ontem':(dd<60?dd+' dias atrás':d.toLocaleDateString('pt-BR'));};
+const diasDe=(iso)=>iso?Math.floor((Date.now()-new Date(iso))/864e5):0;
+const soDigitos=(t)=>String(t||'').replace(/\D/g,'');
+const zap=(fone,texto)=>{const d=soDigitos(fone);if(!d)return null;
+  return 'https://wa.me/'+(d.length<=11?'55'+d:d)+'?text='+encodeURIComponent(texto);};
+let TIME=[],COLS=[],SEGS=[],segAtivo='todos';
 
-async function rank(q=''){
-  const rows=await api('/api/customers?q='+encodeURIComponent(q));
-  const box=document.getElementById('rank');
-  document.getElementById('tot').textContent=rows.length?rows.length+' cliente(s)':'';
-  if(!rows.length){box.innerHTML=vazio('clientes','Nenhum cliente','Cadastre no botão acima ou direto na venda pelo PDV.');return;}
-  box.innerHTML='';
-  rows.forEach((c,i)=>{
-    const el=document.createElement('div');el.className='r-item'+(sel===c.id?' sel':'');el.dataset.id=c.id;
-    // Quando o nome já é o @, não repete: mostra o @ como identificação.
-    const insta=c.instagram||'';
-    const nome=insta&&nrm(c.name)===nrm(insta)?insta:c.name;
-    const mostraIg=insta&&nrm(nome)!==nrm(insta);
-    el.innerHTML=`<div class="pos">${i+1}</div>
-      <div class="who"><div class="nm">${esc(nome)}${c.da_loja?' <span class="selo">site</span>':''}</div>
-        <div class="s">${mostraIg?`<span class="ig">${ICO('instagram',12)}${esc(insta)}</span> · `:''}${esc(c.phone||c.email||'—')} · ${D(c.last_purchase)}</div></div>
-      <div class="val"><div class="sp">${BRL(c.total_spent)}</div>
-        ${c.pending>0?`<div class="pd">${BRL(c.pending)} a receber</div>`:''}
-        <div class="or">${c.orders} compra(s)</div></div>`;
-    // O fiado já conta na posição: a peça saiu daqui.
-    el.onclick=()=>detalhe(c.id);box.appendChild(el);
-  });
+/* abas — a que abre vem do endereço, para os atalhos antigos continuarem valendo */
+function aba(nome){
+  document.querySelectorAll('.aba').forEach(x=>x.classList.toggle('on',x.dataset.aba===nome));
+  document.querySelectorAll('[data-p]').forEach(p=>p.hidden=p.dataset.p!==nome);
+  if(nome==='funil')quadro();
+  if(nome==='lista')listar();
+}
+document.querySelectorAll('.aba').forEach(b=>b.onclick=()=>aba(b.dataset.aba));
+
+async function equipe(){
+  try{const d=await api('/api/team');TIME=d.membros.filter(m=>m.active);}catch(_){TIME=[];}
+  const vendem=TIME.filter(m=>m.vende);
+  const opts=TIME.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
+  document.getElementById('eDono').innerHTML='<option value="">— ninguém —</option>'+opts;
+  document.getElementById('cVend').innerHTML='<option value="">— não informar —</option>'+opts;
+  document.getElementById('aVend').innerHTML='<option value="">— sem vendedor —</option>'
+    +vendem.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
+  document.getElementById('fVend').innerHTML='<option value="">Todo mundo</option>'
+    +vendem.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
+  const ult=localStorage.getItem('vn_vendedor');
+  if(ult&&TIME.some(m=>String(m.id)===ult))document.getElementById('cVend').value=ult;
 }
 
-async function detalhe(id){
-  sel=id;document.querySelectorAll('.r-item').forEach(r=>r.classList.toggle('sel',r.dataset.id==id));
-  const c=await api('/api/customers/'+id),d=document.getElementById('det');
-  const hist=c.sales.length?c.sales.map(s=>`<div class="h">
-      <div><div>${s.code}<span class="bst ${s.payment_status}">${s.payment_status}</span></div>
-      <div class="c">${D(s.created_at)} · ${s.code.startsWith('SITE')?'site':'balcão'} · ${s.payment_method||'—'}</div></div>
-      <div style="text-align:right"><div class="r">${BRL(s.total)}</div>
-      ${s.payment_status==='pendente'?`<button class="btn sm" data-s="${s.id}" type="button" style="margin-top:4px">Receber</button>`:''}</div>
-    </div>`).join(''):vazio('recibo','Sem compras','Ainda não comprou nada.');
-  const insta=c.instagram||'';
-  const nome=insta&&nrm(c.name)===nrm(insta)?insta:c.name;
-  const contato=[c.phone,c.email].filter(Boolean).map(esc).join(' · ');
-  d.innerHTML=`<div class="det-top">
-      <div><h3>${esc(nome)}</h3>
-        ${insta&&nrm(nome)!==nrm(insta)?`<div class="ig" style="margin-top:3px">${ICO('instagram',13)}${esc(insta)}</div>`:''}
-        <div class="contact">${contato||'sem contato cadastrado'}</div></div>
-      <button class="btn sm" id="edt" type="button">Editar</button>
+/* ---------------- HOJE ---------------- */
+async function painel(){
+  const d=await api('/api/crm');
+  SEGS=d.segmentos;
+  const N=d.numeros;
+  document.getElementById('kpis').innerHTML=`
+    <div class="card kpi"><span class="label">Clientes</span><div class="big">${N.clientes}</div>
+      <div class="sub">${N.compradores} já compraram</div></div>
+    <div class="card kpi hi"><span class="label">Voltam a comprar</span>
+      <div class="big">${N.recompra_pct!=null?N.recompra_pct+'%':'—'}</div>
+      <div class="sub">${N.recorrentes} compraram mais de uma vez</div></div>
+    <div class="card kpi"><span class="label">Ticket médio</span><div class="big">${BRL(N.ticket)}</div>
+      <div class="sub">a loja recompra a cada ${d.ciclo_loja} dias</div></div>
+    <div class="card kpi warn"><span class="label">Em risco</span><div class="big">${N.em_risco}</div>
+      <div class="sub">esfriando ou sumidos</div></div>`;
+
+  document.getElementById('nHoje').textContent=d.total_tarefas;
+  document.getElementById('hojeMeta').textContent=d.total_tarefas>d.hoje.length
+    ? `mostrando ${d.hoje.length} de ${d.total_tarefas}` : '';
+  const fila=document.getElementById('fila');
+  if(!d.hoje.length){
+    fila.innerHTML=vazio('ok','Ninguém para chamar hoje',
+      'Quando alguém esfriar, fizer aniversário, ficar devendo ou passar do ritmo de compra, aparece aqui.');
+  }else{
+    fila.innerHTML=d.hoje.map(t=>{
+      const w=zap(t.phone,t.fala);
+      return `<div class="tf ${t.urgencia}">
+        <div class="cab">
+          <span class="nm" data-cli="${t.cliente_id}">${esc(t.nome)}</span>
+          <span class="mot ${t.tipo}">${MOT[t.tipo]||t.tipo}</span>
+          ${t.vip?'<span class="vip">VIP</span>':''}
+          <span class="sgt ${t.seg}">${SEG[t.seg]||t.seg}</span>
+        </div>
+        <div class="pq">${esc(t.porque)} · ${t.compras} compra(s) · ${BRL(t.gasto)}</div>
+        <div class="fala">${esc(t.fala)}</div>
+        <div class="acts">
+          ${w?`<a class="btn sm primary" href="${w}" target="_blank" rel="noopener">WhatsApp</a>`:''}
+          <button class="btn sm ghost" data-copiar="${t.cliente_id}" type="button">Copiar</button>
+          <button class="btn sm ghost" data-falei="${t.cliente_id}" type="button">Já falei</button>
+          <button class="btn sm ghost" data-adiar="${t.cliente_id}" type="button"
+            title="${t.tipo==='cobranca'?'Só silencia o lembrete — a dívida continua no Financeiro':'Volta a aparecer em 7 dias'}">Adiar 7 dias</button>
+        </div></div>`;}).join('');
+    fila.querySelectorAll('[data-cli]').forEach(b=>b.onclick=()=>ficha(b.dataset.cli));
+    fila.querySelectorAll('[data-copiar]').forEach(b=>b.onclick=async()=>{
+      const t=d.hoje.find(x=>String(x.cliente_id)===b.dataset.copiar);
+      try{await navigator.clipboard.writeText(t.fala);b.textContent='Copiado';
+        setTimeout(()=>{b.textContent='Copiar';},1600);}catch(_){alert(t.fala);}
+    });
+    fila.querySelectorAll('[data-falei]').forEach(b=>b.onclick=()=>{
+      const t=d.hoje.find(x=>String(x.cliente_id)===b.dataset.falei);abrirContato(t.cliente_id,t.nome,t.tipo);});
+    fila.querySelectorAll('[data-adiar]').forEach(b=>b.onclick=async()=>{
+      try{await api('/api/crm/cliente/'+b.dataset.adiar+'/contato',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({kind:'nota',body:'Adiado',adiar_dias:7})});painel();}catch(e){alert(e.message);}
+    });
+  }
+  chips();
+}
+
+/* ---------------- TODOS ---------------- */
+function chips(){
+  const box=document.getElementById('chips');
+  const total=SEGS.reduce((s,x)=>s+x.n,0);
+  box.innerHTML=`<button class="chip${segAtivo==='todos'?' on':''}" data-s="todos" type="button">
+      Todos <b>${total}</b></button>`
+    +SEGS.filter(s=>s.n>0).map(s=>`<button class="chip${segAtivo===s.id?' on':''}" data-s="${s.id}"
+      type="button" title="${esc(s.dica)}">${esc(s.label)} <b>${s.n}</b></button>`).join('');
+  box.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{segAtivo=c.dataset.s;chips();listar();});
+}
+let bt;
+async function listar(){
+  const q=document.getElementById('busca').value.trim();
+  const d=await api('/api/crm/clientes?'+new URLSearchParams({q,seg:segAtivo}));
+  const box=document.getElementById('clientes');
+  if(!d.clientes.length){box.innerHTML=vazio('clientes','Ninguém aqui','Tente outro grupo ou outra busca.');return;}
+  box.innerHTML=d.clientes.map(c=>`<div class="cli" data-cli="${c.id}">
+      <span class="av">${esc(iniciais(c.nome))}</span>
+      <div><div class="nm">${esc(c.nome)}
+        ${c.vip?'<span class="vip">VIP</span>':''}
+        <span class="sgt ${c.seg}">${SEG[c.seg]||c.seg}</span></div>
+        <div class="s">${c.compras} compra(s)${c.dias!=null?' · última há '+c.dias+' dias':''}${
+          c.marca?' · gosta de '+esc(c.marca):''}${c.aberto>0?' · deve '+BRL(c.aberto):''}</div></div>
+      <div class="vl">${BRL(c.gasto)}<small>ticket ${BRL(c.ticket)}</small></div>
+    </div>`).join('');
+  box.querySelectorAll('[data-cli]').forEach(el=>el.onclick=()=>ficha(el.dataset.cli));
+}
+document.getElementById('busca').oninput=()=>{clearTimeout(bt);bt=setTimeout(listar,220);};
+
+/* ---------------- FUNIL ---------------- */
+async function quadro(){
+  const q=new URLSearchParams({days:60});
+  const v=document.getElementById('fVend').value;
+  if(v)q.set('member_id',v);
+  const d=await api('/api/pipeline?'+q);
+  COLS=d.colunas;
+  const sel=document.getElementById('aStage');
+  if(!sel.options.length)sel.innerHTML=d.colunas.map(c=>`<option value="${c.id}">${esc(c.label)}</option>`).join('');
+  document.getElementById('nFunil').textContent=d.abertos;
+  document.getElementById('funMeta').textContent=d.valor_aberto>0
+    ? `${BRL(d.valor_aberto)} em jogo` : '';
+
+  document.getElementById('quadro').innerHTML=d.colunas.map(c=>`
+    <div class="col" data-s="${c.id}">
+      <div class="ch"><span class="t">${esc(c.label)}</span><span class="n">${c.n}</span>
+        ${c.valor>0?`<span class="v">${BRL(c.valor)}</span>`:''}</div>
+      ${c.itens.length?c.itens.map(a=>cartao(a,c)).join('')
+        :`<div class="colvazia">${esc(c.dica)}</div>`}
+    </div>`).join('');
+
+  document.querySelectorAll('#quadro [data-mov]').forEach(b=>b.onclick=async()=>{
+    const to=b.dataset.para;
+    let motivo;
+    if(to==='perdido'){motivo=prompt('Por que perdeu? (anotar ajuda a achar o padrão)');if(motivo===null)return;}
+    try{await api('/api/atendimentos/'+b.dataset.mov,{method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({stage:to,...(motivo!==undefined?{motivo}:{})})});quadro();painel();}
+    catch(e){alert(e.message);}
+  });
+  document.querySelectorAll('#quadro [data-ed]').forEach(b=>b.onclick=()=>{
+    abrirAt(d.colunas.flatMap(c=>c.itens).find(x=>String(x.id)===b.dataset.ed));});
+  document.querySelectorAll('#quadro [data-abrecli]').forEach(b=>b.onclick=()=>ficha(b.dataset.abrecli));
+}
+function cartao(a,col){
+  const i=COLS.findIndex(c=>c.id===col.id);
+  const prox=COLS[i+1];
+  const fim=col.id==='vendido'||col.id==='perdido';
+  const parado=!fim&&diasDe(a.updated_at||a.created_at)>=3;
+  const nome=esc(a.cliente_nome||a.nome||a.instagram||'sem nome');
+  return `<div class="ct${parado?' parado':''}">
+      <div class="nm">${a.customer_id?`<span class="nm" data-abrecli="${a.customer_id}" style="cursor:pointer">${nome}</span>`:nome}
+        ${parado?`<span class="alerta-p">parado ${diasDe(a.updated_at||a.created_at)}d</span>`:''}</div>
+      ${a.querendo?`<div class="q">${esc(a.querendo)}</div>`:''}
+      <div class="s">${CANAL[a.canal]||a.canal}${a.vendedor?' · '+esc(a.vendedor):''}${
+        a.venda_code?' · '+esc(a.venda_code)+' '+BRL(a.venda_total):(a.valor>0?' · '+BRL(a.valor):'')}${
+        a.motivo?' · '+esc(a.motivo):''}</div>
+      <div class="acts">
+        ${prox&&prox.id!=='perdido'&&!fim?`<button class="btn sm ${prox.id==='vendido'?'primary':'ghost'}" data-mov="${a.id}" data-para="${prox.id}" type="button">${prox.id==='vendido'?'Fechou':'→ '+esc(prox.label)}</button>`:''}
+        ${!fim?`<button class="btn sm ghost" data-mov="${a.id}" data-para="perdido" type="button">Perdi</button>`:''}
+        <button class="btn sm ghost" data-ed="${a.id}" type="button">Abrir</button>
+      </div></div>`;
+}
+document.getElementById('fVend').onchange=quadro;
+
+/* ---------------- FICHA ---------------- */
+const dlgFicha=document.getElementById('dlgFicha');
+let FICHA=null;
+async function ficha(id){
+  const d=await api('/api/crm/cliente/'+id);
+  FICHA=d;
+  const c=d.cliente,n=d.numeros;
+  document.getElementById('fAv').textContent=iniciais(c.nome);
+  document.getElementById('fNome').textContent=c.nome;
+  document.getElementById('fSub').innerHTML=[
+    n.vip?'<span class="vip">VIP</span>':'',
+    `<span class="sgt ${n.seg}">${SEG[n.seg]||n.seg}</span>`,
+    c.instagram?`<a href="https://instagram.com/${encodeURIComponent(c.instagram.replace(/^@/,''))}" target="_blank" rel="noopener">${esc(c.instagram)}</a>`:'',
+    c.phone?esc(c.phone):'', c.email?esc(c.email):'',
+    c.no_contact?'<span class="mot">não quer contato</span>':'',
+  ].filter(Boolean).join(' ');
+
+  const gosta=(l,arr)=>arr.length?`<div><div class="label">${l}</div>
+    <div class="tags" style="margin-top:6px">${arr.map(x=>`<span class="tg">${esc(x.nome)} <b>${x.n}</b></span>`).join('')}</div></div>`:'';
+  const ev=(e)=>`<div class="ev ${e.t}">
+      <div class="h">${esc(KIND[e.t]||e.titulo)}${e.t==='venda'?' · '+esc(e.titulo):''}</div>
+      ${e.texto?`<div class="d">${esc(e.texto)}</div>`:''}
+      <div class="q">${quando(e.quando)}</div></div>`;
+  // Fiado em aberto fica no topo, com o botão de baixar na hora.
+  const devendo=d.vendas.filter(v=>v.payment_status==='pendente');
+
+  document.getElementById('fCorpo').innerHTML=`
+    ${devendo.length?`<div>${devendo.map(v=>`<div class="devendo">
+      <span><b>${BRL(v.total)}</b> em aberto · ${esc(v.code)} · ${quando(v.created_at)}</span>
+      <button class="btn sm primary" data-receber="${v.id}" type="button">Recebi</button></div>`).join('')}</div>`:''}
+    <div class="n4">
+      <div class="nb"><div class="l">Comprou</div><div class="v">${n.compras}x</div></div>
+      <div class="nb"><div class="l">Gastou</div><div class="v">${BRL(n.gasto)}</div></div>
+      <div class="nb"><div class="l">Ticket</div><div class="v">${BRL(n.ticket)}</div></div>
+      <div class="nb"><div class="l">Deve</div><div class="v" style="color:${n.aberto>0?'var(--warn)':'inherit'}">${BRL(n.aberto)}</div></div>
     </div>
-    <div class="stats">
-      <div class="stat"><div class="l">Total levado</div><div class="v g">${BRL(c.total_spent)}</div>
-        <div class="sub">${BRL(c.paid)} já pago</div></div>
-      <div class="stat"><div class="l">Compras</div><div class="v">${c.orders}</div></div>
-      <div class="stat"><div class="l">A receber</div><div class="v w">${BRL(c.pending)}</div></div>
-      <div class="stat"><div class="l">Ticket médio</div><div class="v">${BRL(c.orders?c.total_spent/c.orders:0)}</div></div>
+    <div class="n4">
+      <div class="nb"><div class="l">Compra a cada</div><div class="v">${n.ciclo} dias</div></div>
+      <div class="nb"><div class="l">Última</div><div class="v">${n.dias!=null?n.dias+' dias':'—'}</div></div>
+      <div class="nb"><div class="l">Deve voltar</div><div class="v">${n.previsao?new Date(n.previsao+'T00:00:00').toLocaleDateString('pt-BR'):'—'}</div></div>
+      <div class="nb"><div class="l">Conversas</div><div class="v">${n.atendimentos}</div></div>
     </div>
-    <span class="label">Histórico</span><div class="hist">${hist}</div>`;
-  const be=d.querySelector('#edt');
-  be.insertAdjacentHTML('afterbegin',ICO('editar',14));
-  be.onclick=()=>abrirDlg(c);
-  d.querySelectorAll('[data-s]').forEach(b=>b.onclick=async()=>{
+    ${(c.size_top||c.size_pants||c.size_shoe)?`<div><div class="label">Veste</div>
+      <div class="tags" style="margin-top:6px">
+        ${c.size_top?`<span class="tg">camiseta <b>${esc(c.size_top)}</b></span>`:''}
+        ${c.size_pants?`<span class="tg">calça <b>${esc(c.size_pants)}</b></span>`:''}
+        ${c.size_shoe?`<span class="tg">tênis <b>${esc(c.size_shoe)}</b></span>`:''}
+      </div></div>`:''}
+    ${gosta('Marcas que leva',d.gosta.marcas)}
+    ${gosta('Tamanhos que já levou',d.gosta.tamanhos)}
+    ${c.tags?`<div><div class="label">Etiquetas</div><div class="tags" style="margin-top:6px">
+      ${c.tags.split(',').map(t=>t.trim()).filter(Boolean).map(t=>`<span class="tg">${esc(t)}</span>`).join('')}</div></div>`:''}
+    ${c.note?`<div><div class="label">Observação</div><div style="font-size:12.5px;line-height:1.5;margin-top:5px;color:var(--ink-2)">${esc(c.note)}</div></div>`:''}
+    ${c.next_contact?`<div class="sw" style="cursor:default"><span>Próximo contato marcado para
+      <b>${new Date(c.next_contact+'T00:00:00').toLocaleDateString('pt-BR')}</b></span></div>`:''}
+    <div><div class="label">História</div>
+      <div class="tl" style="margin-top:9px">${d.linha.length?d.linha.map(ev).join(''):'<div class="ev"><div class="d">Nada registrado ainda.</div></div>'}</div></div>`;
+
+  document.querySelectorAll('#fCorpo [data-receber]').forEach(b=>b.onclick=async()=>{
     b.disabled=true;
-    try{await api('/api/sales/'+b.dataset.s+'/settle',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-      await detalhe(id);await rank(document.getElementById('q').value.trim());}catch(e){alert(e.message);b.disabled=false;}
+    try{await api('/api/sales/'+b.dataset.receber+'/settle',
+      {method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      await ficha(id);painel();}catch(e){alert(e.message);b.disabled=false;}
   });
+  if(!dlgFicha.open)dlgFicha.showModal();
 }
-function semSelecao(){document.getElementById('det').innerHTML=vazio('clientes','Escolha um cliente','Clique em alguém da lista para ver o histórico completo.');}
+document.getElementById('fFechar').onclick=()=>dlgFicha.close();
+dlgFicha.addEventListener('click',(e)=>{if(e.target===dlgFicha)dlgFicha.close();});
 
-const dlg=document.getElementById('dlg');
-let editando=null;   // null = novo cliente
-const V=(id,v)=>{const e=document.getElementById(id);if(v!==undefined)e.value=v;return e.value.trim();};
-
-function abrirDlg(c){
-  editando=c?c.id:null;
-  document.getElementById('dlgTitle').textContent=c?'Editar cliente':'Novo cliente';
-  V('nName',c?c.name:'');V('nInsta',c?(c.instagram||''):'');
-  V('nPhone',c?(c.phone||''):'');V('nMail',c?(c.email||''):'');V('nNote',c?(c.note||''):'');
-  dlg.showModal();
+/* editar / novo cliente — um formulário só */
+const dlgEdit=document.getElementById('dlgEdit');
+function abrirEdit(c){
+  document.getElementById('eT').textContent=c?'Ficha do cliente':'Novo cliente';
+  document.getElementById('eId').value=c?c.id:'';
+  const g=(k)=>c?(c[k]||''):'';
+  document.getElementById('eNome').value=g('nome');
+  document.getElementById('eInsta').value=g('instagram');
+  document.getElementById('eFone').value=g('phone');
+  document.getElementById('eMail').value=g('email');
+  document.getElementById('eTop').value=g('size_top');
+  document.getElementById('ePants').value=g('size_pants');
+  document.getElementById('eShoe').value=g('size_shoe');
+  document.getElementById('eBday').value=/^\d{4}-\d{2}-\d{2}$/.test(g('birthday'))?g('birthday'):'';
+  document.getElementById('eNext').value=g('next_contact');
+  document.getElementById('eDono').value=c&&c.owner_id?c.owner_id:'';
+  document.getElementById('eOrigem').value=g('origin');
+  document.getElementById('eTags').value=g('tags');
+  document.getElementById('eObs').value=g('note');
+  document.getElementById('eNoContact').checked=!!(c&&c.no_contact);
+  dlgEdit.showModal();
 }
-document.getElementById('novo').onclick=()=>abrirDlg(null);
-document.getElementById('save').onclick=async e=>{
-  const name=V('nName');if(!name)return;
+document.getElementById('fEditar').onclick=()=>{if(FICHA)abrirEdit(FICHA.cliente);};
+document.getElementById('novoCli').onclick=()=>abrirEdit(null);
+document.getElementById('eSalvar').onclick=async e=>{
   e.preventDefault();
-  const dados={name,instagram:V('nInsta'),phone:V('nPhone'),email:V('nMail'),note:V('nNote')};
-  const rota=editando?'/api/customers/'+editando:'/api/customers';
-  try{await api(rota,{method:editando?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)});
-    dlg.close();
-    await rank(document.getElementById('q').value.trim());
-    if(editando)await detalhe(editando);
+  const V=(id)=>document.getElementById(id).value.trim();
+  const nome=V('eNome');
+  if(!nome)return alert('Informe o nome (ou o @).');
+  const id=document.getElementById('eId').value;
+  const basico={name:nome,instagram:V('eInsta'),phone:V('eFone'),email:V('eMail'),note:V('eObs')};
+  const crm={size_top:V('eTop'),size_pants:V('ePants'),size_shoe:V('eShoe'),
+    birthday:V('eBday'),next_contact:V('eNext'),owner_id:document.getElementById('eDono').value||null,
+    origin:V('eOrigem'),tags:V('eTags'),note:V('eObs'),
+    no_contact:document.getElementById('eNoContact').checked};
+  try{
+    let alvo=id;
+    if(id){await api('/api/customers/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(basico)});}
+    else{const r=await api('/api/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(basico)});
+      alvo=r.id||(r.customer&&r.customer.id);}
+    if(alvo)await api('/api/crm/cliente/'+alvo,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(crm)});
+    dlgEdit.close();
+    painel();
+    if(alvo&&dlgFicha.open)await ficha(alvo);
+    if(!document.querySelector('[data-p="lista"]').hidden)listar();
   }catch(err){alert(err.message);}
 };
-let t;document.getElementById('q').oninput=e=>{clearTimeout(t);t=setTimeout(()=>rank(e.target.value.trim()),220);};
-semSelecao();rank();
+
+/* registrar contato */
+const dlgContato=document.getElementById('dlgContato');
+function abrirContato(id,nome,tipo){
+  document.getElementById('cId').value=id;
+  document.getElementById('cT').textContent='Falei com '+(nome||'');
+  document.getElementById('cBody').value='';
+  document.getElementById('cKind').value=tipo==='cobranca'?'cobranca':(tipo==='pos_venda'?'pos_venda':'direct');
+  document.getElementById('cQuando').value=tipo==='cobranca'?'3':'';
+  dlgContato.showModal();
+}
+document.getElementById('fContato').onclick=()=>{if(FICHA)abrirContato(FICHA.cliente.id,FICHA.cliente.nome,null);};
+document.getElementById('cSalvar').onclick=async e=>{
+  e.preventDefault();
+  const id=document.getElementById('cId').value;
+  const vend=document.getElementById('cVend').value;
+  try{
+    await api('/api/crm/cliente/'+id+'/contato',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({kind:document.getElementById('cKind').value,
+        body:document.getElementById('cBody').value,member_id:vend||null,
+        adiar_dias:document.getElementById('cQuando').value||null})});
+    if(vend)localStorage.setItem('vn_vendedor',vend);
+    dlgContato.close();
+    if(dlgFicha.open)await ficha(id);
+    painel();
+    if(!document.querySelector('[data-p="lista"]').hidden)listar();
+  }catch(err){alert(err.message);}
+};
+
+/* atendimento (funil) */
+const dlgAt=document.getElementById('dlgAt');
+let canal='direct';
+document.getElementById('aCanal').onclick=(e)=>{
+  const c=e.target.closest('[data-c]');if(!c)return;
+  canal=c.dataset.c;
+  document.querySelectorAll('#aCanal .chip').forEach(x=>x.classList.toggle('on',x===c));
+};
+const aStage=document.getElementById('aStage');
+aStage.onchange=()=>{document.getElementById('wrapMotivo').hidden=aStage.value!=='perdido';};
+function abrirAt(a){
+  document.getElementById('atT').textContent=a?'Atendimento':'Registrar atendimento';
+  document.getElementById('aId').value=a?a.id:'';
+  document.getElementById('aNome').value=a?(a.nome||a.instagram||''):'';
+  document.getElementById('aQuer').value=a?(a.querendo||''):'';
+  document.getElementById('aValor').value=a&&a.valor?a.valor:'';
+  document.getElementById('aMotivo').value=a?(a.motivo||''):'';
+  aStage.value=a?a.stage:'novo';
+  document.getElementById('wrapMotivo').hidden=aStage.value!=='perdido';
+  document.getElementById('aApagar').hidden=!a;
+  canal=a?a.canal:'direct';
+  document.querySelectorAll('#aCanal .chip').forEach(x=>x.classList.toggle('on',x.dataset.c===canal));
+  // Atendimento sem dono não conta no funil de ninguém.
+  const sel=document.getElementById('aVend');
+  const ult=localStorage.getItem('vn_vendedor');
+  const vendem=TIME.filter(m=>m.vende);
+  sel.value=a&&a.member_id?a.member_id
+    :(ult&&vendem.some(m=>String(m.id)===ult)?ult:(vendem[0]?String(vendem[0].id):''));
+  dlgAt.showModal();
+  setTimeout(()=>document.getElementById('aNome').focus(),40);
+}
+document.getElementById('novoAt').onclick=()=>abrirAt(null);
+document.getElementById('aSalvar').onclick=async e=>{
+  e.preventDefault();
+  const nome=document.getElementById('aNome').value.trim();
+  if(!nome)return alert('Diga quem foi atendido — nome ou @.');
+  const id=document.getElementById('aId').value;
+  const corpo={nome,instagram:nome.startsWith('@')?nome:'',canal,
+    querendo:document.getElementById('aQuer').value.trim(),
+    stage:aStage.value,valor:parseFloat(document.getElementById('aValor').value)||0,
+    motivo:document.getElementById('aMotivo').value.trim(),
+    member_id:document.getElementById('aVend').value||null};
+  try{
+    if(id)await api('/api/atendimentos/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
+    else await api('/api/atendimentos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
+    if(corpo.member_id)localStorage.setItem('vn_vendedor',corpo.member_id);
+    dlgAt.close();quadro();painel();
+  }catch(err){alert(err.message);}
+};
+document.getElementById('aApagar').onclick=async()=>{
+  if(!confirm('Apagar este atendimento? Ele some do funil e das taxas de conversão.'))return;
+  try{await api('/api/atendimentos/'+document.getElementById('aId').value,{method:'DELETE'});
+    dlgAt.close();quadro();painel();}catch(e){alert(e.message);}
+};
+
+// /funil abre direto no quadro; qualquer outro caminho abre em Hoje.
+const inicial=location.pathname.startsWith('/funil')?'funil':'hoje';
+equipe().then(painel).then(()=>{if(inicial!=='hoje')aba(inicial);});
 </script>
 </body>
 </html>

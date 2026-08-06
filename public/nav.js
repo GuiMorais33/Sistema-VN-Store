@@ -2,20 +2,15 @@
 (function () {
   const grupos = [
     { titulo: 'Operação', itens: [
-      { href: '/',           ico: 'inicio',     label: 'Início',     match: (p) => p === '/' },
+      { href: '/',           ico: 'inicio',     label: 'Início',     match: (p) => p === '/' || p.startsWith('/lembretes') },
       { href: '/pdv',        ico: 'pdv',        label: 'PDV',        match: (p) => p.startsWith('/pdv') },
-      { href: '/crm',        ico: 'conversa',   label: 'CRM',        match: (p) => p.startsWith('/crm') },
-      { href: '/funil',      ico: 'megafone',   label: 'Funil',      match: (p) => p.startsWith('/funil') },
       { href: '/produtos',   ico: 'estoque',    label: 'Estoque',    match: (p) => p.startsWith('/produtos') || p.startsWith('/estoque') },
-      { href: '/clientes',   ico: 'clientes',   label: 'Clientes',   match: (p) => p.startsWith('/clientes') },
+      { href: '/clientes',   ico: 'clientes',   label: 'Clientes',   match: (p) => p.startsWith('/clientes') || p.startsWith('/crm') || p.startsWith('/funil') },
       { href: '/compras',    ico: 'caixa_vazia',label: 'Compras',    match: (p) => p.startsWith('/compras') },
-      { href: '/lembretes',  ico: 'sino',       label: 'Lembretes',  match: (p) => p.startsWith('/lembretes') },
     ] },
     { titulo: 'Gestão', itens: [
-      { href: '/financeiro', ico: 'financeiro', label: 'Financeiro', match: (p) => p.startsWith('/financeiro') },
+      { href: '/financeiro', ico: 'financeiro', label: 'Financeiro', match: (p) => p.startsWith('/financeiro') || p.startsWith('/relatorios') },
       { href: '/equipe',     ico: 'clientes',   label: 'Equipe',     match: (p) => p.startsWith('/equipe') },
-      { href: '/relatorios', ico: 'grafico',    label: 'Relatórios', match: (p) => p.startsWith('/relatorios') },
-      { href: '/agentes',    ico: 'agentes',    label: 'Agentes',    match: (p) => p.startsWith('/agentes') },
       { href: '/conectar',   ico: 'conectar',   label: 'Conectar',   match: (p) => p.startsWith('/conectar') },
       { href: '/ajuda',      ico: 'conversa',   label: 'Como usar',  match: (p) => p.startsWith('/ajuda') || p.startsWith('/como-usar') },
     ] },

@@ -73,15 +73,11 @@
       <a href="#inicio">Início</a>
       <a href="#pdv">Vender no PDV</a>
       <a href="#estoque">Estoque</a>
-      <a href="#clientes">Clientes e fiado</a>
       <a href="#compras">Compras e custos</a>
-      <a href="#lembretes">Lembretes</a>
-      <a href="#crm">CRM</a>
-      <a href="#financeiro">Financeiro</a>
+      <a href="#crm">Clientes</a>
+      <a href="#financeiro">Financeiro e lucro</a>
       <a href="#equipe">Equipe, metas e sonhos</a>
-      <a href="#relatorios">Relatórios</a>
       <a href="#automatico">O que roda sozinho</a>
-      <a href="#agentes">Os agentes</a>
       <a href="#duvidas">Dúvidas comuns</a>
     </nav>
 
@@ -136,8 +132,20 @@
         <h3>Números do período</h3>
         <p>As abas <b>Hoje</b>, <b>Ontem</b> e <b>Esta semana</b> mudam todos os números abaixo:
           faturamento, quantidade de vendas (mostrando quantas foram no <b>balcão</b> e quantas no
-          <b>site</b>), ticket médio e margem. Mais abaixo ficam o gráfico de vendas por dia, as últimas
-          vendas, o estoque no vermelho, as contas a receber e os lembretes.</p>
+          <b>site</b>), ticket médio e margem. Abaixo, o gráfico de vendas por dia.</p>
+
+        <h3>Lembretes</h3>
+        <p>No pé da tela fica o que não pode escapar: "João paga a segunda parcela dia 10",
+          "encomenda da Camila, conjunto tamanho M", "repor camiseta preta P".</p>
+        <ol class="passos">
+          <li><div>Clique em <b>Novo</b> e escreva o que precisa lembrar.</div></li>
+          <li><div>Escolha o tipo: <b>pagamento</b>, <b>encomenda</b>, <b>reposição</b> ou geral.</div></li>
+          <li><div>Coloque a data e o valor, se fizer sentido.</div></li>
+          <li><div>Quando resolver, clique no <b>quadradinho</b> à esquerda.</div></li>
+        </ol>
+        <p>Vencido fica vermelho, o de hoje fica amarelo, e o Maestro cobra você lá em cima.
+          O botão <b>Ver feitos</b> mostra o que já foi resolvido. O sistema também cria
+          lembrete sozinho quando você vende uma peça que precisa buscar no fornecedor.</p>
       </section>
 
       <!-- PDV -->
@@ -292,59 +300,8 @@
       </section>
 
       <!-- CLIENTES -->
-      <section id="clientes" class="card">
-        <h2><span class="ico-box brand" id="i5"></span>Clientes e fiado</h2>
-        <p>A lista é um <b>ranking</b>: quem mais gastou aparece em primeiro. Clique em alguém para ver
-          o <b>histórico completo</b> de compras, o total gasto, o ticket médio e o que está devendo.</p>
-
-        <h3>Instagram: é assim que a gente reconhece</h3>
-        <p>Muito cliente é conhecido pelo <b>@</b>, não pelo nome. Por isso cada cadastro tem um campo
-          <b>Instagram</b>, e você pode <b>buscar pelo @</b> tanto aqui quanto no PDV.</p>
-        <ul>
-          <li>Se digitar só o <b>@fulano</b> no nome, o sistema preenche o Instagram sozinho.</li>
-          <li>Pode colar o <b>link do perfil</b> — ele guarda só o @.</li>
-          <li>Quando o nome já é o @, a tela mostra ele uma vez só, sem repetir.</li>
-          <li>Ao ler os clientes da loja, quem estiver cadastrado com o @ já vem com o campo preenchido.</li>
-        </ul>
-
-        <h3>Editar um cliente</h3>
-        <p>Abra a pessoa no ranking e clique em <b>Editar</b>: dá para corrigir nome, @, telefone,
-          e-mail e observação. O nome também é atualizado nas <b>compras antigas</b>, então o histórico
-          continua batendo.</p>
-
-        <h3>Receber um fiado</h3>
-        <p>Existem dois caminhos, os dois com um clique:</p>
-        <ul>
-          <li>No <b>Início</b>, no quadro <b>Contas a receber</b>, clique em <b>Receber</b>.</li>
-          <li>Em <b>Clientes</b>, abra a pessoa e clique em <b>Receber</b> na compra pendente.</li>
-        </ul>
-        <p>Nesse momento o valor <b>entra no caixa</b> e a dívida some da lista.</p>
-
-        <div class="aviso dica"><span class="ico" id="d3"></span>
-          <div>Cliente também pode ser criado <b>durante a venda</b>, direto no PDV — não precisa vir
-          aqui antes. Digite o <b>@</b> na busca do cliente e toque em "Criar".</div></div>
-      </section>
-
-      <!-- LEMBRETES -->
-      <section id="lembretes" class="card">
-        <h2><span class="ico-box brand" id="i6"></span>Lembretes</h2>
-        <p>O lugar para anotar o que não pode escapar: <i>"João paga a segunda parcela dia 10"</i>,
-          <i>"encomenda da Camila, conjunto tamanho M"</i>, <i>"repor camiseta preta P"</i>.</p>
-
-        <h3>Como criar</h3>
-        <ol class="passos">
-          <li><div>Clique em <b>Novo lembrete</b> e escreva o que precisa lembrar.</div></li>
-          <li><div>Escolha o <b>tipo</b>: pagamento, encomenda, reposição ou geral.</div></li>
-          <li><div>Coloque a <b>data</b> (e o <b>valor</b> ou o <b>cliente</b>, se fizer sentido).</div></li>
-          <li><div>Quando resolver, clique no <b>quadradinho</b> à esquerda para marcar como feito.</div></li>
-        </ol>
-
-        <p>Lembrete <b class="hl">vencido fica vermelho</b>, o de <b>hoje fica amarelo</b>. O resumo no
-          topo mostra atrasados, os de hoje e o total em aberto — e o <b>Maestro cobra você</b> na tela
-          de Início.</p>
-      </section>
-
-      <!-- FINANCEIRO -->
+            <!-- LEMBRETES -->
+            <!-- FINANCEIRO -->
       <section id="financeiro" class="card">
         <h2><span class="ico-box brand" id="i7"></span>Financeiro</h2>
         <p>Mostra <b>quanto entrou, quanto saiu e o que sobrou</b> no período (Hoje, Mês ou Tudo).</p>
@@ -406,15 +363,62 @@
         <div class="aviso atencao"><span class="ico" id="a2"></span>
           <div>As vendas lançadas pelo PDV e pelo site <b>entram sozinhas</b> — você não precisa
           lançá-las aqui. Use o "Lançar" apenas para <b>despesas</b> e receitas que não são venda.</div></div>
+
+        <h3>A aba Lucro</h3>
+<p>Responde a pergunta que o faturamento não responde: <b>o que realmente dá dinheiro</b>.
+          Vender muito de um produto de margem apertada pode render menos que vender pouco de um
+          produto de margem boa.</p>
+
+        <h3>Os números do topo</h3>
+        <p><b>Receita</b> menos <b>custo das peças</b> é o <b>lucro bruto</b>, e a <b>margem</b> é
+          esse lucro em porcentagem. O custo usado é o que a peça tinha <b>no dia da venda</b> —
+          mudar o custo hoje não reescreve o lucro do mês passado.</p>
+
+        <h3>Curva ABC · onde está o lucro</h3>
+        <div class="tw"><table>
+          <tr><th>Classe</th><th>O que significa</th></tr>
+          <tr><td><b>A</b></td><td>Os produtos que juntos fazem <b>80% do seu lucro</b>. São os que
+            não podem faltar no estoque.</td></tr>
+          <tr><td><b>B</b></td><td>Os 15% seguintes. Importantes, mas não críticos.</td></tr>
+          <tr><td><b>C</b></td><td>O resto. Ocupam espaço e capital para pouco retorno.</td></tr>
+        </table></div>
+        <p>Abaixo, o ranking mostra cada produto com peças vendidas, receita, lucro e margem.
+          <b>Margem abaixo de 25% fica amarela</b>, e negativa fica vermelha — sinal de que o preço
+          está errado ou o custo subiu.</p>
+
+        <h3>Dinheiro parado</h3>
+        <p>Produtos que <b>têm estoque e não venderam</b> no período, do mais caro para o mais
+          barato, com o valor <b>a custo</b> — quanto do seu dinheiro está dormindo ali. É a lista
+          para pensar em promoção, troca com o fornecedor ou simplesmente parar de repor.</p>
+
+        <div class="aviso atencao"><span class="ico" id="a4"></span>
+          <div><b>Margem de 100%?</b> Isso não é lucro perfeito, é <b>custo faltando</b>. Vá em
+          <span class="rota">Estoque → Custos em massa</span> e preencha — enquanto o custo for zero,
+          o relatório trata a venda inteira como lucro.</div></div>
       </section>
 
       <!-- CRM -->
       <section id="crm" class="card">
-        <h2><span class="ico-box brand" id="i15"></span>CRM</h2>
+        <h2><span class="ico-box brand" id="i15"></span>Clientes</h2>
         <p>Vender de novo para quem já comprou é o que faz a operação crescer sem gastar mais em
           anúncio. O CRM não responde "quem são meus clientes" — responde
           <b>com quem eu preciso falar hoje, e o que eu digo</b>.</p>
 
+        <p>Esta tela juntou três coisas que antes viviam separadas: a <b>lista de clientes</b>,
+          o <b>funil de atendimento</b> e a <b>fila de contatos do dia</b>. São três abas:
+          <b>Hoje</b>, <b>Funil</b> e <b>Todos</b>.</p>
+
+<h3>Instagram: é assim que a gente reconhece</h3>
+        <p>Muito cliente é conhecido pelo <b>@</b>, não pelo nome. Por isso cada cadastro tem um campo
+          <b>Instagram</b>, e você pode <b>buscar pelo @</b> tanto aqui quanto no PDV.</p>
+        <ul>
+          <li>Se digitar só o <b>@fulano</b> no nome, o sistema preenche o Instagram sozinho.</li>
+          <li>Pode colar o <b>link do perfil</b> — ele guarda só o @.</li>
+          <li>Quando o nome já é o @, a tela mostra ele uma vez só, sem repetir.</li>
+          <li>Ao ler os clientes da loja, quem estiver cadastrado com o @ já vem com o campo preenchido.</li>
+        </ul>
+
+        
         <h3>Hoje: a fila de contatos</h3>
         <p>Toda manhã o sistema monta a lista de quem merece um toque, na ordem certa. Cada linha já
           vem com <b>a mensagem pronta</b>, com o nome da pessoa e a marca que ela costuma levar — é
@@ -486,6 +490,7 @@
           já estava aberta dá para amarrar as duas em <b>De qual atendimento</b>.</p>
       </section>
 
+      <!-- (o Lucro entrou no Financeiro acima) -->
       <!-- EQUIPE -->
       <section id="equipe" class="card">
         <h2><span class="ico-box brand" id="i14"></span>Equipe e metas</h2>
@@ -575,41 +580,7 @@
       </section>
 
       <!-- RELATÓRIOS -->
-      <section id="relatorios" class="card">
-        <h2><span class="ico-box brand" id="i13"></span>Relatórios</h2>
-        <p>Responde a pergunta que o faturamento não responde: <b>o que realmente dá dinheiro</b>.
-          Vender muito de um produto de margem apertada pode render menos que vender pouco de um
-          produto de margem boa.</p>
-
-        <h3>Os números do topo</h3>
-        <p><b>Receita</b> menos <b>custo das peças</b> é o <b>lucro bruto</b>, e a <b>margem</b> é
-          esse lucro em porcentagem. O custo usado é o que a peça tinha <b>no dia da venda</b> —
-          mudar o custo hoje não reescreve o lucro do mês passado.</p>
-
-        <h3>Curva ABC · onde está o lucro</h3>
-        <div class="tw"><table>
-          <tr><th>Classe</th><th>O que significa</th></tr>
-          <tr><td><b>A</b></td><td>Os produtos que juntos fazem <b>80% do seu lucro</b>. São os que
-            não podem faltar no estoque.</td></tr>
-          <tr><td><b>B</b></td><td>Os 15% seguintes. Importantes, mas não críticos.</td></tr>
-          <tr><td><b>C</b></td><td>O resto. Ocupam espaço e capital para pouco retorno.</td></tr>
-        </table></div>
-        <p>Abaixo, o ranking mostra cada produto com peças vendidas, receita, lucro e margem.
-          <b>Margem abaixo de 25% fica amarela</b>, e negativa fica vermelha — sinal de que o preço
-          está errado ou o custo subiu.</p>
-
-        <h3>Dinheiro parado</h3>
-        <p>Produtos que <b>têm estoque e não venderam</b> no período, do mais caro para o mais
-          barato, com o valor <b>a custo</b> — quanto do seu dinheiro está dormindo ali. É a lista
-          para pensar em promoção, troca com o fornecedor ou simplesmente parar de repor.</p>
-
-        <div class="aviso atencao"><span class="ico" id="a4"></span>
-          <div><b>Margem de 100%?</b> Isso não é lucro perfeito, é <b>custo faltando</b>. Vá em
-          <span class="rota">Estoque → Custos em massa</span> e preencha — enquanto o custo for zero,
-          o relatório trata a venda inteira como lucro.</div></div>
-      </section>
-
-      <!-- AUTOMÁTICO -->
+            <!-- AUTOMÁTICO -->
       <section id="automatico" class="card">
         <h2><span class="ico-box brand" id="i8"></span>O que o sistema faz sozinho</h2>
         <p>Estas coisas acontecem sem ninguém clicar em nada:</p>
@@ -632,24 +603,7 @@
       </section>
 
       <!-- AGENTES -->
-      <section id="agentes" class="card">
-        <h2><span class="ico-box brand" id="i9"></span>Os agentes</h2>
-        <p>Cada agente cuida de uma parte da loja e avisa quando algo precisa de você. Hoje trabalham:</p>
-        <div class="tw"><table>
-          <tr><th>Agente</th><th>Cuida de</th></tr>
-          <tr><td>Maestro</td><td>Junta tudo e resume o dia na tela de Início.</td></tr>
-          <tr><td>Vendas</td><td>PDV e pedidos do dia.</td></tr>
-          <tr><td>Estoque</td><td>Avisa o que está acabando e o valor parado em mercadoria.</td></tr>
-          <tr><td>Financeiro</td><td>Caixa e margem, lançando cada venda sozinho.</td></tr>
-          <tr><td>Cobrança</td><td>O fiado em aberto e quem precisa pagar.</td></tr>
-          <tr><td>Clientes</td><td>Ranking e histórico de cada pessoa.</td></tr>
-          <tr><td>Lembretes</td><td>Cobra o que está atrasado ou vence hoje.</td></tr>
-        </table></div>
-        <p>Na página <span class="rota">Agentes</span> você também vê os que ainda vão entrar
-          (Atendimento, Marketing, Logística e Compras).</p>
-      </section>
-
-      <!-- DÚVIDAS -->
+            <!-- DÚVIDAS -->
       <section id="duvidas" class="card">
         <h2><span class="ico-box brand" id="i10"></span>Dúvidas comuns</h2>
 

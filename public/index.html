@@ -92,6 +92,37 @@
   .dlgf{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);min-width:min(560px,94vw);max-height:80vh}
   .dlgf h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;font-size:19px;transform:skewX(-5deg)}
   .dlgf .lst{display:flex;flex-direction:column;gap:6px;overflow-y:auto}
+
+  /* ---- Lembretes (a página virou este painel) ---- */
+  .lem{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:start;
+    padding:9px 0;border-bottom:1px solid var(--line-soft)}
+  .lem:last-child{border-bottom:none}
+  .lem.feito{opacity:.45}
+  .lem.feito .t{text-decoration:line-through}
+  .lem .chk{width:22px;height:22px;border-radius:7px;border:1px solid var(--line-str);background:var(--bg-elev);
+    color:transparent;cursor:pointer;display:grid;place-items:center;padding:0;margin-top:1px}
+  .lem .chk.on{background:var(--brand);border-color:var(--brand);color:#04140A}
+  .lem .t{font-size:13px;font-weight:600;cursor:pointer;line-height:1.35}
+  .lem .n{font-size:11.5px;color:var(--ink-3);margin-top:2px;line-height:1.4}
+  .lem .tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+  .lem .tg{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:2px 7px;
+    border-radius:999px;background:var(--bg-elev);border:1px solid var(--line-soft);color:var(--ink-3)}
+  .lem .tg.late{color:var(--crit);border-color:rgba(242,86,74,.3)}
+  .lem .tg.now{color:var(--warn);border-color:rgba(230,168,40,.3)}
+  .lem .tg.val{font-family:var(--font-mono);color:var(--ink-2)}
+  .lem .ib{background:none;border:none;color:var(--ink-3);cursor:pointer;padding:3px}
+  .lem .ib:hover{color:var(--crit)}
+  .panel .ph{display:flex;align-items:center;gap:9px;margin-bottom:var(--s2)}
+  .panel .ph h3{margin:0;flex:1}
+  .tipos{display:flex;gap:5px;flex-wrap:wrap}
+  .tp{padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--bg-elev);
+    color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer}
+  .tp.sel{border-color:var(--brand);color:var(--brand-hi);background:rgba(47,210,79,.1)}
+  .dlgr{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);min-width:min(410px,92vw)}
+  .dlgr h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;font-size:18px;transform:skewX(-5deg)}
+  .dlgr .g2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+  @media (max-width:520px){.dlgr .g2{grid-template-columns:1fr}}
+  .dlgr .foot{display:flex;gap:var(--s2);justify-content:flex-end}
 </style>
 </head>
 <body>
@@ -108,8 +139,8 @@
   <div class="card maestro" style="margin-bottom:var(--s4)">
     <div class="m-ava"><img src="/logo.webp" alt=""></div>
     <div class="m-body">
-      <div class="m-top"><h3>Maestro</h3><a href="/agentes" class="m-link">ver o time →</a></div>
-      <div class="m-role">Gerente-geral · coordena os agentes</div>
+      <div class="m-top"><h3>Maestro</h3></div>
+      <div class="m-role">O resumo do dia em uma frase</div>
       <p id="maestroMsg"><span class="sk">Lendo os números da loja…</span></p>
       <div class="m-tags" id="maestroTags"></div>
     </div>
@@ -142,28 +173,43 @@
 
   <div class="cols" style="margin-top:var(--s3)">
     <div class="card panel">
-      <h3>Últimas vendas</h3>
-      <div class="rows" id="recent"></div>
-    </div>
-    <div class="card panel">
       <h3>Estoque no vermelho</h3>
       <div class="rows" id="low"></div>
     </div>
-  </div>
-
-
-  <div class="cols" style="margin-top:var(--s3)">
-    <div class="card panel">
-      <h3>Contas a receber</h3>
-      <div class="rows" id="recv"></div>
-    </div>
-    <div class="card panel">
-      <h3>Lembretes</h3>
+    <div class="card panel" id="painelLem">
+      <div class="ph"><h3>Lembretes</h3>
+        <button class="btn sm ghost" id="verFeitos" type="button">Ver feitos</button>
+        <button class="btn sm primary" id="novoLem" type="button">Novo</button></div>
       <div class="rows" id="rem"></div>
     </div>
   </div>
 
 </div>
+
+<dialog id="dlgLem">
+  <form class="dlgr" method="dialog">
+    <h3 id="lT">Novo lembrete</h3>
+    <input type="hidden" id="rId">
+    <div class="field"><label>O que precisa lembrar? *</label>
+      <input id="rT" placeholder="Ex.: João paga a segunda parcela"></div>
+    <div class="field"><label>Tipo</label>
+      <div class="tipos" id="tipos">
+        <button type="button" class="tp sel" data-k="geral">Geral</button>
+        <button type="button" class="tp" data-k="pagamento">Pagamento</button>
+        <button type="button" class="tp" data-k="encomenda">Encomenda</button>
+        <button type="button" class="tp" data-k="reposicao">Reposição</button>
+      </div></div>
+    <div class="g2">
+      <div class="field"><label>Quando</label><input id="rD" type="date"></div>
+      <div class="field"><label>Valor (opcional)</label><input id="rV" type="number" step="0.01" placeholder="R$"></div>
+    </div>
+    <div class="field"><label>Detalhes</label><input id="rN" placeholder="Anote o que precisar"></div>
+    <div class="foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn primary" id="lSalvar" value="ok" type="submit">Salvar</button>
+    </div>
+  </form>
+</dialog>
 
 <dialog id="dlgFila">
   <form class="dlgf" method="dialog">
@@ -311,48 +357,7 @@ async function load(){
       : `loja não conectada`;
   }catch(e){}
 
-  const rec=document.getElementById('recent');
-  rec.innerHTML = d.recent_sales.length ? d.recent_sales.map(s=>{
-    const tag = s.payment_status==='pendente'
-      ? `<span class="pill" style="color:var(--warn);border-color:rgba(232,163,23,.3);background:rgba(232,163,23,.08)">Fiado</span>` : '';
-    return `<div class="row-item"><div class="l"><span>${s.code} ${tag}</span>
-      <span class="s">${s.customer_name||'Sem cliente'} · ${s.payment_method||'—'}</span></div>
-      <span class="r" style="color:var(--ok)">${BRL(s.total)}</span></div>`;
-  }).join('') : vazio('recibo','Sem vendas hoje','Assim que você lançar no PDV, aparece aqui.');
-
-  const low=document.getElementById('low');
-  low.innerHTML = d.low_stock_list.length ? d.low_stock_list.map(v=>
-    `<div class="row-item"><div class="l"><span>${v.product_name}</span><span class="s">${v.variant_name||''}</span></div>
-     <span class="r" style="color:var(--warn)">${v.stock} un.</span></div>`).join('')
-    : vazio('ok','Estoque saudável','Nenhum item perto da ruptura.');
-
-  const recv=document.getElementById('recv');
-  if(d.pending_list&&d.pending_list.length){
-    recv.innerHTML=d.pending_list.map(s=>
-      `<div class="row-item"><div class="l"><span>${s.code} · ${s.customer_name||'Sem cliente'}</span>
-        <span class="s">${DATA(s.created_at)}</span></div>
-       <span class="settle"><span class="r" style="color:var(--warn)">${BRL(s.total)}</span>
-       <button class="btn sm" data-settle="${s.id}" type="button">Receber</button></span></div>`).join('');
-    recv.querySelectorAll('[data-settle]').forEach(b=>b.addEventListener('click',async()=>{
-      b.disabled=true;
-      try{await api('/api/sales/'+b.dataset.settle+'/settle',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});await load();}
-      catch(e){alert(e.message);b.disabled=false;}
-    }));
-  } else recv.innerHTML=vazio('ok','Nada a receber','Todo mundo em dia por aqui.');
-
-  // Lembretes
-  const rem=document.getElementById('rem');
-  const R=d.reminders||{};
-  if(d.reminders_list&&d.reminders_list.length){
-    rem.innerHTML=d.reminders_list.map(r=>{
-      const hoje=new Date().toISOString().slice(0,10);
-      const late=r.due_date&&r.due_date<hoje, now_=r.due_date===hoje;
-      const q=!r.due_date?'sem data':(late?'atrasado':(now_?'hoje':new Date(r.due_date+'T12:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})));
-      return `<div class="row-item"><div class="l"><span>${r.title}</span>
-        <span class="s">${q}${r.customer_name?' · '+r.customer_name:''}</span></div>
-        <span class="r" style="color:${late?'var(--crit)':(now_?'var(--warn)':'var(--ink-2)')}">${r.amount?BRL(r.amount):''}</span></div>`;
-    }).join('')+`<a class="btn sm ghost" href="/lembretes" style="margin-top:6px">Ver todos</a>`;
-  } else rem.innerHTML=vazio('sino','Nada pendente','Anote em Lembretes o que não pode escapar.');
+  const R=d.reminders||{};   // o Maestro ainda avisa dos lembretes
 
   // Maestro
   const p=[];
@@ -370,8 +375,8 @@ async function load(){
   document.getElementById('maestroMsg').innerHTML='Fala, chefe. '+p.join(' ');
 
   const tags=[];
-  if(R.atrasados>0) tags.push(`<a class="m-tag crit" href="/lembretes">${ICO('alerta',13)}${R.atrasados} lembrete(s) atrasado(s)</a>`);
-  if(R.hoje>0) tags.push(`<a class="m-tag warn" href="/lembretes">${ICO('calendario',13)}${R.hoje} pra hoje</a>`);
+  if(R.atrasados>0) tags.push(`<a class="m-tag crit" href="#painelLem">${ICO('alerta',13)}${R.atrasados} lembrete(s) atrasado(s)</a>`);
+  if(R.hoje>0) tags.push(`<a class="m-tag warn" href="#painelLem">${ICO('calendario',13)}${R.hoje} pra hoje</a>`);
   if(d.receivable_count>0) tags.push(`<a class="m-tag warn" href="/clientes">${ICO('recibo',13)}${BRL(d.receivable_total)} a receber</a>`);
   if(d.low_stock>0) tags.push(`<a class="m-tag warn" href="/produtos">${ICO('estoque',13)}${d.low_stock} perto da ruptura</a>`);
   if(!tags.length) tags.push(`<span class="m-tag ok">${ICO('ok',13)}Tudo em dia</span>`);
@@ -381,8 +386,91 @@ async function loadChart(){
   try{const d=await api('/api/sales-series?days=14');serie=d.series;
     document.getElementById('chartSub').textContent='últimos '+d.days+' dias';renderChart();}catch(e){}
 }
+/* ================= LEMBRETES (a página virou este painel) ================= */
+const ICO_TIPO={geral:'lembrete',pagamento:'financeiro',encomenda:'entrega',reposicao:'estoque'};
+const NOME_TIPO={geral:'Geral',pagamento:'Pagamento',encomenda:'Encomenda',reposicao:'Reposição'};
+let filtroLem='abertos', tipoLem='geral';
+const dataBr=(s)=>{if(!s)return '';const [a,m,d]=s.split('-');return `${d}/${m}`;};
+function quandoLem(r){
+  if(!r.due_date)return {cls:'',txt:'sem data'};
+  if(r.atrasado)return {cls:'late',txt:'atrasado · '+dataBr(r.due_date)};
+  if(r.hoje)return {cls:'now',txt:'hoje'};
+  const dias=Math.round((new Date(r.due_date+'T12:00')-new Date().setHours(12,0,0,0))/864e5);
+  return dias===1?{cls:'now',txt:'amanhã'}:{cls:'dt',txt:dataBr(r.due_date)};
+}
+async function lembretes(){
+  const d=await api('/api/reminders?filter='+filtroLem);
+  const box=document.getElementById('rem');
+  if(!d.items.length){
+    box.innerHTML=vazio('sino',filtroLem==='feitos'?'Nada concluído ainda':'Nada pendente',
+      'Anote o que não pode escapar: quem vai pagar, encomenda de cliente, reposição.');
+    return;
+  }
+  box.innerHTML='';
+  for(const r of d.items){
+    const q=quandoLem(r);
+    const el=document.createElement('div');
+    el.className='lem'+(r.done?' feito':'');
+    el.innerHTML=`<button class="chk ${r.done?'on':''}" type="button" aria-label="concluir">${ICO('ok',14)}</button>
+      <div><div class="t">${r.title}</div>
+        ${r.notes?`<div class="n">${r.notes}</div>`:''}
+        <div class="tags">
+          <span class="tg">${ICO(ICO_TIPO[r.kind]||'lembrete',12)}${NOME_TIPO[r.kind]||'Geral'}</span>
+          <span class="tg ${q.cls}">${ICO('calendario',12)}${q.txt}</span>
+          ${r.customer_name?`<span class="tg">${ICO('clientes',12)}${r.customer_name}</span>`:''}
+          ${r.amount?`<span class="tg val">${BRL(r.amount)}</span>`:''}
+        </div></div>
+      <button class="ib" data-del="${r.id}" type="button" aria-label="apagar">${ICO('lixeira',15)}</button>`;
+    el.querySelector('.chk').onclick=async()=>{
+      await api('/api/reminders/'+r.id,{method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({done:!r.done})});
+      lembretes();load();
+    };
+    el.querySelector('[data-del]').onclick=async()=>{
+      if(!confirm('Apagar este lembrete?'))return;
+      await api('/api/reminders/'+r.id,{method:'DELETE'});lembretes();load();
+    };
+    el.querySelector('.t').onclick=()=>abrirLem(r);
+    box.appendChild(el);
+  }
+}
+const dlgLem=document.getElementById('dlgLem');
+function setTipo(k){tipoLem=k;document.querySelectorAll('.tp').forEach(t=>t.classList.toggle('sel',t.dataset.k===k));}
+document.getElementById('tipos').onclick=e=>{const b=e.target.closest('.tp');if(b)setTipo(b.dataset.k);};
+function abrirLem(r){
+  document.getElementById('lT').textContent=r?'Editar lembrete':'Novo lembrete';
+  document.getElementById('rId').value=r?r.id:'';
+  document.getElementById('rT').value=r?r.title:'';
+  document.getElementById('rD').value=r&&r.due_date?r.due_date:'';
+  document.getElementById('rV').value=r&&r.amount?r.amount:'';
+  document.getElementById('rN').value=r&&r.notes?r.notes:'';
+  setTipo(r&&r.kind?r.kind:'geral');
+  dlgLem.showModal();
+}
+document.getElementById('novoLem').onclick=()=>abrirLem(null);
+document.getElementById('verFeitos').onclick=(e)=>{
+  filtroLem=filtroLem==='abertos'?'feitos':'abertos';
+  e.target.textContent=filtroLem==='abertos'?'Ver feitos':'Ver abertos';
+  lembretes();
+};
+document.getElementById('lSalvar').onclick=async e=>{
+  e.preventDefault();
+  const title=document.getElementById('rT').value.trim();
+  if(!title)return alert('Escreva o que precisa lembrar.');
+  const id=document.getElementById('rId').value;
+  const body={title,kind:tipoLem,due_date:document.getElementById('rD').value||null,
+    amount:parseFloat(document.getElementById('rV').value)||null,
+    notes:document.getElementById('rN').value.trim()};
+  try{
+    await api(id?('/api/reminders/'+id):'/api/reminders',{method:id?'PUT':'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    dlgLem.close();lembretes();load();
+  }catch(err){alert(err.message);}
+};
+
 document.getElementById('pdvLink').insertAdjacentHTML('afterbegin',ICO('pdv',16));
-load(); loadChart(); setInterval(()=>{load();loadChart();},20000);
+load(); loadChart(); lembretes();
+setInterval(()=>{load();loadChart();lembretes();},20000);
 </script>
 </body>
 </html>
