@@ -191,6 +191,32 @@ CREATE TABLE IF NOT EXISTS fixed_expenses (
   created_at   TEXT NOT NULL
 );
 
+-- Equipe: quem trabalha na loja e o que cada um faz.
+CREATE TABLE IF NOT EXISTS team_members (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  role       TEXT NOT NULL DEFAULT 'Vendedor',
+  instagram  TEXT DEFAULT '',
+  phone      TEXT DEFAULT '',
+  vende      INTEGER NOT NULL DEFAULT 1,   -- aparece na hora de lançar a venda?
+  active     INTEGER NOT NULL DEFAULT 1,
+  note       TEXT DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(name)
+);
+
+-- Meta do mês por pessoa (ou da loja inteira, quando member_id é nulo).
+CREATE TABLE IF NOT EXISTS goals (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id  INTEGER REFERENCES team_members(id),
+  ym         TEXT NOT NULL,                -- AAAA-MM
+  target     REAL NOT NULL DEFAULT 0,      -- quanto precisa vender
+  note       TEXT DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(member_id, ym)
+);
+CREATE INDEX IF NOT EXISTS idx_goals_ym ON goals(ym);
+
 -- Fechamento de caixa do dia: o que o sistema esperava x o que foi contado.
 CREATE TABLE IF NOT EXISTS cash_closings (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -260,6 +286,10 @@ ensureColumn('sale_items', 'encomenda', 'encomenda INTEGER NOT NULL DEFAULT 0');
 ensureColumn('financial_entries', 'paid', 'paid INTEGER NOT NULL DEFAULT 1');
 ensureColumn('financial_entries', 'due_date', 'due_date TEXT');
 ensureColumn('financial_entries', 'paid_at', 'paid_at TEXT');
+
+// Quem vendeu — sem isso não dá para medir meta de ninguém.
+ensureColumn('sales', 'seller_id', 'seller_id INTEGER');
+ensureColumn('sales', 'seller_name', 'seller_name TEXT');
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_order ON sales(nuvemshop_order_id) WHERE nuvemshop_order_id IS NOT NULL'); } catch (_) {}
 
 // ---- Plano de contas padrão (criado uma vez) ----

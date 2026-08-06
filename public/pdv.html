@@ -104,6 +104,11 @@
       <div class="cart-head"><h2>Venda</h2><span class="cart-count" id="count"></span></div>
       <div id="lines" class="lines"></div>
 
+      <div class="field" id="wrapVend" hidden>
+        <label for="vend">Quem vendeu</label>
+        <select id="vend"></select>
+      </div>
+
       <div class="field cust-wrap">
         <label for="cust">Cliente</label>
         <input id="cust" type="text" placeholder="Nome ou @instagram…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
@@ -256,6 +261,23 @@ async function criarCliente(nome){
 }
 document.addEventListener('click',e=>{if(!e.target.closest('#cust')&&!e.target.closest('#custList'))cl.classList.remove('show');});
 
+/* quem vendeu — o campo só aparece se houver equipe cadastrada */
+(async()=>{
+  try{
+    const t=await api('/api/team');
+    const vs=t.membros.filter(m=>m.active&&m.vende);
+    if(!vs.length)return;
+    const sel=document.getElementById('vend');
+    sel.innerHTML='<option value="">— não informar —</option>'
+      +vs.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
+    // Lembra de quem estava no balcão neste aparelho.
+    const ult=localStorage.getItem('vn_vendedor');
+    if(ult&&vs.some(m=>String(m.id)===ult))sel.value=ult;
+    sel.onchange=()=>localStorage.setItem('vn_vendedor',sel.value);
+    document.getElementById('wrapVend').hidden=false;
+  }catch(_){}
+})();
+
 /* controles */
 document.getElementById('seg').onclick=e=>{const b=e.target.closest('.seg-b');if(!b)return;
   document.querySelectorAll('.seg-b').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');S.status=b.dataset.st;
@@ -274,12 +296,14 @@ async function finalizar(){
   try{
     const r=await api('/api/sales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       items,customer_id:S.cliente?S.cliente.id:null,payment_method:S.pay,payment_status:S.status,
+      seller_id:document.getElementById('vend').value||null,
       discount:parseFloat(document.getElementById('disc').value)||0})});
+    const vend=r.vendedor?' · '+r.vendedor:'';
     const sit=r.payment_status==='pendente'?'Fiado — foi para Contas a receber':'Pago';
     const sinc=r.stock_synced?' · estoque atualizado na loja':(r.mode==='demo'?'':' · estoque não sincronizou');
     const enc=(r.encomendas&&r.encomendas.length)
       ? `<br><b style="color:var(--warn)">Pegar no fornecedor hoje:</b> ${r.encomendas.join(', ')}` : '';
-    toast(`${r.code} · ${BRL(r.total)}`,`${r.customer_name||'Sem cliente'} · ${sit}${sinc}${enc}`);
+    toast(`${r.code} · ${BRL(r.total)}`,`${r.customer_name||'Sem cliente'}${vend} · ${sit}${sinc}${enc}`);
     S.cart.clear();S.pay='';limparCliente();
     document.querySelectorAll('.pay').forEach(p=>p.classList.remove('sel'));
     document.getElementById('disc').value='';renderCart();

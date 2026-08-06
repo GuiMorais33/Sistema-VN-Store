@@ -948,7 +948,7 @@ app.post('/api/customers/detectar-instagram', (req, res) => {
 
 // ==================== VENDA (PDV) ====================
 app.post('/api/sales', async (req, res) => {
-  const { items = [], customer_id = null, new_customer = null, customer_name = '', payment_method = '', payment_status = 'pago', discount = 0 } = req.body || {};
+  const { items = [], customer_id = null, new_customer = null, customer_name = '', payment_method = '', payment_status = 'pago', discount = 0, seller_id = null } = req.body || {};
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Adicione ao menos um item à venda.' });
 
   // Cliente: usa existente, cria novo, ou anônimo.
@@ -990,13 +990,19 @@ app.post('/api/sales', async (req, res) => {
   const costTotal = money(lines.reduce((s, l) => s + l.unitCost * l.qty, 0));
   const margin = money(total - costTotal);
   const status = payment_status === 'pendente' ? 'pendente' : 'pago';
+  // Quem vendeu — o nome fica gravado na venda para o histórico não
+  // mudar se a pessoa sair da equipe.
+  const vendedor = seller_id
+    ? db.prepare('SELECT id, name FROM team_members WHERE id = ?').get(seller_id) : null;
   const ts = now();
   const code = 'VN-' + String(db.prepare('SELECT COALESCE(MAX(id),0)+1 AS n FROM sales').get().n).padStart(6, '0');
 
   const saleId = db.transaction(() => {
-    const id = db.prepare(`INSERT INTO sales (code, channel, customer_id, customer_name, payment_method, payment_status, paid_at, subtotal, discount, total, cost_total, margin, synced_nuvemshop, created_at)
-      VALUES (?, 'pdv', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`)
-      .run(code, custId, custName, payment_method, status, status === 'pago' ? ts : null, subtotal, disc, total, costTotal, margin, ts).lastInsertRowid;
+    const id = db.prepare(`INSERT INTO sales (code, channel, customer_id, customer_name, payment_method, payment_status, paid_at, subtotal, discount, total, cost_total, margin, seller_id, seller_name, items_count, synced_nuvemshop, created_at)
+      VALUES (?, 'pdv', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`)
+      .run(code, custId, custName, payment_method, status, status === 'pago' ? ts : null, subtotal, disc, total, costTotal, margin,
+        vendedor ? vendedor.id : null, vendedor ? vendedor.name : null,
+        lines.reduce((s, l) => s + l.qty, 0), ts).lastInsertRowid;
     const insItem = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, name, qty, unit_price, unit_cost, line_total, encomenda) VALUES (?,?,?,?,?,?,?,?)`);
     // Grade do site e par em mãos baixam separados: o site perde a
     // numeração vendida, o estoque real só perde se o par estava aqui.
@@ -1051,6 +1057,7 @@ app.post('/api/sales', async (req, res) => {
     .map((l) => `${l.v.product_name} ${l.v.variant_name}`);
   res.json({
     ok: true, code, total, margin, payment_status: status, customer_name: custName,
+    vendedor: vendedor ? vendedor.name : null,
     mode: live ? 'live' : 'demo', stock_synced: syncedAll && live, notes: syncNotes,
     encomendas,   // o PDV avisa na tela e o lembrete já foi criado
   });
@@ -1136,6 +1143,144 @@ app.get('/api/sales-series', (req, res) => {
     series.push({ date: key, total: r ? money(r.total) : 0, count: r ? r.n : 0 });
   }
   res.json({ days, series });
+});
+
+// ==================== EQUIPE ====================
+app.get('/api/team', (req, res) => {
+  const rows = db.prepare(`SELECT * FROM team_members
+    ORDER BY active DESC, vende DESC, name`).all();
+  res.json({
+    total: rows.filter((r) => r.active).length,
+    vendedores: rows.filter((r) => r.active && r.vende).length,
+    membros: rows,
+  });
+});
+
+app.post('/api/team', (req, res) => {
+  const b = req.body || {};
+  const nome = String(b.name || '').trim();
+  if (!nome) return res.status(400).json({ error: 'Informe o nome.' });
+  const dados = [nome, String(b.role || 'Vendedor').trim() || 'Vendedor',
+    limpaInsta(b.instagram), String(b.phone || '').trim(),
+    b.vende === false ? 0 : 1, b.active === false ? 0 : 1, String(b.note || '').trim()];
+  if (b.id) {
+    db.prepare(`UPDATE team_members SET name=?, role=?, instagram=?, phone=?, vende=?, active=?, note=? WHERE id=?`)
+      .run(...dados, b.id);
+    // O nome também aparece nas vendas antigas — mantém coerente.
+    db.prepare('UPDATE sales SET seller_name = ? WHERE seller_id = ?').run(nome, b.id);
+    return res.json({ ok: true, membro: db.prepare('SELECT * FROM team_members WHERE id = ?').get(b.id) });
+  }
+  const ex = db.prepare('SELECT id FROM team_members WHERE lower(name) = lower(?)').get(nome);
+  if (ex) return res.status(409).json({ error: 'Já existe alguém com esse nome na equipe.' });
+  const id = db.prepare(`INSERT INTO team_members (name, role, instagram, phone, vende, active, note, created_at)
+    VALUES (?,?,?,?,?,?,?,?)`).run(...dados, now()).lastInsertRowid;
+  res.json({ ok: true, membro: db.prepare('SELECT * FROM team_members WHERE id = ?').get(id) });
+});
+
+app.delete('/api/team/:id', (req, res) => {
+  const m = db.prepare('SELECT * FROM team_members WHERE id = ?').get(req.params.id);
+  if (!m) return res.status(404).json({ error: 'Pessoa não encontrada.' });
+  // Se já vendeu, não some do histórico: só sai de cena.
+  const vendeu = db.prepare('SELECT 1 FROM sales WHERE seller_id = ? LIMIT 1').get(m.id);
+  if (vendeu) {
+    db.prepare('UPDATE team_members SET active = 0 WHERE id = ?').run(m.id);
+    return res.json({ ok: true, desativado: true });
+  }
+  db.prepare('DELETE FROM goals WHERE member_id = ?').run(m.id);
+  db.prepare('DELETE FROM team_members WHERE id = ?').run(m.id);
+  res.json({ ok: true, apagado: true });
+});
+
+// ==================== METAS ====================
+// Meta é do mês e por pessoa. O quanto já vendeu vem das vendas com
+// vendedor marcado — só conta o que foi pago, não o fiado em aberto.
+app.get('/api/metas', (req, res) => {
+  const ym = /^\d{4}-\d{2}$/.test(req.query.ym || '') ? req.query.ym : new Date().toISOString().slice(0, 7);
+  const ini = `${ym}-01T00:00:00`;
+  const [ano, mes] = ym.split('-').map(Number);
+  const fim = new Date(ano, mes, 1).toISOString();
+
+  const membros = db.prepare('SELECT * FROM team_members WHERE active = 1 AND vende = 1 ORDER BY name').all();
+  const metas = db.prepare('SELECT * FROM goals WHERE ym = ?').all(ym);
+  const metaDe = new Map(metas.map((g) => [g.member_id == null ? 'loja' : String(g.member_id), g]));
+
+  const vendasPor = db.prepare(`SELECT seller_id,
+      COUNT(*) vendas, COALESCE(SUM(total),0) valor, COALESCE(SUM(margin),0) margem,
+      COALESCE(SUM(items_count),0) itens
+    FROM sales WHERE payment_status = 'pago' AND created_at >= ? AND created_at < ?
+    GROUP BY seller_id`).all(ini, fim);
+  const porId = new Map(vendasPor.map((v) => [String(v.seller_id), v]));
+
+  const pessoas = membros.map((m) => {
+    const v = porId.get(String(m.id)) || { vendas: 0, valor: 0, margem: 0, itens: 0 };
+    const g = metaDe.get(String(m.id));
+    const alvo = g ? g.target : 0;
+    const pct = alvo > 0 ? Math.round((v.valor / alvo) * 100) : null;
+    return {
+      id: m.id, nome: m.name, funcao: m.role, instagram: m.instagram,
+      meta: money(alvo), vendido: money(v.valor), vendas: v.vendas,
+      margem: money(v.margem), itens: v.itens,
+      pct, falta: money(Math.max(0, alvo - v.valor)),
+      ticket: v.vendas ? money(v.valor / v.vendas) : 0,
+    };
+  }).sort((a, b) => b.vendido - a.vendido);
+
+  // Total da loja: a meta da loja é a própria, se existir; senão soma as pessoas.
+  const gLoja = metaDe.get('loja');
+  const vendidoTudo = db.prepare(`SELECT COUNT(*) vendas, COALESCE(SUM(total),0) valor,
+      COALESCE(SUM(margin),0) margem FROM sales
+    WHERE payment_status = 'pago' AND created_at >= ? AND created_at < ?`).get(ini, fim);
+  const semVendedor = db.prepare(`SELECT COUNT(*) vendas, COALESCE(SUM(total),0) valor FROM sales
+    WHERE payment_status = 'pago' AND seller_id IS NULL AND created_at >= ? AND created_at < ?`).get(ini, fim);
+  const alvoLoja = gLoja ? gLoja.target : pessoas.reduce((s, p) => s + p.meta, 0);
+
+  // Dias: quanto do mês já passou, para saber se o ritmo dá.
+  const hoje = new Date();
+  const noMes = hoje.toISOString().slice(0, 7) === ym;
+  const diasNoMes = new Date(ano, mes, 0).getDate();
+  const diaAtual = noMes ? hoje.getDate() : diasNoMes;
+  const restam = Math.max(0, diasNoMes - diaAtual);
+
+  res.json({
+    ym, dias: { no_mes: diasNoMes, atual: diaAtual, restam, decorrido_pct: Math.round((diaAtual / diasNoMes) * 100) },
+    loja: {
+      meta: money(alvoLoja), vendido: money(vendidoTudo.valor), vendas: vendidoTudo.vendas,
+      margem: money(vendidoTudo.margem),
+      pct: alvoLoja > 0 ? Math.round((vendidoTudo.valor / alvoLoja) * 100) : null,
+      falta: money(Math.max(0, alvoLoja - vendidoTudo.valor)),
+      por_dia: restam > 0 ? money(Math.max(0, alvoLoja - vendidoTudo.valor) / restam) : 0,
+      meta_propria: Boolean(gLoja),
+    },
+    sem_vendedor: { vendas: semVendedor.vendas, valor: money(semVendedor.valor) },
+    pessoas,
+  });
+});
+
+// Define/atualiza a meta de alguém (ou da loja, com member_id nulo).
+app.post('/api/metas', (req, res) => {
+  const b = req.body || {};
+  const ym = /^\d{4}-\d{2}$/.test(b.ym || '') ? b.ym : new Date().toISOString().slice(0, 7);
+  const alvo = money(b.target);
+  if (!(alvo >= 0)) return res.status(400).json({ error: 'Informe um valor válido.' });
+  const mid = b.member_id ? Number(b.member_id) : null;
+  if (mid && !db.prepare('SELECT 1 FROM team_members WHERE id = ?').get(mid)) {
+    return res.status(400).json({ error: 'Pessoa não encontrada na equipe.' });
+  }
+  // Zerar a meta é apagá-la — assim não fica meta de R$ 0 atrapalhando.
+  if (alvo === 0) {
+    db.prepare(`DELETE FROM goals WHERE ym = ? AND ${mid ? 'member_id = ?' : 'member_id IS NULL'}`)
+      .run(...(mid ? [ym, mid] : [ym]));
+    return res.json({ ok: true, removida: true });
+  }
+  const existente = db.prepare(`SELECT id FROM goals WHERE ym = ? AND ${mid ? 'member_id = ?' : 'member_id IS NULL'}`)
+    .get(...(mid ? [ym, mid] : [ym]));
+  if (existente) {
+    db.prepare('UPDATE goals SET target = ?, note = ? WHERE id = ?').run(alvo, b.note || '', existente.id);
+  } else {
+    db.prepare('INSERT INTO goals (member_id, ym, target, note, created_at) VALUES (?,?,?,?,?)')
+      .run(mid, ym, alvo, b.note || '', now());
+  }
+  res.json({ ok: true });
 });
 
 // ==================== RELATÓRIOS DE LUCRO ====================
@@ -1885,6 +2030,7 @@ app.get('/lembretes', page('lembretes.html'));
 app.get('/compras', page('compras.html'));
 app.get('/custos', page('custos.html'));
 app.get('/relatorios', page('relatorios.html'));
+app.get('/equipe', page('equipe.html'));
 app.get('/ajuda', page('ajuda.html'));
 app.get('/como-usar', page('ajuda.html'));
 

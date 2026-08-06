@@ -77,6 +77,7 @@
       <a href="#compras">Compras e custos</a>
       <a href="#lembretes">Lembretes</a>
       <a href="#financeiro">Financeiro</a>
+      <a href="#equipe">Equipe e metas</a>
       <a href="#relatorios">Relatórios</a>
       <a href="#automatico">O que roda sozinho</a>
       <a href="#agentes">Os agentes</a>
@@ -406,6 +407,47 @@
           lançá-las aqui. Use o "Lançar" apenas para <b>despesas</b> e receitas que não são venda.</div></div>
       </section>
 
+      <!-- EQUIPE -->
+      <section id="equipe" class="card">
+        <h2><span class="ico-box brand" id="i14"></span>Equipe e metas</h2>
+        <p>Quem trabalha na loja, o que cada um faz, e <b>quanto cada vendedor já vendeu</b> contra a
+          meta do mês.</p>
+
+        <h3>Cadastrar a equipe</h3>
+        <p>Em <b>Adicionar pessoa</b>, informe nome e função (Vendedor, Gerente, Caixa, Estoquista…).
+          Duas chaves importam:</p>
+        <ul>
+          <li><b>Vende no balcão</b> — quem estiver marcado aparece no PDV na hora de lançar a venda e
+            entra no ranking. Desligue para quem não vende.</li>
+          <li><b>Está na equipe</b> — quando alguém sair, <b>desligue em vez de apagar</b>: o histórico
+            de vendas continua no lugar. Aliás, quem já vendeu nem pode ser apagado — o sistema
+            marca como "saiu" sozinho.</li>
+        </ul>
+
+        <h3>Marcar quem vendeu</h3>
+        <p>Depois de cadastrar alguém que vende, aparece no PDV o campo <b>Quem vendeu</b>. Ele
+          <b>lembra da última pessoa escolhida naquele aparelho</b>, então no balcão você escolhe uma
+          vez e segue vendendo.</p>
+
+        <h3>Metas do mês</h3>
+        <ol class="passos">
+          <li><div>Escolha o mês no seletor de data.</div></li>
+          <li><div><b>Definir meta</b> no cartão de cada pessoa, ou <b>Meta da loja</b> para o total.</div></li>
+          <li><div>Se você não definir a meta da loja, ela vira a <b>soma das metas de cada um</b>.</div></li>
+        </ol>
+        <p>A barra fica <b>verde a partir de 90%</b>, amarela entre 60 e 89, vermelha abaixo. Na barra
+          da loja tem um <b>tracinho</b> mostrando onde você deveria estar pelo dia do mês — se a
+          barra passou do tracinho, o ritmo está bom. O quadro <b>Ritmo do mês</b> diz quanto falta
+          vender por dia nos dias que restam.</p>
+
+        <div class="aviso dica"><span class="ico" id="d7"></span>
+          <div><b>Só conta o que foi pago.</b> Venda fiado em aberto não entra na meta — ela entra
+          quando você registrar o recebimento. Assim ninguém bate meta com dinheiro que não entrou.</div></div>
+
+        <p>Vendas sem vendedor marcado aparecem à parte, no topo do ranking, para você saber quanto
+          ficou sem dono.</p>
+      </section>
+
       <!-- RELATÓRIOS -->
       <section id="relatorios" class="card">
         <h2><span class="ico-box brand" id="i13"></span>Relatórios</h2>
@@ -524,9 +566,9 @@
 <script src="/nav.js"></script>
 <script>
 const icones={i1:'conectar',i2:'inicio',i3:'pdv',i4:'estoque',i5:'clientes',i6:'sino',
-  i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa',i12:'caixa_vazia',i13:'grafico'};
+  i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa',i12:'caixa_vazia',i13:'grafico',i14:'clientes'};
 Object.entries(icones).forEach(([id,n])=>{const e=document.getElementById(id);if(e)e.innerHTML=ICO(n,17);});
-['d1','d2','d3','d4','d5','d6'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['d1','d2','d3','d4','d5','d6','d7'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
 ['a1','a2','a4'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
 
 // Marca a seção visível no índice

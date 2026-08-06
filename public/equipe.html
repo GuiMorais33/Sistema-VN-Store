@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070907">
+<title>VN Store — Equipe</title>
+<link rel="icon" href="/logo.webp">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .topo{display:grid;grid-template-columns:1.25fr 1fr;gap:var(--s3);margin-bottom:var(--s4)}
+  @media (max-width:900px){.topo{grid-template-columns:1fr}}
+  .box{padding:var(--s4)}
+  .box .big{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;
+    font-size:clamp(24px,3vw,32px);color:var(--brand-hi);letter-spacing:-1px;margin-top:6px}
+  .box .sub{font-size:12px;color:var(--ink-3);margin-top:5px;line-height:1.5}
+
+  /* Barra de progresso da meta */
+  .prog{height:12px;border-radius:7px;background:var(--bg-elev);border:1px solid var(--line-soft);
+    overflow:hidden;margin-top:10px;position:relative}
+  .prog i{display:block;height:100%;border-radius:7px;transition:width .5s var(--ease)}
+  .prog i.ok{background:linear-gradient(90deg,var(--brand-deep),var(--brand));box-shadow:0 0 12px var(--glow)}
+  .prog i.meio{background:linear-gradient(90deg,#8a6410,var(--warn))}
+  .prog i.baixo{background:linear-gradient(90deg,#8E2A22,var(--crit))}
+  /* marca de onde deveria estar, pelo dia do mês */
+  .prog .ritmo{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink-2);opacity:.65}
+  .legenda{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin-top:6px}
+
+  .bar{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center;margin-bottom:var(--s3)}
+  .bar input[type=month]{width:auto}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--s3)}
+  .card-v{padding:var(--s4);display:flex;flex-direction:column;gap:2px;position:relative;overflow:hidden}
+  .card-v .pos{position:absolute;top:var(--s4);right:var(--s4);font-family:var(--font-disp);
+    font-weight:900;font-size:26px;color:var(--ink-3);opacity:.5;transform:skewX(-8deg)}
+  .card-v:first-child .pos{color:var(--brand-hi);opacity:.9}
+  .card-v .nm{font-size:16px;font-weight:700}
+  .card-v .fn{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.6px;font-weight:700}
+  .card-v .ig{font-family:var(--font-mono);font-size:11.5px;color:var(--brand-hi);margin-top:2px}
+  .card-v .val{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;
+    font-size:21px;margin-top:9px}
+  .card-v .de{font-size:11.5px;color:var(--ink-3);font-family:var(--font-mono)}
+  .card-v .linhas{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:10px}
+  .card-v .mini{background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:9px;padding:8px 10px}
+  .card-v .mini .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-3);font-weight:700}
+  .card-v .mini .v{font-family:var(--font-mono);font-weight:700;font-size:13px;margin-top:2px}
+  .card-v .acts{display:flex;gap:5px;margin-top:11px}
+  .pctg{font-family:var(--font-mono);font-weight:700;font-size:13px}
+  .pctg.ok{color:var(--ok)} .pctg.meio{color:var(--warn)} .pctg.baixo{color:var(--crit)}
+
+  .pessoa{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:11px;align-items:center;
+    padding:11px 13px;border:1px solid var(--line);border-radius:var(--r);
+    background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+  .pessoa.off{opacity:.5}
+  .av{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-disp);
+    font-weight:900;font-size:15px;color:var(--brand-hi);background:rgba(47,210,79,.12);
+    border:1px solid rgba(47,210,79,.3);transform:skewX(-5deg)}
+  .pessoa .nm{font-weight:600;font-size:13.5px}
+  .pessoa .s{font-size:11px;color:var(--ink-3);margin-top:2px}
+  .pessoa .acts{display:flex;gap:3px}
+  .ib{background:none;border:1px solid transparent;border-radius:7px;color:var(--ink-3);cursor:pointer;
+    padding:5px;display:grid;place-items:center}
+  .ib:hover{color:var(--ink);border-color:var(--line)}
+  .ib.del:hover{color:var(--crit);border-color:rgba(242,86,74,.3)}
+  .lista{display:flex;flex-direction:column;gap:5px}
+  .tagf{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 6px;
+    border-radius:999px;background:var(--bg-elev);color:var(--ink-3);margin-left:5px}
+  .tagf.vende{background:rgba(47,210,79,.1);color:var(--brand-hi)}
+
+  .dlg{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);min-width:min(400px,92vw)}
+  .dlg h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;font-size:18px;transform:skewX(-5deg)}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+  @media (max-width:520px){.g2{grid-template-columns:1fr}}
+  .dlg-foot{display:flex;gap:var(--s2);justify-content:flex-end}
+  .sw{display:flex;gap:9px;align-items:flex-start;padding:11px 12px;border:1px solid var(--line);
+    border-radius:var(--r);background:var(--bg-elev);font-size:12px;line-height:1.45;color:var(--ink-2);cursor:pointer}
+  .sw input{width:17px;height:17px;flex:none;margin-top:1px;accent-color:var(--brand)}
+  .sw b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="pagehead">
+    <div><h1>Equipe</h1><div class="ph-sub">Quem é quem · metas do mês · quanto cada um vendeu</div></div>
+    <div class="ph-actions"><button class="btn primary" id="nova" type="button">Adicionar pessoa</button></div>
+  </div>
+
+  <div class="bar">
+    <input type="month" id="mes">
+    <button class="btn sm ghost" id="metaLoja" type="button">Meta da loja</button>
+  </div>
+
+  <div class="topo">
+    <div class="card box">
+      <span class="label">Meta da loja · <span id="mesTxt"></span></span>
+      <div class="big" id="lojaVal">—</div>
+      <div class="sub" id="lojaSub">Carregando…</div>
+      <div class="prog"><i id="lojaBar" style="width:0"></i><span class="ritmo" id="lojaRitmo" hidden></span></div>
+      <div class="legenda"><span id="lojaPct">—</span><span id="lojaFalta"></span></div>
+    </div>
+    <div class="card box">
+      <span class="label">Ritmo do mês</span>
+      <div class="big" id="ritmoVal">—</div>
+      <div class="sub" id="ritmoSub">—</div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>Ranking do mês</h2><span class="rule"></span><span class="meta" id="rankMeta"></span></div>
+  <div class="grid" id="ranking"></div>
+
+  <div class="sec"><h2>Todo mundo</h2><span class="rule"></span><span class="meta" id="timeMeta"></span></div>
+  <div class="lista" id="time"></div>
+</div>
+
+<dialog id="dlg">
+  <form class="dlg" method="dialog">
+    <h3 id="dlgT">Adicionar pessoa</h3>
+    <input type="hidden" id="pId">
+    <div class="field"><label>Nome *</label><input id="pNome" required placeholder="Como você chama a pessoa"></div>
+    <div class="g2">
+      <div class="field"><label>Função</label>
+        <input id="pFuncao" list="funcoes" placeholder="Vendedor">
+        <datalist id="funcoes">
+          <option value="Vendedor"><option value="Gerente"><option value="Caixa">
+          <option value="Estoquista"><option value="Social media"><option value="Entregas">
+          <option value="Dono">
+        </datalist></div>
+      <div class="field"><label>Instagram</label><input id="pInsta" placeholder="@fulano"
+        autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+    </div>
+    <div class="field"><label>Telefone / WhatsApp</label><input id="pFone" inputmode="tel"></div>
+    <label class="sw"><input type="checkbox" id="pVende" checked>
+      <span><b>Vende no balcão</b> — aparece na hora de lançar a venda no PDV e entra no ranking de metas.
+        Desligue para quem não vende (estoquista, social media).</span></label>
+    <label class="sw"><input type="checkbox" id="pAtivo" checked>
+      <span><b>Está na equipe</b> — desligue quando alguém sair, em vez de apagar: o histórico de
+        vendas continua.</span></label>
+    <div class="field"><label>Observação</label><input id="pObs" placeholder="Turno, dias, o que precisar"></div>
+    <div class="dlg-foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn primary" id="salvar" value="ok" type="submit">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgMeta">
+  <form class="dlg" method="dialog">
+    <h3 id="dlgMetaT">Meta do mês</h3>
+    <input type="hidden" id="mId">
+    <div class="field"><label id="mQuem">Quem</label>
+      <div class="hint" id="mInfo"></div></div>
+    <div class="field"><label>Meta de venda (R$)</label>
+      <input id="mValor" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0,00">
+      <div class="hint">Deixe <b>0</b> para tirar a meta.</div></div>
+    <div class="dlg-foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn primary" id="salvarMeta" value="ok" type="submit">Salvar meta</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/icons.js"></script>
+<script src="/nav.js"></script>
+<script>
+const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
+const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
+document.getElementById('nova').insertAdjacentHTML('afterbegin',ICO('mais',16));
+
+const iniciais=(n)=>String(n||'').trim().split(/\s+/).slice(0,2).map(p=>p[0]||'').join('').toUpperCase();
+// Verde a partir de 90%, amarelo de 60 a 89, vermelho abaixo.
+const tom=(p)=>p==null?'':(p>=90?'ok':(p>=60?'meio':'baixo'));
+const mesAtual=()=>new Date().toISOString().slice(0,7);
+let META=null;
+
+async function carregar(){
+  const ym=document.getElementById('mes').value||mesAtual();
+  const d=await api('/api/metas?ym='+ym);
+  META=d;
+  const [a,m]=ym.split('-');
+  document.getElementById('mesTxt').textContent=
+    new Date(a,m-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+
+  // Loja
+  const L=d.loja;
+  document.getElementById('lojaVal').textContent=BRL(L.vendido);
+  document.getElementById('lojaSub').innerHTML=L.meta>0
+    ? `de ${BRL(L.meta)} de meta${L.meta_propria?'':' (soma das metas de cada um)'} · ${L.vendas} venda(s)`
+    : 'Nenhuma meta definida ainda — clique em <b>Meta da loja</b> ou defina por pessoa.';
+  const bar=document.getElementById('lojaBar');
+  bar.style.width=Math.min(100,L.pct||0)+'%';
+  bar.className=tom(L.pct);
+  const rit=document.getElementById('lojaRitmo');
+  rit.hidden=!(L.meta>0);
+  rit.style.left=d.dias.decorrido_pct+'%';
+  document.getElementById('lojaPct').textContent=L.pct!=null?L.pct+'% da meta':'sem meta';
+  document.getElementById('lojaFalta').textContent=L.falta>0?`faltam ${BRL(L.falta)}`:(L.meta>0?'meta batida':'');
+
+  // Ritmo
+  const R=document.getElementById('ritmoVal'),RS=document.getElementById('ritmoSub');
+  if(L.meta>0&&d.dias.restam>0){
+    R.textContent=BRL(L.por_dia);
+    R.style.color=L.falta<=0?'var(--brand-hi)':'var(--warn)';
+    RS.textContent=L.falta<=0
+      ? `Meta já batida com ${d.dias.restam} dia(s) sobrando.`
+      : `por dia nos ${d.dias.restam} dia(s) que faltam · ${d.dias.decorrido_pct}% do mês passou`;
+  }else if(L.meta>0){
+    R.textContent=L.falta<=0?'Bateu':'Não bateu';
+    R.style.color=L.falta<=0?'var(--brand-hi)':'var(--crit)';
+    RS.textContent='Mês encerrado.';
+  }else{R.textContent='—';R.style.color='';RS.textContent='Defina uma meta para acompanhar o ritmo.';}
+
+  // Ranking
+  const box=document.getElementById('ranking');
+  document.getElementById('rankMeta').textContent=d.sem_vendedor.vendas
+    ? `${d.sem_vendedor.vendas} venda(s) sem vendedor marcado · ${BRL(d.sem_vendedor.valor)}` : '';
+  if(!d.pessoas.length){
+    box.innerHTML='<div style="grid-column:1/-1">'+vazio('clientes','Nenhum vendedor ainda',
+      'Adicione as pessoas da equipe e marque quem vende no balcão.')+'</div>';
+  }else{
+    box.innerHTML=d.pessoas.map((p,i)=>`<div class="card card-v">
+        <span class="pos">${i+1}º</span>
+        <div class="nm">${esc(p.nome)}</div>
+        <div class="fn">${esc(p.funcao)}</div>
+        ${p.instagram?`<div class="ig">${esc(p.instagram)}</div>`:''}
+        <div class="val">${BRL(p.vendido)}</div>
+        <div class="de">${p.meta>0?'de '+BRL(p.meta)+' de meta':'sem meta definida'}</div>
+        <div class="prog"><i class="${tom(p.pct)}" style="width:${Math.min(100,p.pct||0)}%"></i></div>
+        <div class="legenda">
+          <span class="pctg ${tom(p.pct)}">${p.pct!=null?p.pct+'%':'—'}</span>
+          <span>${p.falta>0?'faltam '+BRL(p.falta):(p.meta>0?'bateu a meta':'')}</span>
+        </div>
+        <div class="linhas">
+          <div class="mini"><div class="l">Vendas</div><div class="v">${p.vendas}</div></div>
+          <div class="mini"><div class="l">Ticket médio</div><div class="v">${BRL(p.ticket)}</div></div>
+        </div>
+        <div class="acts"><button class="btn sm ghost" data-meta="${p.id}" type="button">Definir meta</button></div>
+      </div>`).join('');
+    box.querySelectorAll('[data-meta]').forEach(b=>b.onclick=()=>{
+      const p=d.pessoas.find(x=>String(x.id)===b.dataset.meta);abrirMeta(p);});
+  }
+  time();
+}
+
+async function time(){
+  const d=await api('/api/team');
+  document.getElementById('timeMeta').textContent=
+    `${d.total} na equipe · ${d.vendedores} vende(m) no balcão`;
+  const box=document.getElementById('time');
+  if(!d.membros.length){
+    box.innerHTML=vazio('clientes','Equipe vazia','Comece adicionando você mesmo e depois os vendedores.');
+    return;
+  }
+  box.innerHTML=d.membros.map(m=>`<div class="pessoa${m.active?'':' off'}">
+      <span class="av">${esc(iniciais(m.name))}</span>
+      <div><div class="nm">${esc(m.name)}
+        <span class="tagf${m.vende?' vende':''}">${m.vende?'vende':'não vende'}</span>
+        ${m.active?'':'<span class="tagf">saiu</span>'}</div>
+        <div class="s">${esc(m.role)}${m.instagram?' · '+esc(m.instagram):''}${m.phone?' · '+esc(m.phone):''}${m.note?' · '+esc(m.note):''}</div></div>
+      <div class="acts">
+        <button class="ib" data-ed="${m.id}" type="button" aria-label="editar">${ICO('editar',15)}</button>
+        <button class="ib del" data-rm="${m.id}" type="button" aria-label="remover">${ICO('lixeira',15)}</button>
+      </div></div>`).join('');
+  box.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>{
+    abrir(d.membros.find(x=>String(x.id)===b.dataset.ed));});
+  box.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{
+    const m=d.membros.find(x=>String(x.id)===b.dataset.rm);
+    if(!confirm(`Remover ${m.name} da equipe?\n\nSe essa pessoa já vendeu, ela só sai de cena — o histórico continua.`))return;
+    try{const r=await api('/api/team/'+m.id,{method:'DELETE'});
+      carregar();
+      if(r.desativado)alert(`${m.name} já tem vendas, então foi marcada como "saiu" em vez de apagada.`);
+    }catch(e){alert(e.message);}
+  });
+}
+
+/* pessoa */
+const dlg=document.getElementById('dlg');
+function abrir(m){
+  document.getElementById('dlgT').textContent=m?'Editar pessoa':'Adicionar pessoa';
+  document.getElementById('pId').value=m?m.id:'';
+  document.getElementById('pNome').value=m?m.name:'';
+  document.getElementById('pFuncao').value=m?m.role:'Vendedor';
+  document.getElementById('pInsta').value=m?(m.instagram||''):'';
+  document.getElementById('pFone').value=m?(m.phone||''):'';
+  document.getElementById('pObs').value=m?(m.note||''):'';
+  document.getElementById('pVende').checked=m?!!m.vende:true;
+  document.getElementById('pAtivo').checked=m?!!m.active:true;
+  dlg.showModal();
+}
+document.getElementById('nova').onclick=()=>abrir(null);
+document.getElementById('salvar').onclick=async e=>{
+  const nome=document.getElementById('pNome').value.trim();
+  if(!nome)return;
+  e.preventDefault();
+  try{
+    await api('/api/team',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:document.getElementById('pId').value||undefined,name:nome,
+        role:document.getElementById('pFuncao').value.trim(),
+        instagram:document.getElementById('pInsta').value.trim(),
+        phone:document.getElementById('pFone').value.trim(),
+        note:document.getElementById('pObs').value.trim(),
+        vende:document.getElementById('pVende').checked,
+        active:document.getElementById('pAtivo').checked})});
+    dlg.close();carregar();
+  }catch(err){alert(err.message);}
+};
+
+/* meta */
+const dlgMeta=document.getElementById('dlgMeta');
+function abrirMeta(p){
+  document.getElementById('mId').value=p?p.id:'';
+  document.getElementById('dlgMetaT').textContent=p?'Meta de '+p.nome:'Meta da loja';
+  document.getElementById('mQuem').textContent=p?p.nome:'A loja inteira';
+  document.getElementById('mInfo').innerHTML=p
+    ? `Já vendeu <b>${BRL(p.vendido)}</b> neste mês.`
+    : (META?`A loja já vendeu <b>${BRL(META.loja.vendido)}</b> neste mês. Se você não definir, a meta da loja
+       vira a soma das metas de cada pessoa.`:'');
+  document.getElementById('mValor').value=p?(p.meta||''):(META&&META.loja.meta_propria?META.loja.meta:'');
+  dlgMeta.showModal();
+}
+document.getElementById('metaLoja').onclick=()=>abrirMeta(null);
+document.getElementById('salvarMeta').onclick=async e=>{
+  e.preventDefault();
+  const v=parseFloat(document.getElementById('mValor').value);
+  if(!(v>=0))return alert('Informe um valor (ou 0 para tirar a meta).');
+  try{
+    await api('/api/metas',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ym:document.getElementById('mes').value||mesAtual(),
+        member_id:document.getElementById('mId').value||null,target:v})});
+    dlgMeta.close();carregar();
+  }catch(err){alert(err.message);}
+};
+
+document.getElementById('mes').value=mesAtual();
+document.getElementById('mes').onchange=carregar;
+carregar();
+</script>
+</body>
+</html>
