@@ -258,6 +258,60 @@ CREATE TABLE IF NOT EXISTS atendimentos (
   created_at  TEXT NOT NULL,
   updated_at  TEXT
 );
+-- Carrinho abandonado: quem chegou no checkout, deixou o contato e não
+-- terminou. Vem da loja; aqui vira uma venda a resgatar.
+CREATE TABLE IF NOT EXISTS carts (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  ns_checkout_id TEXT UNIQUE,
+  customer_id    INTEGER REFERENCES customers(id),
+  nome           TEXT DEFAULT '',
+  phone          TEXT DEFAULT '',
+  email          TEXT DEFAULT '',
+  total          REAL NOT NULL DEFAULT 0,
+  itens          TEXT DEFAULT '',      -- resumo legível do que ia levar
+  url            TEXT DEFAULT '',      -- link que devolve a pessoa ao carrinho
+  ns_created_at  TEXT,
+  recuperado     INTEGER NOT NULL DEFAULT 0,  -- virou pedido depois
+  sale_id        INTEGER,
+  created_at     TEXT NOT NULL,
+  updated_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_carts_quando ON carts(ns_created_at);
+
+-- Os modelos de mensagem. O texto é do dono: o sistema só troca as
+-- variáveis e põe na fila na hora certa.
+CREATE TABLE IF NOT EXISTS msg_templates (
+  id           TEXT PRIMARY KEY,      -- carrinho_1 | pedido_pago | ...
+  label        TEXT NOT NULL,
+  evento       TEXT NOT NULL,         -- carrinho | pago | enviado | retirar | entregue
+  corpo        TEXT NOT NULL DEFAULT '',
+  ativo        INTEGER NOT NULL DEFAULT 1,
+  atraso_horas INTEGER NOT NULL DEFAULT 0,
+  ordem        INTEGER NOT NULL DEFAULT 0,
+  updated_at   TEXT
+);
+
+-- A fila: uma linha por mensagem a mandar. "ref" é a chave do evento e
+-- é única — é o que garante que ninguém receba a mesma coisa duas vezes.
+CREATE TABLE IF NOT EXISTS messages (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  ref            TEXT UNIQUE,
+  tipo           TEXT NOT NULL,          -- carrinho | pedido
+  template_id    TEXT,
+  customer_id    INTEGER,
+  cart_id        INTEGER,
+  sale_id        INTEGER,
+  nome           TEXT DEFAULT '',
+  phone          TEXT DEFAULT '',
+  corpo          TEXT NOT NULL,          -- já com as variáveis trocadas
+  status         TEXT NOT NULL DEFAULT 'pendente', -- pendente|enviado|descartado
+  agendado_para  TEXT,
+  enviado_em     TEXT,
+  enviado_por    INTEGER,
+  created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_msg_status ON messages(status, agendado_para);
+
 -- Visão do negócio: quem somos e como a loja gera valor.
 -- Textos longos (missão, visão, manifesto) ficam aqui;
 -- o que é lista (valores e os nove blocos do Canvas) fica em canvas_items.

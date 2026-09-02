@@ -452,6 +452,42 @@
           no faturamento, mas não entra em segmento nem vira tarefa — não é uma pessoa que dá para
           chamar.</div></div>
 
+<h3>Mensagens: carrinho abandonado e status do pedido</h3>
+        <p>Duas coisas que a loja perde por esquecimento: <b>carrinho largado que ninguém resgata</b>
+          e <b>cliente sem notícia do próprio pedido</b>. A aba <b>Mensagens</b> resolve as duas.</p>
+        <p>O sistema puxa da Nuvemshop os <b>carrinhos abandonados</b> (a loja só registra o carrinho
+          <b>6 horas</b> depois que a pessoa desiste) e acompanha a <b>mudança de status</b> dos
+          pedidos do site. Quando algo acontece, ele monta a mensagem já com o nome da pessoa, as
+          peças e o link, e põe na fila.</p>
+        <ol class="passos">
+          <li><div>Abra <b>Mensagens</b> e veja a fila do que precisa sair.</div></li>
+          <li><div><b>Abrir no WhatsApp</b> já leva o texto pronto — é só conferir e mandar.</div></li>
+          <li><div>Quem já foi some da fila e <b>entra na história do cliente</b>, para o time inteiro
+            saber que ele foi avisado.</div></li>
+        </ol>
+
+        <div class="aviso atencao"><span class="ico" id="a6"></span>
+          <div><b>O envio é com um toque seu, não automático.</b> Para o sistema mandar sozinho seria
+          preciso a <b>API oficial do WhatsApp</b> (conta Meta verificada, número dedicado, modelos
+          aprovados e custo por conversa). O motor todo — descobrir quem, quando e o quê — já está
+          pronto e é a parte que dá trabalho; ligar o envio automático depois é só trocar a última
+          peça. O que <b>não</b> dá é usar biblioteca não oficial: viola as regras do WhatsApp e o
+          risco é o número da loja ser banido.</div></div>
+
+        <h3>Os modelos</h3>
+        <p>São cinco, e <b>o texto é seu</b>: primeiro e segundo toque de carrinho, pagamento
+          confirmado, pedido enviado e pronto para retirar. Clique em qualquer um para reescrever.
+          As variáveis <span class="rota">{nome} {itens} {valor} {pedido} {link} {loja}</span> são
+          trocadas na hora do envio — e se alguma não existir, ela some em vez de aparecer crua para
+          o cliente.</p>
+        <p>Nos modelos de carrinho você escolhe <b>quantas horas depois</b> a mensagem entra na fila.
+          Qualquer modelo pode ser <b>desligado</b> — aí ele para de gerar mensagem.</p>
+        <p>Duas garantias: <b>ninguém recebe a mesma coisa duas vezes</b> (cada evento gera uma
+          mensagem só, para sempre), e <b>carrinho que virou pedido some da cobrança</b> sozinho —
+          não se cobra quem já comprou.</p>
+        <p>Se o seu plano da Nuvemshop não entregar os carrinhos pela API, a tela avisa e os
+          <b>avisos de pedido continuam funcionando</b> normalmente.</p>
+
         <h3>Funil: o mapa da estratégia</h3>
         <p>A aba <b>Funil</b> começa pelo <b>mapa</b>: o caminho que a sua loja construiu para uma
           pessoa estranha virar cliente. Ele já vem desenhado com o percurso comum de uma loja de
@@ -711,7 +747,7 @@ const icones={i1:'conectar',i2:'inicio',i3:'pdv',i4:'estoque',i5:'clientes',i6:'
   i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa',i12:'caixa_vazia',i13:'grafico',i14:'clientes',i15:'conversa',i16:'grafico'};
 Object.entries(icones).forEach(([id,n])=>{const e=document.getElementById(id);if(e)e.innerHTML=ICO(n,17);});
 ['d1','d2','d3','d4','d5','d6','d7','d8','d9','d10','d11','d12'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
-['a1','a2','a4','a5'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['a1','a2','a4','a5','a6'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
 
 // Marca a seção visível no índice
 const links=[...document.querySelectorAll('.indice a')];

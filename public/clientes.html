@@ -65,6 +65,33 @@
     min-width:26px;text-align:right;transform:skewX(-6deg)}
   .cli:first-child .pos{color:var(--brand-hi)}
 
+
+  /* ---- Mensagens: a fila do que precisa ser mandado ---- */
+  .avisoauto{display:flex;gap:10px;padding:11px 13px;border-radius:var(--r);margin-bottom:var(--s3);
+    background:rgba(122,162,247,.07);border:1px solid rgba(122,162,247,.28);
+    font-size:12px;line-height:1.5;color:var(--ink-2)}
+  .avisoauto b{color:var(--ink)}
+  .msg{border:1px solid var(--line);border-radius:var(--r);padding:12px 13px;
+    background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+  .msg .cab{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .msg .nm{font-weight:700;font-size:13.5px}
+  .msg .corpo{margin-top:8px;padding:10px 12px;border-radius:10px;background:var(--bg-elev);
+    border:1px solid var(--line-soft);font-size:12.5px;line-height:1.55;color:var(--ink);white-space:pre-wrap}
+  .msg .acts{display:flex;gap:5px;margin-top:9px;flex-wrap:wrap}
+  .msg.enviado{opacity:.55}
+  .tpo{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;
+    border-radius:999px;background:var(--bg-elev);color:var(--ink-3)}
+  .tpo.carrinho{background:rgba(230,168,40,.14);color:var(--warn)}
+  .tpo.pedido{background:rgba(47,210,79,.13);color:var(--brand-hi)}
+  .mod{border:1px solid var(--line);border-radius:var(--r);padding:11px 13px;background:var(--bg-elev);cursor:pointer}
+  .mod:hover{border-color:var(--brand)}
+  .mod .t{font-size:12.5px;font-weight:700;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+  .mod .c{font-size:11.5px;color:var(--ink-3);margin-top:5px;line-height:1.45;white-space:pre-wrap}
+  .mod.off{opacity:.5}
+  .vars{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+  .vr{font-family:var(--font-mono);font-size:10.5px;padding:2px 7px;border-radius:6px;
+    background:var(--bg-elev);border:1px solid var(--line-soft);color:var(--brand-hi);cursor:pointer}
+
   /* Chips de segmento — o filtro é o próprio panorama */
   .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:var(--s3)}
   .chip{padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--bg-elev);
@@ -175,6 +202,7 @@
   <div class="abas">
     <button class="aba on" data-aba="crm" type="button">CRM</button>
     <button class="aba" data-aba="funil" type="button">Funil <span class="n" id="nFunil">0</span></button>
+    <button class="aba" data-aba="msgs" type="button">Mensagens <span class="n" id="nMsg">0</span></button>
   </div>
 
   <!-- CRM: a base inteira, em ordem de quem mais levou -->
@@ -188,6 +216,26 @@
     <div class="chips" id="chips"></div>
     <div class="sec"><h2>Ranking</h2><span class="rule"></span><span class="meta" id="rankMeta"></span></div>
     <div class="lista" id="clientes"></div>
+  </div>
+
+
+  <!-- MENSAGENS -->
+  <div data-p="msgs" hidden>
+    <div class="avisoauto" id="avisoAuto"></div>
+    <div class="kpis" id="kMsg"></div>
+    <div class="acao">
+      <div class="seg" id="fStatus">
+        <button data-s="pendente" class="sel" type="button">Para enviar</button>
+        <button data-s="enviado" type="button">Enviadas</button>
+        <button data-s="descartado" type="button">Descartadas</button>
+      </div>
+      <button class="btn sm ghost" id="atualizarMsg" type="button">Procurar novidades</button>
+    </div>
+    <div class="lista" id="fMsgs"></div>
+
+    <div class="sec"><h2>Modelos de mensagem</h2><span class="rule"></span>
+      <span class="meta">o texto é seu — o sistema só troca as variáveis</span></div>
+    <div class="lista" id="modelos"></div>
   </div>
 
   <!-- FUNIL: o mapa da estratégia em cima, as conversas de hoje embaixo -->
@@ -360,6 +408,29 @@
   </form>
 </dialog>
 
+<dialog id="dlgModelo">
+  <form class="dlg" method="dialog">
+    <h3 id="mT">Modelo</h3>
+    <input type="hidden" id="mId">
+    <div class="field"><label>A mensagem *</label>
+      <textarea id="mCorpo" rows="6" style="resize:vertical"></textarea>
+      <div class="hint">Clique numa variável para inserir onde o cursor está:</div>
+      <div class="vars" id="mVars"></div></div>
+    <div class="g2">
+      <div class="field" id="wrapAtraso"><label>Mandar quantas horas depois</label>
+        <input id="mAtraso" type="number" step="1" min="0" max="720" inputmode="numeric">
+        <div class="hint">A loja só registra o carrinho <b>6 horas</b> depois do abandono.</div></div>
+      <div class="field"><label>Está ligado?</label>
+        <select id="mAtivo"><option value="1">Sim, gera mensagem</option>
+          <option value="0">Não, deixa quieto</option></select></div>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn primary" id="mSalvar" value="ok" type="submit">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
 <script src="/icons.js"></script>
 <script src="/nav.js"></script>
 <script>
@@ -392,6 +463,7 @@ function aba(nome){
   document.querySelectorAll('[data-p]').forEach(p=>p.hidden=p.dataset.p!==nome);
   // O mapa e o quadro só carregam quando a aba abre.
   if(nome==='funil'&&!funilCarregado){funilCarregado=true;mapa();quadro();}
+  if(nome==='msgs'&&!msgsCarregadas){msgsCarregadas=true;mensagens();}
 }
 document.querySelectorAll('.aba').forEach(b=>b.onclick=()=>aba(b.dataset.aba));
 
@@ -625,6 +697,132 @@ document.getElementById('noApagar').onclick=async()=>{
     dlgNo.close();mapa();}catch(e){alert(e.message);}
 };
 
+/* ---------------- MENSAGENS ---------------- */
+// O sistema monta e enfileira; quem manda é uma pessoa, com um toque.
+const TIPO={carrinho:'Carrinho',pedido:'Pedido'};
+let msgStatus='pendente', MSGS=null, msgsCarregadas=false;
+
+async function mensagens(){
+  const d=await api('/api/mensagens?status='+msgStatus);
+  MSGS=d;
+  document.getElementById('nMsg').textContent=d.contagem.pendente||0;
+
+  document.getElementById('avisoAuto').innerHTML=d.envio_automatico
+    ? '<span>Envio automático <b>ligado</b>.</span>'
+    : '<span>O sistema escreve e organiza; <b>o envio é com um toque seu</b>. '
+      +'Mandar sozinho exige a API oficial do WhatsApp (conta Meta verificada e modelos aprovados) — '
+      +'o motor já está pronto para isso quando você quiser contratar.</span>';
+
+  const C=d.carrinhos;
+  document.getElementById('kMsg').innerHTML=`
+    <div class="card kpi warn"><span class="label">Carrinhos em aberto</span>
+      <div class="big">${C.abertos}</div><div class="sub">${BRL(C.valor)} parados nos últimos 30 dias</div></div>
+    <div class="card kpi hi"><span class="label">Recuperados</span>
+      <div class="big">${C.recuperados}</div><div class="sub">voltaram e compraram</div></div>
+    <div class="card kpi"><span class="label">Para enviar</span>
+      <div class="big">${d.contagem.pendente||0}</div><div class="sub">esperando um toque</div></div>
+    <div class="card kpi"><span class="label">Já enviadas</span>
+      <div class="big">${d.contagem.enviado||0}</div><div class="sub">registradas na ficha do cliente</div></div>`
+    +(d.erro_carrinhos?`<div class="card kpi"><span class="label">Carrinhos da loja</span>
+      <div class="big" style="font-size:14px;color:var(--warn)">indisponível</div>
+      <div class="sub">${esc(d.erro_carrinhos)}</div></div>`:'');
+
+  const box=document.getElementById('fMsgs');
+  if(!d.linhas.length){
+    box.innerHTML=vazio('ok',msgStatus==='pendente'?'Nada para enviar agora':'Nada aqui',
+      msgStatus==='pendente'
+        ?'Quando alguém largar o carrinho ou um pedido mudar de status, a mensagem aparece pronta aqui.':'');
+  }else{
+    box.innerHTML=d.linhas.map(m=>{
+      const w=zap(m.phone,m.corpo);
+      return `<div class="msg ${m.status}">
+        <div class="cab"><span class="nm">${esc(m.nome||m.phone||'sem nome')}</span>
+          <span class="tpo ${m.tipo}">${TIPO[m.tipo]||m.tipo}</span>
+          <span class="mot">${esc(m.modelo||'')}</span>
+          ${m.enviado_em?`<span class="mot">enviada ${quando(m.enviado_em)}</span>`:''}</div>
+        <div class="corpo">${esc(m.corpo)}</div>
+        ${m.status==='pendente'?`<div class="acts">
+          ${w?`<a class="btn sm primary" href="${w}" target="_blank" rel="noopener" data-abriu="${m.id}">Abrir no WhatsApp</a>`:
+             '<span class="mot">sem telefone cadastrado</span>'}
+          <button class="btn sm ghost" data-copiar="${m.id}" type="button">Copiar</button>
+          <button class="btn sm ghost" data-enviei="${m.id}" type="button">Já enviei</button>
+          <button class="btn sm ghost" data-descartar="${m.id}" type="button">Descartar</button>
+        </div>`:''}
+      </div>`;}).join('');
+
+    box.querySelectorAll('[data-copiar]').forEach(b=>b.onclick=async()=>{
+      const m=d.linhas.find(x=>String(x.id)===b.dataset.copiar);
+      try{await navigator.clipboard.writeText(m.corpo);b.textContent='Copiado';
+        setTimeout(()=>{b.textContent='Copiar';},1600);}catch(_){alert(m.corpo);}
+    });
+    // Abrir o WhatsApp já dá baixa: é o momento em que a mensagem sai.
+    box.querySelectorAll('[data-abriu]').forEach(b=>b.onclick=()=>{
+      setTimeout(()=>marcar(b.dataset.abriu,'enviado'),900);});
+    box.querySelectorAll('[data-enviei]').forEach(b=>b.onclick=()=>marcar(b.dataset.enviei,'enviado'));
+    box.querySelectorAll('[data-descartar]').forEach(b=>b.onclick=()=>marcar(b.dataset.descartar,'descartar'));
+  }
+
+  document.getElementById('modelos').innerHTML=d.modelos.map(m=>`
+    <div class="mod${m.ativo?'':' off'}" data-mod="${m.id}">
+      <div class="t">${esc(m.label)}
+        ${m.atraso_horas?`<span class="mot">${m.atraso_horas}h depois</span>`:''}
+        ${m.ativo?'':'<span class="mot">desligado</span>'}</div>
+      <div class="c">${esc(m.corpo)}</div>
+    </div>`).join('');
+  document.querySelectorAll('[data-mod]').forEach(b=>b.onclick=()=>
+    abrirModelo(d.modelos.find(x=>x.id===b.dataset.mod)));
+}
+async function marcar(id,acao){
+  const vend=localStorage.getItem('vn_vendedor');
+  try{await api('/api/mensagens/'+id,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({acao:acao==='descartar'?'descartar':'enviado',member_id:vend||null})});
+    mensagens();}catch(e){alert(e.message);}
+}
+document.getElementById('fStatus').onclick=e=>{
+  const b=e.target.closest('button');if(!b)return;
+  document.querySelectorAll('#fStatus button').forEach(x=>x.classList.remove('sel'));
+  b.classList.add('sel');msgStatus=b.dataset.s;mensagens();
+};
+document.getElementById('atualizarMsg').onclick=async(e)=>{
+  const b=e.target;b.disabled=true;b.textContent='Procurando…';
+  try{const r=await api('/api/mensagens/atualizar',{method:'POST'});
+    await mensagens();
+    if(r.carrinhos&&r.carrinhos.erro)alert('Carrinhos da loja: '+r.carrinhos.erro);
+  }catch(err){alert(err.message);}
+  finally{b.disabled=false;b.textContent='Procurar novidades';}
+};
+
+const dlgModelo=document.getElementById('dlgModelo');
+const VARS=['{nome}','{itens}','{valor}','{pedido}','{link}','{loja}'];
+function abrirModelo(m){
+  document.getElementById('mT').textContent=m.label;
+  document.getElementById('mId').value=m.id;
+  document.getElementById('mCorpo').value=m.corpo;
+  document.getElementById('mAtraso').value=m.atraso_horas;
+  document.getElementById('mAtivo').value=m.ativo?'1':'0';
+  document.getElementById('wrapAtraso').hidden=m.evento!=='carrinho';
+  document.getElementById('mVars').innerHTML=VARS.map(v=>`<span class="vr" data-v="${v}">${v}</span>`).join('');
+  document.querySelectorAll('#mVars .vr').forEach(b=>b.onclick=()=>{
+    const t=document.getElementById('mCorpo');
+    const i=t.selectionStart||t.value.length;
+    t.value=t.value.slice(0,i)+b.dataset.v+t.value.slice(t.selectionEnd||i);
+    t.focus();t.selectionStart=t.selectionEnd=i+b.dataset.v.length;
+  });
+  dlgModelo.showModal();
+}
+document.getElementById('mSalvar').onclick=async e=>{
+  e.preventDefault();
+  const corpo=document.getElementById('mCorpo').value.trim();
+  if(!corpo)return alert('A mensagem não pode ficar vazia.');
+  try{
+    await api('/api/mensagens/modelo/'+document.getElementById('mId').value,
+      {method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({corpo,atraso_horas:document.getElementById('mAtraso').value,
+         ativo:document.getElementById('mAtivo').value==='1'})});
+    dlgModelo.close();mensagens();
+  }catch(err){alert(err.message);}
+};
+
 /* ---------------- FICHA ---------------- */
 const dlgFicha=document.getElementById('dlgFicha');
 let FICHA=null;
@@ -827,7 +1025,9 @@ document.getElementById('aApagar').onclick=async()=>{
 
 // /funil abre direto no quadro; qualquer outro caminho abre em Hoje.
 const inicial=location.pathname.startsWith('/funil')?'funil':'crm';
-equipe().then(painel).then(()=>{if(inicial!=='crm')aba(inicial);});
+// As mensagens carregam de saída só para o contador da aba ser verdade.
+equipe().then(painel).then(()=>{msgsCarregadas=true;return mensagens();})
+  .then(()=>{if(inicial!=='crm')aba(inicial);}).catch(()=>{});
 </script>
 </body>
 </html>

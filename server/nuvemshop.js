@@ -121,6 +121,27 @@ export async function listOrders(opts = {}) {
   return all;
 }
 
+// Carrinhos abandonados: quem chegou no checkout, deixou o contato e
+// não terminou. A loja só gera o registro depois de ~6 horas.
+// opts.since = AAAA-MM-DD.
+export async function listAbandonedCheckouts(opts = {}) {
+  const all = [];
+  let page = 1;
+  const per = 50;
+  const since = opts.since ? `&created_at_min=${opts.since}T00:00:00-03:00` : '';
+  const maxPages = opts.maxPages || 20;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data } = await request('GET', `/checkouts?per_page=${per}&page=${page}${since}`);
+    if (!Array.isArray(data) || data.length === 0) break;
+    all.push(...data);
+    if (data.length < per) break;
+    page += 1;
+    if (page > maxPages) break;
+  }
+  return all;
+}
+
 // Categorias da loja (id + nome), para espelhar a organização do site.
 export async function listAllCategories() {
   const all = [];

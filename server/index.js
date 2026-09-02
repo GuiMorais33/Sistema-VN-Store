@@ -1716,6 +1716,255 @@ app.delete('/api/crm/nota/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ==================== MENSAGENS AO CLIENTE ====================
+// Duas coisas que a loja perde por esquecimento: carrinho abandonado
+// que ninguém resgata, e cliente sem notícia do próprio pedido.
+// O sistema monta a mensagem e põe na fila; QUEM ENVIA é uma pessoa,
+// com um toque. Enviar sozinho exige a API oficial do WhatsApp — está
+// preparado para isso, mas não se liga sem o dono contratar.
+
+const MODELOS = [
+  { id: 'carrinho_1', label: 'Carrinho abandonado — primeiro toque', evento: 'carrinho',
+    atraso_horas: 6, ordem: 1,
+    corpo: 'Oi {nome}! Vi que você deixou {itens} no carrinho lá na VN 👀\n'
+      + 'Ainda tenho aqui. Quer que eu separe?\n{link}' },
+  { id: 'carrinho_2', label: 'Carrinho abandonado — segundo toque', evento: 'carrinho',
+    atraso_horas: 48, ordem: 2,
+    corpo: 'E aí {nome}, consegue fechar hoje? Se rolar dúvida de tamanho me chama que eu te ajudo.\n{link}' },
+  { id: 'pedido_pago', label: 'Pagamento confirmado', evento: 'pago', atraso_horas: 0, ordem: 3,
+    corpo: 'Fechou, {nome}! Pagamento do pedido {pedido} confirmado ✅\n'
+      + 'Já vou separar e te aviso quando sair.' },
+  { id: 'pedido_enviado', label: 'Pedido enviado', evento: 'enviado', atraso_horas: 0, ordem: 4,
+    corpo: '{nome}, seu pedido {pedido} saiu para entrega 📦\nQualquer coisa é só chamar aqui.' },
+  { id: 'pedido_retirar', label: 'Pronto para retirar', evento: 'retirar', atraso_horas: 0, ordem: 5,
+    corpo: '{nome}, seu pedido {pedido} está separado e te esperando na loja 🛍️' },
+];
+
+function semearModelos() {
+  const ins = db.prepare(`INSERT OR IGNORE INTO msg_templates
+    (id, label, evento, corpo, ativo, atraso_horas, ordem, updated_at) VALUES (?,?,?,?,1,?,?,?)`);
+  const ts = now();
+  for (const m of MODELOS) ins.run(m.id, m.label, m.evento, m.corpo, m.atraso_horas, m.ordem, ts);
+}
+
+// Troca as variáveis pelo que a loja sabe. O que não existir vira vazio,
+// nunca "{nome}" na cara do cliente.
+function preencher(corpo, v) {
+  return String(corpo || '')
+    .replace(/\{nome\}/g, (v.nome || '').split(' ')[0] || 'tudo bem')
+    .replace(/\{loja\}/g, 'VN Store')
+    .replace(/\{valor\}/g, v.valor != null ? brl(v.valor) : '')
+    .replace(/\{itens\}/g, v.itens || 'as peças')
+    .replace(/\{pedido\}/g, v.pedido || '')
+    .replace(/\{link\}/g, v.link || '')
+    .replace(/\s*\n\s*\n\s*/g, '\n\n')
+    .trim();
+}
+
+// Traz os carrinhos abandonados e marca os que já viraram pedido.
+async function sincronizarCarrinhos(dias = 30) {
+  if (!isLive()) return { skipped: true };
+  const desde = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10);
+  let lista;
+  try { lista = await nuvem.listAbandonedCheckouts({ since: desde }); }
+  catch (err) {
+    // Loja em plano que não expõe o recurso: registra e segue a vida.
+    setSetting('carrinhos_erro', err.message);
+    return { erro: err.message };
+  }
+  setSetting('carrinhos_erro', '');
+
+  const ins = db.prepare(`INSERT INTO carts
+    (ns_checkout_id, customer_id, nome, phone, email, total, itens, url, ns_created_at, created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(ns_checkout_id) DO UPDATE SET
+      total = excluded.total, itens = excluded.itens, url = excluded.url,
+      phone = excluded.phone, email = excluded.email, updated_at = excluded.created_at`);
+  const achaCli = db.prepare(`SELECT id FROM customers
+    WHERE (? <> '' AND lower(email) = lower(?)) OR (? <> '' AND phone = ?) LIMIT 1`);
+  const ts = now();
+  let novos = 0;
+
+  db.transaction(() => {
+    for (const c of lista) {
+      const id = String(c.id ?? c.token ?? '');
+      if (!id) continue;
+      // A loja muda nome de campo entre versões — aceita o que vier.
+      const ct = c.contact || c.customer || {};
+      const nome = String(c.contact_name || ct.name || c.customer_name || '').trim();
+      const fone = String(c.contact_phone || ct.phone || c.phone || '').trim();
+      const mail = String(c.contact_email || ct.email || c.email || '').trim();
+      const prods = Array.isArray(c.products) ? c.products : (Array.isArray(c.items) ? c.items : []);
+      const itens = prods.map((p) => {
+        const n = p.name || (p.product && p.product.name) || 'peça';
+        const q = parseInt(p.quantity, 10) || 1;
+        return q > 1 ? `${q}x ${n}` : n;
+      }).join(', ');
+      const url = String(c.abandoned_checkout_url || c.checkout_url || c.url || '').trim();
+      const quando = c.created_at ? new Date(c.created_at).toISOString() : ts;
+      const existia = db.prepare('SELECT 1 FROM carts WHERE ns_checkout_id = ?').get(id);
+      const cli = (mail || fone) ? achaCli.get(mail, mail, fone, fone) : null;
+      ins.run(id, cli ? cli.id : null, nome, fone, mail,
+        money(parseFloat(c.total) || 0), itens, url, quando, ts);
+      if (!existia) novos += 1;
+    }
+  })();
+
+  // Carrinho vira "recuperado" quando aparece um pedido da mesma pessoa
+  // depois dele — não adianta cobrar quem já comprou.
+  // Casa pelo cliente do pedido, ou pelo e-mail do cadastro dele.
+  const MESMA_PESSOA = `s.channel = 'site' AND s.created_at >= carts.ns_created_at
+      AND ((carts.customer_id IS NOT NULL AND s.customer_id = carts.customer_id)
+        OR (carts.email <> '' AND lower(COALESCE(cu.email,'')) = lower(carts.email)))`;
+  const fecha = db.prepare(`UPDATE carts SET recuperado = 1, sale_id = (
+      SELECT s.id FROM sales s LEFT JOIN customers cu ON cu.id = s.customer_id
+      WHERE ${MESMA_PESSOA} ORDER BY s.created_at LIMIT 1)
+    WHERE recuperado = 0 AND EXISTS (
+      SELECT 1 FROM sales s LEFT JOIN customers cu ON cu.id = s.customer_id
+      WHERE ${MESMA_PESSOA})`);
+  const rec = fecha.run().changes;
+  return { novos, total: lista.length, recuperados: rec };
+}
+
+// Monta a fila. "ref" é única por evento, então rodar isso mil vezes
+// nunca duplica mensagem.
+function gerarMensagens() {
+  semearModelos();
+  const modelos = db.prepare('SELECT * FROM msg_templates WHERE ativo = 1').all();
+  const porEvento = (e) => modelos.filter((m) => m.evento === e).sort((a, b) => a.ordem - b.ordem);
+  const ins = db.prepare(`INSERT OR IGNORE INTO messages
+    (ref, tipo, template_id, customer_id, cart_id, sale_id, nome, phone, corpo, status, agendado_para, created_at)
+    VALUES (?,?,?,?,?,?,?,?,?, 'pendente', ?, ?)`);
+  const ts = now();
+  let n = 0;
+
+  // --- carrinhos abandonados ---
+  const carrinhos = db.prepare(`SELECT * FROM carts
+    WHERE recuperado = 0 AND COALESCE(phone,'') <> '' AND ns_created_at >= ?`)
+    .all(new Date(Date.now() - 30 * 864e5).toISOString());
+  for (const m of porEvento('carrinho')) {
+    for (const c of carrinhos) {
+      const quando = new Date(new Date(c.ns_created_at).getTime() + m.atraso_horas * 36e5);
+      if (quando > new Date()) continue;   // ainda não é hora
+      const corpo = preencher(m.corpo, { nome: c.nome, valor: c.total, itens: c.itens, link: c.url });
+      n += ins.run(`CART-${c.ns_checkout_id}-${m.id}`, 'carrinho', m.id, c.customer_id, c.id, null,
+        c.nome, c.phone, corpo, quando.toISOString(), ts).changes;
+    }
+  }
+
+  // --- status do pedido ---
+  // Cada transição gera no máximo uma mensagem, para sempre.
+  const pedidos = db.prepare(`SELECT s.*, c.phone AS cli_phone, c.name AS cli_nome FROM sales s
+    LEFT JOIN customers c ON c.id = s.customer_id
+    WHERE s.channel = 'site' AND s.created_at >= ?`)
+    .all(new Date(Date.now() - 45 * 864e5).toISOString());
+  for (const p of pedidos) {
+    const fone = String(p.cli_phone || '').trim();
+    if (!fone) continue;
+    const nome = p.cli_nome || p.customer_name || '';
+    // Lista fechada de propósito: "unfulfilled" contém "fulfilled", e um
+    // teste por pedaço avisaria entrega de pedido que não saiu da loja.
+    const ship = String(p.ns_shipping_status || '').trim().toLowerCase();
+    const enviado = ['fulfilled', 'shipped', 'enviado', 'despachado', 'delivered', 'entregue'].includes(ship);
+    const retirada = String(p.ns_shipping_type || '') === 'retirada'
+      || /pickup|retir/i.test(String(p.ns_shipping_type || ''));
+    const estados = [
+      { evento: 'pago', quando: p.payment_status === 'pago' },
+      { evento: 'retirar', quando: p.payment_status === 'pago' && retirada && enviado },
+      { evento: 'enviado', quando: enviado && !retirada },
+    ];
+    for (const e of estados) {
+      if (!e.quando) continue;
+      for (const m of porEvento(e.evento)) {
+        const corpo = preencher(m.corpo, { nome, valor: p.total, pedido: p.code });
+        n += ins.run(`PED-${p.code}-${m.id}`, 'pedido', m.id, p.customer_id, null, p.id,
+          nome, fone, corpo, ts, ts).changes;
+      }
+    }
+  }
+  return n;
+}
+
+app.get('/api/mensagens', (req, res) => {
+  semearModelos();
+  const agora = now();
+  const status = ['pendente', 'enviado', 'descartado'].includes(req.query.status)
+    ? req.query.status : 'pendente';
+  const linhas = db.prepare(`SELECT m.*, t.label AS modelo FROM messages m
+    LEFT JOIN msg_templates t ON t.id = m.template_id
+    WHERE m.status = ?${status === 'pendente' ? ' AND COALESCE(m.agendado_para, m.created_at) <= ?' : ''}
+    ORDER BY m.created_at DESC LIMIT 200`)
+    .all(...(status === 'pendente' ? [status, agora] : [status]));
+
+  const cont = db.prepare(`SELECT status, COUNT(*) n FROM messages GROUP BY status`).all();
+  const contagem = { pendente: 0, enviado: 0, descartado: 0 };
+  for (const c of cont) contagem[c.status] = c.n;
+
+  const carrinhos = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(total),0) v FROM carts
+    WHERE recuperado = 0 AND ns_created_at >= ?`)
+    .get(new Date(Date.now() - 30 * 864e5).toISOString());
+  const recuperados = db.prepare(`SELECT COUNT(*) n FROM carts WHERE recuperado = 1 AND ns_created_at >= ?`)
+    .get(new Date(Date.now() - 30 * 864e5).toISOString()).n;
+
+  res.json({
+    status, linhas, contagem,
+    carrinhos: { abertos: carrinhos.n, valor: money(carrinhos.v), recuperados },
+    modelos: db.prepare('SELECT * FROM msg_templates ORDER BY ordem, id').all(),
+    erro_carrinhos: getSetting('carrinhos_erro') || '',
+    // Enquanto não houver API oficial contratada, quem envia é gente.
+    envio_automatico: false,
+  });
+});
+
+// Gera a fila na hora (o tique automático também faz isso sozinho).
+app.post('/api/mensagens/atualizar', async (req, res) => {
+  // Procurar novidades tem que olhar os dois lados: carrinho largado e
+  // pedido que mudou de status. Senão o botão mente pela metade.
+  let pedidos = null, carrinhos = null;
+  try { pedidos = await sincronizarPedidos(); } catch (err) { pedidos = { erro: err.message }; }
+  try { carrinhos = await sincronizarCarrinhos(); } catch (err) { carrinhos = { erro: err.message }; }
+  const geradas = gerarMensagens();
+  res.json({ ok: true, pedidos, carrinhos, geradas });
+});
+
+app.post('/api/mensagens/:id', (req, res) => {
+  const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(req.params.id);
+  if (!m) return res.status(404).json({ error: 'Mensagem não encontrada.' });
+  const acao = req.body?.acao;
+  if (acao === 'descartar') {
+    db.prepare("UPDATE messages SET status = 'descartado' WHERE id = ?").run(m.id);
+    return res.json({ ok: true });
+  }
+  if (acao !== 'enviado') return res.status(400).json({ error: 'Ação inválida.' });
+  const ts = now();
+  const quem = req.body?.member_id ? Number(req.body.member_id) : null;
+  db.transaction(() => {
+    db.prepare("UPDATE messages SET status='enviado', enviado_em=?, enviado_por=? WHERE id=?")
+      .run(ts, quem, m.id);
+    // Vira história do cliente — o CRM tem que saber que falamos com ele.
+    if (m.customer_id) {
+      db.prepare(`INSERT INTO crm_notes (customer_id, member_id, kind, body, motivo, created_at)
+        VALUES (?,?, 'whatsapp', ?, ?, ?)`)
+        .run(m.customer_id, quem, m.corpo.slice(0, 300),
+          m.tipo === 'carrinho' ? 'carrinho abandonado' : 'status do pedido', ts);
+      db.prepare('UPDATE customers SET last_contact = ? WHERE id = ?').run(ts, m.customer_id);
+    }
+  })();
+  res.json({ ok: true });
+});
+
+app.post('/api/mensagens/modelo/:id', (req, res) => {
+  const t = db.prepare('SELECT * FROM msg_templates WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Modelo não encontrado.' });
+  const b = req.body || {};
+  const corpo = b.corpo !== undefined ? String(b.corpo).trim() : t.corpo;
+  if (!corpo) return res.status(400).json({ error: 'A mensagem não pode ficar vazia.' });
+  const h = b.atraso_horas !== undefined ? Math.max(0, Math.min(720, parseInt(b.atraso_horas, 10) || 0)) : t.atraso_horas;
+  db.prepare('UPDATE msg_templates SET corpo=?, ativo=?, atraso_horas=?, updated_at=? WHERE id=?')
+    .run(corpo, b.ativo === false ? 0 : 1, h, now(), t.id);
+  res.json({ ok: true });
+});
+
 // ==================== VISÃO DO NEGÓCIO ====================
 // Identidade (quem somos) + o Business Model Canvas, nos nove blocos do
 // modelo do Osterwalder. É documento de pensamento: o sistema não
@@ -2516,6 +2765,10 @@ async function tickAutomatico(motivo = 'automático') {
     if (r && !r.skipped && (r.novos || r.lancados)) {
       console.log(`› Pedidos do site (${motivo}): ${r.novos} novo(s), ${r.lancados} lançado(s) no caixa.`);
     }
+    const c = await sincronizarCarrinhos();
+    if (c && c.novos) console.log(`› Carrinhos abandonados: ${c.novos} novo(s).`);
+    const msgs = gerarMensagens();
+    if (msgs) console.log(`› ${msgs} mensagem(ns) esperando envio.`);
   } catch (err) {
     console.error('Sincronização de pedidos falhou:', err.message);
     setSetting('last_orders_error', err.message);
