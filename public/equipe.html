@@ -279,7 +279,7 @@ document.getElementById('nova').insertAdjacentHTML('afterbegin',ICO('mais',16));
 const iniciais=(n)=>String(n||'').trim().split(/\s+/).slice(0,2).map(p=>p[0]||'').join('').toUpperCase();
 // Verde a partir de 90%, amarelo de 60 a 89, vermelho abaixo.
 const tom=(p)=>p==null?'':(p>=90?'ok':(p>=60?'meio':'baixo'));
-const mesAtual=()=>new Date().toISOString().slice(0,7);
+const mesAtual=()=>mesLocal();
 let META=null;
 
 async function carregar(){

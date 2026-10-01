@@ -411,7 +411,7 @@ async function load(){
 
 /* contas a pagar */
 function contasAPagar(d){
-  const hoje=new Date().toISOString().slice(0,10);
+  const hoje=diaLocal();
   const box=document.getElementById('aPagar');
   document.getElementById('apMeta').textContent=d.a_pagar.length
     ? BRL(d.despesa_agendada)+(d.a_pagar_vencidas?` · ${d.a_pagar_vencidas} vencida(s)`:'')
@@ -437,7 +437,7 @@ function contasAPagar(d){
 
 /* fechamento de caixa */
 async function caixa(){
-  const dia=document.getElementById('cxDia').value||new Date().toISOString().slice(0,10);
+  const dia=document.getElementById('cxDia').value||diaLocal();
   const d=await api('/api/caixa?day='+dia);
   const f=d.fechamento;
   const dif=f?f.diferenca:null;
@@ -446,9 +446,9 @@ async function caixa(){
       <span class="v">${BRL(x.total)}</span></div>`).join(''):'<div class="cxl"><span>Nenhuma venda no balcão</span><span class="v">R$ 0,00</span></div>'}
     ${d.site.n?`<div class="cxl"><span style="color:var(--ink-3)">site · ${d.site.n} pedido(s)</span>
       <span class="v" style="color:var(--ink-3)">${BRL(d.site.total)}</span></div>`:''}
-    ${d.saidas>0?`<div class="cxl"><span style="color:var(--crit)">saídas do dia</span>
-      <span class="v" style="color:var(--crit)">− ${BRL(d.saidas)}</span></div>`:''}
     <div class="cxt"><span class="l">Esperado em espécie</span><span class="v">${BRL(d.esperado_especie)}</span></div>
+    ${d.saidas>0?`<div class="cxl" style="font-size:11px"><span style="color:var(--ink-3)">Despesas lançadas hoje: ${BRL(d.saidas)}.
+      Se alguma saiu da gaveta, ela explica a diferença.</span></div>`:''}
     <div class="conf">
       <input id="cxContado" type="number" step="0.01" min="0" inputmode="decimal"
         placeholder="Quanto tem na gaveta" value="${f?f.contado:''}">
@@ -562,7 +562,7 @@ document.getElementById('ncAdd').onclick=async()=>{
 const dlg=document.getElementById('dlg'),dlgCat=document.getElementById('dlgCat');
 document.getElementById('novo').onclick=()=>{
   ['eV','eDesc'].forEach(i=>document.getElementById(i).value='');
-  document.getElementById('eD').value=new Date().toISOString().slice(0,10);
+  document.getElementById('eD').value=diaLocal();
   setKind('despesa');dlg.showModal();
 };
 document.getElementById('cats').onclick=()=>{carregarCats();dlgCat.showModal();};
@@ -576,7 +576,7 @@ document.getElementById('save').onclick=async e=>{
 };
 document.getElementById('per').onclick=e=>{const b=e.target.closest('button');if(!b)return;
   document.querySelectorAll('#per button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');per=b.dataset.p;load();};
-document.getElementById('cxDia').value=new Date().toISOString().slice(0,10);
+document.getElementById('cxDia').value=diaLocal();
 carregarCats().then(()=>{setKind('despesa');fixas();});load();caixa();
 
 /* ================= ABA LUCRO ================= */

@@ -6,6 +6,7 @@
    ============================================================ */
 
 :root{
+  color-scheme: dark;
   /* --- Fundos: preto com viés frio-esverdeado (escolhido, não cinza) --- */
   --bg:        #070907;
   --bg-elev:   #0C100D;
@@ -228,7 +229,7 @@ a{color:inherit}
    esses também, senão o campo fica branco no meio do tema escuro. */
 .input, input:not([type]), input[type="text"], input[type="search"], input[type="number"],
 input[type="email"], input[type="password"], input[type="tel"], input[type="url"],
-input[type="date"], input[type="time"], select, textarea{
+input[type="date"], input[type="time"], input[type="month"], select, textarea{
   width:100%;padding:10px 13px;border-radius:10px;font-size:14px;font-family:var(--font-body);
   background:var(--bg-elev);border:1px solid var(--line);color:var(--ink);
   transition:border-color var(--t-fast),box-shadow var(--t-fast);
@@ -308,9 +309,11 @@ textarea:-webkit-autofill, select:-webkit-autofill{
   position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(140%);z-index:80;
   min-width:290px;max-width:92vw;padding:13px 16px;border-radius:var(--r-lg);
   background:var(--surface-2);border:1px solid var(--brand);box-shadow:var(--sh-3),0 0 22px var(--glow);
-  transition:transform var(--t-med);
+  transition:transform var(--t-med),opacity var(--t-med),visibility var(--t-med);
+  /* escondido de verdade: vazio, ele era baixo demais e espiava na base da tela */
+  opacity:0;visibility:hidden;pointer-events:none;
 }
-.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1;visibility:visible;pointer-events:auto}
 .toast.err{border-color:var(--crit);box-shadow:var(--sh-3)}
 .toast .t{font-family:var(--font-disp);text-transform:uppercase;letter-spacing:.4px;font-weight:900;font-size:15px}
 .toast .d{font-size:12.5px;color:var(--ink-2);margin-top:3px}

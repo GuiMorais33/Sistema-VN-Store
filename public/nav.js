@@ -1,4 +1,12 @@
 // Navegação lateral compartilhada — injetada em todas as páginas.
+// "Que dia é hoje?" no relógio do aparelho. toISOString() é sempre UTC:
+// usado para isso, depois das 21h ele já respondia o dia seguinte.
+window.diaLocal = (d = new Date()) => {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+window.mesLocal = (d = new Date()) => window.diaLocal(d).slice(0, 7);
+
 (function () {
   const grupos = [
     { titulo: 'Operação', itens: [

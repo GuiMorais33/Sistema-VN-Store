@@ -168,6 +168,8 @@
   .tags{display:flex;gap:5px;flex-wrap:wrap}
   .tg{font-size:11px;padding:3px 9px;border-radius:999px;background:var(--bg-elev);
     border:1px solid var(--line-soft);color:var(--ink-2)}
+  .formas{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+  .formas .como{display:flex;gap:5px}
   .devendo{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;
     border:1px solid rgba(230,168,40,.35);border-radius:var(--r);background:rgba(230,168,40,.06);
     font-size:12.5px;margin-bottom:6px}
@@ -439,7 +441,7 @@ const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&l
 async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
 const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
 const NUM=(n)=>Number(n||0).toLocaleString('pt-BR');
-const HOJE=new Date().toISOString().slice(0,10);
+const HOJE=diaLocal();
 const iniciais=(n)=>String(n||'').replace(/^@/,'').trim().split(/\s+/).slice(0,2).map(p=>p[0]||'').join('').toUpperCase();
 const SEG={novo:'Novo',ativo:'Ativo',esfriando:'Esfriando',sumido:'Sumido',perdido:'Perdido',lead:'Lead',cadastro:'Cadastro'};
 const MOT={cobranca:'Cobrança',agendado:'Agendado',aniversario:'Aniversário',pos_venda:'Pós-venda',
@@ -612,8 +614,13 @@ async function mapa(){
         <div class="f${x.automatico?' auto':''}">${x.automatico?'automático':'você digita'}</div>
         ${meta}</div>`;
     }).join('');
-    const seta=n.conversao!=null
-      ? `<div class="seta${n.conversao<100?'':''}"><span class="l"></span>
+    // Acima de 100% não é conversão: a etapa de baixo recebe gente que veio
+    // por outro caminho (ex.: venda do site que não passou pela proposta).
+    const seta=n.conversao!=null&&n.conversao>100
+      ? `<div class="seta"><span class="l"></span>
+           <span>↓ a etapa de baixo recebe gente de outro caminho</span><span class="l"></span></div>`
+      : n.conversao!=null
+      ? `<div class="seta"><span class="l"></span>
            <span><b>${String(n.conversao).replace('.',',')}%</b> seguem</span><span class="l"></span></div>`
       : '<div class="seta"><span class="l"></span><span>↓</span><span class="l"></span></div>';
     return `<div class="niv">
@@ -852,7 +859,13 @@ async function ficha(id){
   document.getElementById('fCorpo').innerHTML=`
     ${devendo.length?`<div>${devendo.map(v=>`<div class="devendo">
       <span><b>${BRL(v.total)}</b> em aberto · ${esc(v.code)} · ${quando(v.created_at)}</span>
-      <button class="btn sm primary" data-receber="${v.id}" type="button">Recebi</button></div>`).join('')}</div>`:''}
+      <span class="formas" data-venda="${v.id}">
+        <button class="btn sm primary" data-receber="${v.id}" type="button">Recebi</button>
+        <span class="como" hidden>
+          <button class="btn sm ghost" data-forma="Pix" type="button">Pix</button>
+          <button class="btn sm ghost" data-forma="Dinheiro" type="button">Espécie</button>
+          <button class="btn sm ghost" data-forma="Cartão" type="button">Cartão</button>
+        </span></span></div>`).join('')}</div>`:''}
     <div class="n4">
       <div class="nb"><div class="l">Comprou</div><div class="v">${n.compras}x</div></div>
       <div class="nb"><div class="l">Gastou</div><div class="v">${BRL(n.gasto)}</div></div>
@@ -881,11 +894,15 @@ async function ficha(id){
     <div><div class="label">História</div>
       <div class="tl" style="margin-top:9px">${d.linha.length?d.linha.map(ev).join(''):'<div class="ev"><div class="d">Nada registrado ainda.</div></div>'}</div></div>`;
 
-  document.querySelectorAll('#fCorpo [data-receber]').forEach(b=>b.onclick=async()=>{
-    b.disabled=true;
-    try{await api('/api/sales/'+b.dataset.receber+'/settle',
-      {method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-      await ficha(id);painel();}catch(e){alert(e.message);b.disabled=false;}
+  // Receber pergunta COMO: é o que põe o fiado pago em espécie na conta da gaveta.
+  document.querySelectorAll('#fCorpo [data-receber]').forEach(b=>b.onclick=()=>{
+    b.hidden=true;b.parentElement.querySelector('.como').hidden=false;});
+  document.querySelectorAll('#fCorpo [data-forma]').forEach(b=>b.onclick=async()=>{
+    const venda=b.closest('.formas').dataset.venda;
+    b.closest('.como').querySelectorAll('button').forEach(x=>x.disabled=true);
+    try{await api('/api/sales/'+venda+'/settle',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({payment_method:b.dataset.forma})});
+      await ficha(id);painel();}catch(e){alert(e.message);}
   });
   if(!dlgFicha.open)dlgFicha.showModal();
 }

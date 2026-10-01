@@ -263,7 +263,8 @@ function renderKpis(){
   const p=OP.periodos[periodo]||{};
   const rot={hoje:'hoje',ontem:'ontem',semana:'nesta semana'}[periodo];
   document.getElementById('kpis').innerHTML=[
-    kpi({label:'Faturamento',ico:'financeiro',tone:'brand',mod:'is-brand',val:BRL(p.faturamento),sub:rot}),
+    kpi({label:'Vendido',ico:'financeiro',tone:'brand',mod:'is-brand',val:BRL(p.faturamento),
+      sub:p.a_receber>0?`${rot} · ${BRL(p.a_receber)} ainda em fiado`:rot}),
     kpi({label:'Vendas',ico:'recibo',val:p.pedidos,sub:`${p.pdv.n} no balcão · ${p.site.n} no site`}),
     kpi({label:'Ticket médio',ico:'grafico',val:BRL(p.ticket),sub:'por venda'}),
     kpi({label:'Margem',ico:'subiu',val:p.margem_pct+'%',sub:'do faturamento'}),
@@ -357,6 +358,13 @@ async function load(){
       : `loja não conectada`;
   }catch(e){}
 
+  // Estoque no vermelho: o que está acabando, para repor antes de faltar.
+  const low=document.getElementById('low');
+  low.innerHTML = d.low_stock_list && d.low_stock_list.length ? d.low_stock_list.map(v=>
+    `<div class="row-item"><div class="l"><span>${v.product_name}</span><span class="s">${v.variant_name||''}</span></div>
+     <span class="r" style="color:var(--warn)">${v.stock} un.</span></div>`).join('')
+    : vazio('ok','Estoque saudável','Nenhum item perto da ruptura.');
+
   const R=d.reminders||{};   // o Maestro ainda avisa dos lembretes
 
   // Maestro
@@ -366,7 +374,7 @@ async function load(){
     const det=[];
     if(pdv) det.push(`<b>${pdv.n}</b> no balcão`);
     if(site) det.push(`<b>${site.n}</b> pelo site`);
-    p.push(`Já são <b>${d.orders_today}</b> venda(s) hoje${det.length?' ('+det.join(' e ')+')':''}, <b class="hl">${BRL(d.revenue_today)}</b> no caixa com margem de <b>${d.margin_pct}%</b>.`);
+    p.push(`Já são <b>${d.orders_today}</b> venda(s) hoje${det.length?' ('+det.join(' e ')+')':''}, <b class="hl">${BRL(d.revenue_today)}</b> vendidos com margem de <b>${d.margin_pct}%</b>.`);
   } else p.push('Ainda sem vendas hoje — o PDV está pronto.');
   if(d.receivable_count>0) p.push(`Tem <b class="hl">${BRL(d.receivable_total)}</b> em fiado pra receber.`);
   if(R.atrasados>0) p.push(`E <b>${R.atrasados}</b> lembrete(s) já passaram da data.`);

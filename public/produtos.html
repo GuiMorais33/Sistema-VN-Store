@@ -377,10 +377,15 @@
 <datalist id="catList"></datalist>
 <datalist id="brandList"></datalist>
 
+<div class="toast" id="toast"></div>
+
 <script src="/icons.js"></script>
 <script src="/nav.js"></script>
 <script>
 const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+// Usados pela aba Entradas (vieram da antiga tela de Compras).
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const D=(s)=>s?new Date(s).toLocaleDateString('pt-BR'):'—';
 async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
 const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
 document.querySelector('.bar .search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
@@ -601,7 +606,7 @@ resumo();lista();
 /* ================= ENTRADAS DE MERCADORIA ================= */
 // Só carrega quando a aba abre — a lista de produtos não pode esperar por ela.
 let entradasCarregadas=false;
-document.querySelector('.search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
+document.querySelector('[data-pane="entradas"] .search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
 
 const carrinho=new Map();   // variant_id -> {v, qty, custo}
 let pago='1';

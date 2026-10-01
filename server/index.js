@@ -3,6 +3,8 @@
 //  Roda em "modo demonstração" sem token; fica ao vivo quando o
 //  .env com as credenciais da Nuvemshop é preenchido.
 // ============================================================
+// O fuso da loja vem primeiro: tudo que pergunta "que dia é hoje" depende dele.
+import { diaLocal, mesLocal, inicioDoDia, inicioDoMes } from './fuso.js';
 import express from 'express';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -57,6 +59,14 @@ app.use(express.static(PUBLIC));
 const isLive = () => nuvem.isConfigured();
 const now = () => new Date().toISOString();
 const money = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+// O que conta como VENDA FEITA, em todo lugar que mostra "vendas":
+//  - no balcão, toda venda não cancelada — fiado incluso, a peça saiu;
+//  - no site, só o pedido pago — pix ou boleto pendente ainda não é venda.
+// "Quanto entrou no caixa" é outra pergunta, e quem responde é o Financeiro.
+const SQL_VENDA = `payment_status <> 'cancelado' AND (channel <> 'site' OR payment_status = 'pago')`;
+// Diferença entre o relógio da loja e o UTC, para o SQLite agrupar por dia local.
+const OFFSET_SQL = () => `${-new Date().getTimezoneOffset()} minutes`;
 const nameOf = (obj) => {
   if (!obj) return '';
   if (typeof obj === 'string') return obj;
@@ -890,7 +900,7 @@ app.post('/api/sales', async (req, res) => {
         insRem.run(
           `Pegar no fornecedor: ${l.v.product_name} ${l.v.variant_name}`,
           `${l.encomendar} peça(s) · venda ${code}${custName ? ' · ' + custName : ''}`,
-          ts.slice(0, 10), custId, ts,
+          diaLocal(), custId, ts,
         );
       }
     }
@@ -905,7 +915,7 @@ app.post('/api/sales', async (req, res) => {
       const aid = db.prepare(`INSERT INTO atendimentos
         (member_id, customer_id, nome, canal, stage, sale_id, valor, day, created_at)
         VALUES (?,?,?, 'loja', 'vendido', ?,?,?,?)`)
-        .run(vendedor.id, custId, custName || '', id, total, ts.slice(0, 10), ts).lastInsertRowid;
+        .run(vendedor.id, custId, custName || '', id, total, diaLocal(), ts).lastInsertRowid;
       db.prepare('UPDATE sales SET atendimento_id = ? WHERE id = ?').run(aid, id);
     }
     // Caixa: só entra quando PAGO. Fiado vira conta a receber (a própria venda pendente).
@@ -918,12 +928,12 @@ app.post('/api/sales', async (req, res) => {
   })();
 
   // Empurra o novo estoque para a Nuvemshop.
-  let syncedAll = true; const syncNotes = [];
+  let syncedAll = true; let enviados = 0; const syncNotes = [];
   if (isLive()) {
     for (const l of lines) {
       if (!l.v.stock_management || !l.v.nuvemshop_product_id || !l.v.nuvemshop_variant_id) continue;
       if (l.v.on_demand) continue;   // a grade do site fica como está
-      try { await nuvem.setVariantStock(l.v.nuvemshop_product_id, l.v.nuvemshop_variant_id, Math.max(0, l.v.stock - l.qty)); }
+      try { await nuvem.setVariantStock(l.v.nuvemshop_product_id, l.v.nuvemshop_variant_id, Math.max(0, l.v.stock - l.qty)); enviados += 1; }
       catch (err) { syncedAll = false; syncNotes.push(`${l.v.product_name} ${l.v.variant_name}: ${err.message}`); }
     }
   } else { syncedAll = false; syncNotes.push('Modo demonstração — estoque não enviado à Nuvemshop.'); }
@@ -936,6 +946,8 @@ app.post('/api/sales', async (req, res) => {
     ok: true, code, total, margin, payment_status: status, customer_name: custName,
     vendedor: vendedor ? vendedor.name : null,
     mode: live ? 'live' : 'demo', stock_synced: syncedAll && live, notes: syncNotes,
+    // quantas variações tiveram o estoque mexido no site (sob encomenda não mexe)
+    stock_enviados: enviados,
     encomendas,   // o PDV avisa na tela e o lembrete já foi criado
   });
 });
@@ -962,7 +974,7 @@ app.get('/api/dashboard', (req, res) => {
   const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
   const iso = startOfDay.toISOString();
   const today = db.prepare(`SELECT COUNT(*) AS orders, COALESCE(SUM(total),0) AS revenue, COALESCE(SUM(margin),0) AS margin
-    FROM sales WHERE created_at >= ? AND payment_status='pago'`).get(iso);
+    FROM sales WHERE created_at >= ? AND ${SQL_VENDA}`).get(iso);
   const ticket = today.orders > 0 ? money(today.revenue / today.orders) : 0;
   const marginPct = today.revenue > 0 ? Math.round((today.margin / today.revenue) * 100) : 0;
   // "Acabando" olha o que existe de verdade. Produto sob encomenda fica
@@ -977,7 +989,7 @@ app.get('/api/dashboard', (req, res) => {
   const lowList = db.prepare(`SELECT v.product_name, v.variant_name, v.stock ${BAIXO} ORDER BY v.stock ASC LIMIT 8`).all();
   const pendingList = db.prepare(`SELECT id, code, customer_name, total, created_at FROM sales WHERE payment_status='pendente' ORDER BY created_at ASC LIMIT 8`).all();
   // Lembretes: o que vence hoje ou já passou
-  const hojeStr = new Date().toISOString().slice(0, 10);
+  const hojeStr = diaLocal();
   const remResumo = db.prepare(`SELECT
       COALESCE(SUM(CASE WHEN done=0 AND due_date < ? THEN 1 ELSE 0 END),0) atrasados,
       COALESCE(SUM(CASE WHEN done=0 AND due_date = ? THEN 1 ELSE 0 END),0) hoje,
@@ -989,7 +1001,7 @@ app.get('/api/dashboard', (req, res) => {
   // Vendas por origem hoje (PDV x Site)
   const origemHoje = db.prepare(`SELECT CASE WHEN channel='site' THEN 'site' ELSE 'pdv' END o,
     COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
-    WHERE payment_status='pago' AND created_at >= ? GROUP BY o`).all(iso);
+    WHERE ${SQL_VENDA} AND created_at >= ? GROUP BY o`).all(iso);
   res.json({
     mode: isLive() ? 'live' : 'demo',
     reminders: remResumo, reminders_list: remLista, por_origem_hoje: origemHoje,
@@ -1003,13 +1015,15 @@ app.get('/api/dashboard', (req, res) => {
 // ==================== SÉRIE DE VENDAS (gráfico) ====================
 app.get('/api/sales-series', (req, res) => {
   const days = Math.min(60, Math.max(7, parseInt(req.query.days, 10) || 14));
-  const rows = db.prepare(`SELECT date(created_at) d, COALESCE(SUM(total),0) total, COUNT(*) n FROM sales GROUP BY date(created_at)`).all();
+  const off = OFFSET_SQL();
+  const rows = db.prepare(`SELECT date(created_at, '${off}') d, COALESCE(SUM(total),0) total, COUNT(*) n
+    FROM sales WHERE ${SQL_VENDA} GROUP BY d`).all();
   const map = new Map(rows.map((r) => [r.d, r]));
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const series = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(today); d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
+    const key = diaLocal(d);
     const r = map.get(key);
     series.push({ date: key, total: r ? money(r.total) : 0, count: r ? r.n : 0 });
   }
@@ -1066,8 +1080,8 @@ app.delete('/api/team/:id', (req, res) => {
 // Meta é do mês e por pessoa. O quanto já vendeu vem das vendas com
 // vendedor marcado — só conta o que foi pago, não o fiado em aberto.
 app.get('/api/metas', (req, res) => {
-  const ym = /^\d{4}-\d{2}$/.test(req.query.ym || '') ? req.query.ym : new Date().toISOString().slice(0, 7);
-  const ini = `${ym}-01T00:00:00`;
+  const ym = /^\d{4}-\d{2}$/.test(req.query.ym || '') ? req.query.ym : mesLocal();
+  const ini = inicioDoMes(ym);
   const [ano, mes] = ym.split('-').map(Number);
   const fim = new Date(ano, mes, 1).toISOString();
 
@@ -1107,7 +1121,7 @@ app.get('/api/metas', (req, res) => {
 
   // Dias: quanto do mês já passou, para saber se o ritmo dá.
   const hoje = new Date();
-  const noMes = hoje.toISOString().slice(0, 7) === ym;
+  const noMes = mesLocal(hoje) === ym;
   const diasNoMes = new Date(ano, mes, 0).getDate();
   const diaAtual = noMes ? hoje.getDate() : diasNoMes;
   const restam = Math.max(0, diasNoMes - diaAtual);
@@ -1130,7 +1144,7 @@ app.get('/api/metas', (req, res) => {
 // Define/atualiza a meta de alguém (ou da loja, com member_id nulo).
 app.post('/api/metas', (req, res) => {
   const b = req.body || {};
-  const ym = /^\d{4}-\d{2}$/.test(b.ym || '') ? b.ym : new Date().toISOString().slice(0, 7);
+  const ym = /^\d{4}-\d{2}$/.test(b.ym || '') ? b.ym : mesLocal();
   const alvo = money(b.target);
   if (!(alvo >= 0)) return res.status(400).json({ error: 'Informe um valor válido.' });
   const mid = b.member_id ? Number(b.member_id) : null;
@@ -1195,7 +1209,7 @@ const DIAS_UTEIS_MES = 26;
 // número real com estimativa.
 function taxasDe(memberId, dias = 180) {
   const desde = new Date(Date.now() - dias * 864e5).toISOString();
-  const desdeDia = desde.slice(0, 10);
+  const desdeDia = diaLocal(new Date(desde));
 
   const meu = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(total),0) v FROM sales
     WHERE seller_id = ? AND payment_status = 'pago' AND created_at >= ?`).get(memberId, desde);
@@ -1262,8 +1276,8 @@ function escadaDoSonho(s, t) {
 }
 
 app.get('/api/sonhos', (req, res) => {
-  const hoje = new Date().toISOString().slice(0, 10);
-  const ym = hoje.slice(0, 7);
+  const hoje = diaLocal();
+  const ym = mesLocal();
   const membros = db.prepare('SELECT * FROM team_members WHERE active = 1 AND vende = 1 ORDER BY name').all();
   const sonhos = db.prepare('SELECT * FROM dreams WHERE active = 1').all();
   const porMembro = new Map(sonhos.map((s) => [String(s.member_id), s]));
@@ -1289,7 +1303,7 @@ app.get('/api/sonhos', (req, res) => {
       WHERE seller_id = ? AND payment_status = 'pago' AND created_at >= ?`).get(m.id, s.created_at).v;
     const ganho = money(desde * (s.comissao_pct / 100));
     const noMes = db.prepare(`SELECT COALESCE(SUM(total),0) v FROM sales
-      WHERE seller_id = ? AND payment_status = 'pago' AND created_at >= ?`).get(m.id, `${ym}-01T00:00:00`).v;
+      WHERE seller_id = ? AND payment_status = 'pago' AND created_at >= ?`).get(m.id, inicioDoMes(ym)).v;
     const conta = escadaDoSonho(s, t);
     return {
       ...base,
@@ -1350,7 +1364,7 @@ app.post('/api/sonhos/:memberId/meta', (req, res) => {
   if (!s) return res.status(404).json({ error: 'Essa pessoa ainda não tem sonho escrito.' });
   const conta = escadaDoSonho(s, taxasDe(mid));
   if (!conta.pronto) return res.status(400).json({ error: 'A conta ainda não fecha — falta ticket ou conversão.' });
-  const ym = /^\d{4}-\d{2}$/.test(req.body?.ym || '') ? req.body.ym : new Date().toISOString().slice(0, 7);
+  const ym = /^\d{4}-\d{2}$/.test(req.body?.ym || '') ? req.body.ym : mesLocal();
   const ex = db.prepare('SELECT id FROM goals WHERE ym = ? AND member_id = ?').get(ym, mid);
   if (ex) db.prepare('UPDATE goals SET target = ?, note = ? WHERE id = ?').run(conta.meta_mes, s.titulo, ex.id);
   else db.prepare('INSERT INTO goals (member_id, ym, target, note, created_at) VALUES (?,?,?,?,?)')
@@ -1365,7 +1379,7 @@ const CANAIS = ['direct', 'whatsapp', 'loja', 'site', 'indicacao'];
 
 app.get('/api/atendimentos', (req, res) => {
   const dias = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
-  const desde = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10);
+  const desde = diaLocal(new Date(Date.now() - dias * 864e5));
   const cond = ['a.day >= ?']; const args = [desde];
   if (req.query.member_id) { cond.push('a.member_id = ?'); args.push(Number(req.query.member_id)); }
   if (req.query.stage && STAGES.includes(req.query.stage)) { cond.push('a.stage = ?'); args.push(req.query.stage); }
@@ -1376,7 +1390,7 @@ app.get('/api/atendimentos', (req, res) => {
     WHERE ${cond.join(' AND ')}
     ORDER BY a.created_at DESC LIMIT 400`).all(...args);
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = diaLocal();
   const resumo = db.prepare(`SELECT COUNT(*) atend,
       SUM(CASE WHEN stage IN ${SQL_PROPOSTA} THEN 1 ELSE 0 END) prop,
       SUM(CASE WHEN stage = 'vendido' THEN 1 ELSE 0 END) vend,
@@ -1423,7 +1437,7 @@ app.post('/api/atendimentos', (req, res) => {
     (member_id, customer_id, nome, instagram, canal, querendo, stage, valor, day, created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?)`)
     .run(mid, cid, nome, insta, canal,
-      String(b.querendo || '').trim(), stage, money(b.valor), ts.slice(0, 10), ts).lastInsertRowid;
+      String(b.querendo || '').trim(), stage, money(b.valor), diaLocal(), ts).lastInsertRowid;
   res.json({ ok: true, atendimento: db.prepare('SELECT * FROM atendimentos WHERE id = ?').get(id) });
 });
 
@@ -1458,7 +1472,7 @@ app.delete('/api/atendimentos/:id', (req, res) => {
 
 const CICLO_MIN = 7;        // ninguém compra streetwear a cada 3 dias
 const CICLO_PADRAO = 45;    // chute inicial, até a loja ter histórico
-const dia = (d) => new Date(d).toISOString().slice(0, 10);
+const dia = (d) => diaLocal(new Date(d));
 const diasEntre = (a, b) => Math.floor((new Date(b) - new Date(a)) / 864e5);
 const brl = (n) => 'R$ ' + money(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -1764,7 +1778,7 @@ function preencher(corpo, v) {
 // Traz os carrinhos abandonados e marca os que já viraram pedido.
 async function sincronizarCarrinhos(dias = 30) {
   if (!isLive()) return { skipped: true };
-  const desde = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10);
+  const desde = diaLocal(new Date(Date.now() - dias * 864e5));
   let lista;
   try { lista = await nuvem.listAbandonedCheckouts({ since: desde }); }
   catch (err) {
@@ -2013,7 +2027,7 @@ app.get('/api/canvas', (req, res) => {
 
   // Só o que o sistema mede de verdade — o resto é pensamento do dono.
   const d90 = new Date(Date.now() - 90 * 864e5).toISOString();
-  const ym = new Date().toISOString().slice(0, 7);
+  const ym = mesLocal();
   const vendas = db.prepare(`SELECT channel, COUNT(*) n, COALESCE(SUM(total),0) v FROM sales
     WHERE payment_status <> 'cancelado' AND created_at >= ? GROUP BY channel`).all(d90);
   const totalV = vendas.reduce((s, x) => s + x.v, 0);
@@ -2022,9 +2036,9 @@ app.get('/api/canvas', (req, res) => {
     SELECT customer_id FROM sales WHERE customer_id IS NOT NULL AND payment_status <> 'cancelado'
     GROUP BY customer_id HAVING COUNT(*) > 1)`).get().n;
   const despesa = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM financial_entries
-    WHERE type = 'despesa' AND substr(created_at,1,7) = ?`).get(ym).v;
+    WHERE type = 'despesa' AND created_at >= ?`).get(inicioDoMes(ym)).v;
   const canais = db.prepare(`SELECT canal, COUNT(*) n FROM atendimentos WHERE day >= ?
-    GROUP BY canal ORDER BY n DESC`).all(d90.slice(0, 10));
+    GROUP BY canal ORDER BY n DESC`).all(diaLocal(new Date(d90)));
 
   const real = {
     receitas: totalV > 0
@@ -2150,7 +2164,7 @@ app.get('/api/mapa', (req, res) => {
   semearMapa();
   const dias = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
   const desdeISO = new Date(Date.now() - dias * 864e5).toISOString();
-  const desdeDia = desdeISO.slice(0, 10);
+  const desdeDia = diaLocal(new Date(desdeISO));
 
   const niveis = db.prepare('SELECT * FROM funnel_levels ORDER BY ordem, id').all();
   const nos = db.prepare('SELECT * FROM funnel_nodes ORDER BY ordem, id').all();
@@ -2268,7 +2282,8 @@ app.get('/api/relatorios', (req, res) => {
     JOIN sales s ON s.id = i.sale_id
     LEFT JOIN variants v ON v.id = i.variant_id
     LEFT JOIN products p ON p.id = v.product_id
-    WHERE s.payment_status <> 'cancelado' AND s.created_at >= ?`;
+    WHERE s.payment_status <> 'cancelado' AND (s.channel <> 'site' OR s.payment_status = 'pago')
+      AND s.created_at >= ?`;
 
   const agrupado = (campo, rotulo) => db.prepare(`
     SELECT COALESCE(NULLIF(${campo},''),'(sem ${rotulo})') label,
@@ -2373,7 +2388,7 @@ app.get('/api/financial', (req, res) => {
   const aPagar = db.prepare(`SELECT id, category, description, amount, due_date, created_at
     FROM financial_entries WHERE type='despesa' AND paid = 0
     ORDER BY COALESCE(due_date,'9999-12-31'), id`).all();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = diaLocal();
   const vencidas = aPagar.filter((e) => e.due_date && e.due_date < hoje);
   // Por categoria (o coração da gestão): entra e sai, agrupado.
   // Só o que já saiu/entrou de verdade — para bater com o número do topo.
@@ -2455,7 +2470,7 @@ app.post('/api/fixed-expenses', (req, res) => {
     // Se a conta deste mês já foi lançada e ainda não foi paga, ela
     // acompanha a edição — senão você corrige o valor e a conta a pagar
     // continua mostrando o antigo.
-    const ym = new Date().toISOString().slice(0, 7);
+    const ym = mesLocal();
     const upd = db.prepare(`UPDATE financial_entries
       SET amount = ?, category = ?, category_id = ?, description = ?, due_date = ?
       WHERE ref = ? AND paid = 0`)
@@ -2476,7 +2491,7 @@ app.delete('/api/fixed-expenses/:id', (req, res) => {
 // Lança as fixas que já chegaram no dia — uma vez por mês cada.
 function lancarFixas() {
   const hoje = new Date();
-  const ym = hoje.toISOString().slice(0, 7);
+  const ym = mesLocal(hoje);
   const dia = hoje.getDate();
   const pend = db.prepare(`SELECT * FROM fixed_expenses
     WHERE active = 1 AND day_of_month <= ? AND COALESCE(last_ym,'') <> ?`).all(dia, ym);
@@ -2498,47 +2513,51 @@ function lancarFixas() {
 
 // ==================== FECHAMENTO DE CAIXA ====================
 // Confere o que o sistema esperava receber com o que você contou.
-app.get('/api/caixa', (req, res) => {
-  const dia = (req.query.day || new Date().toISOString().slice(0, 10)).slice(0, 10);
-  const ini = `${dia}T00:00:00`, fim = `${dia}T23:59:59`;
+// O caixa de um dia. Uma conta só, usada para ver e para fechar —
+// assim as duas telas nunca discordam.
+// O que vale é QUANDO o dinheiro entrou (paid_at), não quando a venda foi
+// feita: fiado recebido hoje em espécie está na gaveta hoje.
+function caixaDoDia(dia) {
+  const ini = inicioDoDia(dia);
+  const [a, m, d] = dia.split('-').map(Number);
+  const fim = new Date(a, m - 1, d + 1).toISOString();
   const porForma = db.prepare(`SELECT COALESCE(NULLIF(payment_method,''),'não informado') forma,
       COUNT(*) n, COALESCE(SUM(total),0) total FROM sales
-    WHERE payment_status='pago' AND channel='pdv' AND created_at BETWEEN ? AND ?
+    WHERE payment_status='pago' AND channel='pdv' AND paid_at >= ? AND paid_at < ?
     GROUP BY forma ORDER BY total DESC`).all(ini, fim);
   const site = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(total),0) total FROM sales
-    WHERE payment_status='pago' AND channel='site' AND created_at BETWEEN ? AND ?`).get(ini, fim);
+    WHERE payment_status='pago' AND channel='site' AND COALESCE(paid_at, created_at) >= ?
+      AND COALESCE(paid_at, created_at) < ?`).get(ini, fim);
   const saidas = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries
-    WHERE type='despesa' AND paid = 1 AND created_at BETWEEN ? AND ?`).get(ini, fim).n;
-  const especie = porForma.find((f) => /esp[ée]cie|dinheiro/i.test(f.forma));
-  const fechado = db.prepare('SELECT * FROM cash_closings WHERE day = ?').get(dia);
-  res.json({
-    dia,
-    por_forma: porForma,
+    WHERE type='despesa' AND paid = 1 AND created_at >= ? AND created_at < ?`).get(ini, fim).n;
+  const especie = porForma.filter((f) => /esp[ée]cie|dinheiro/i.test(f.forma));
+  return {
+    dia, por_forma: porForma,
     balcao: money(porForma.reduce((s, f) => s + f.total, 0)),
     site: { n: site.n, total: money(site.total) },
     saidas: money(saidas),
-    esperado_especie: money(especie ? especie.total : 0),
-    fechamento: fechado || null,
-  });
+    esperado_especie: money(especie.reduce((s, f) => s + f.total, 0)),
+  };
+}
+
+app.get('/api/caixa', (req, res) => {
+  const dia = (req.query.day || diaLocal()).slice(0, 10);
+  const c = caixaDoDia(dia);
+  res.json({ ...c, fechamento: db.prepare('SELECT * FROM cash_closings WHERE day = ?').get(dia) || null });
 });
 
 app.post('/api/caixa/fechar', (req, res) => {
   const b = req.body || {};
-  const dia = (b.day || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const dia = (b.day || diaLocal()).slice(0, 10);
   const contado = money(b.contado);
   if (!(contado >= 0)) return res.status(400).json({ error: 'Informe quanto você contou.' });
-  const ini = `${dia}T00:00:00`, fim = `${dia}T23:59:59`;
-  const porForma = db.prepare(`SELECT COALESCE(NULLIF(payment_method,''),'não informado') forma,
-      COALESCE(SUM(total),0) total FROM sales
-    WHERE payment_status='pago' AND channel='pdv' AND created_at BETWEEN ? AND ?
-    GROUP BY forma`).all(ini, fim);
-  const especie = porForma.find((f) => /esp[ée]cie|dinheiro/i.test(f.forma));
-  const esperado = money(especie ? especie.total : 0);
+  const c = caixaDoDia(dia);
+  const esperado = c.esperado_especie;
   db.prepare(`INSERT INTO cash_closings (day, esperado, contado, diferenca, por_forma, note, created_at)
     VALUES (?,?,?,?,?,?,?)
     ON CONFLICT(day) DO UPDATE SET esperado=excluded.esperado, contado=excluded.contado,
       diferenca=excluded.diferenca, por_forma=excluded.por_forma, note=excluded.note`)
-    .run(dia, esperado, contado, money(contado - esperado), JSON.stringify(porForma), b.note || '', now());
+    .run(dia, esperado, contado, money(contado - esperado), JSON.stringify(c.por_forma), b.note || '', now());
   res.json({ ok: true, fechamento: db.prepare('SELECT * FROM cash_closings WHERE day = ?').get(dia) });
 });
 
@@ -2668,7 +2687,7 @@ function limparClientesGenericos() {
 // de status (pagou, embalou, enviou). Roda sozinho de tempos em tempos.
 async function sincronizarPedidos(dias = 45) {
   if (!isLive()) return { skipped: true };
-  const desde = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10);
+  const desde = diaLocal(new Date(Date.now() - dias * 864e5));
   const orders = await nuvem.listOrders({ since: desde });
 
   const achar = db.prepare('SELECT id, payment_status, fin_posted FROM sales WHERE nuvemshop_order_id = ?');
@@ -2819,15 +2838,17 @@ app.get('/api/operacao', (req, res) => {
     const args = ate ? [de.toISOString(), ate.toISOString()] : [de.toISOString()];
     const cond = ate ? 'created_at >= ? AND created_at < ?' : 'created_at >= ?';
     const t = db.prepare(`SELECT COUNT(*) pedidos, COALESCE(SUM(total),0) fat, COALESCE(SUM(margin),0) marg,
-        COALESCE(SUM(items_count),0) pecas FROM sales
-        WHERE payment_status='pago' AND ${cond}`).get(...args);
+        COALESCE(SUM(items_count),0) pecas,
+        COALESCE(SUM(CASE WHEN payment_status = 'pendente' THEN total ELSE 0 END),0) fiado FROM sales
+        WHERE ${SQL_VENDA} AND ${cond}`).get(...args);
     const porCanal = db.prepare(`SELECT CASE WHEN channel='site' THEN 'site' ELSE 'pdv' END c,
         COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
-        WHERE payment_status='pago' AND ${cond} GROUP BY c`).all(...args);
+        WHERE ${SQL_VENDA} AND ${cond} GROUP BY c`).all(...args);
     const pdv = porCanal.find((x) => x.c === 'pdv') || { n: 0, t: 0 };
     const site = porCanal.find((x) => x.c === 'site') || { n: 0, t: 0 };
     return {
       pedidos: t.pedidos, faturamento: money(t.fat), ticket: t.pedidos ? money(t.fat / t.pedidos) : 0,
+      a_receber: money(t.fiado),
       margem_pct: t.fat > 0 ? Math.round((t.marg / t.fat) * 100) : 0,
       pdv: { n: pdv.n, total: money(pdv.t) }, site: { n: site.n, total: money(site.t) },
     };
@@ -2890,7 +2911,7 @@ app.get('/api/operacao/:fila', (req, res) => {
 // ==================== LEMBRETES ====================
 app.get('/api/reminders', (req, res) => {
   const filtro = req.query.filter || 'abertos';
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = diaLocal();
   let where = 'r.done = 0';
   if (filtro === 'feitos') where = 'r.done = 1';
   else if (filtro === 'todos') where = '1=1';

@@ -131,9 +131,14 @@
         </table></div>
 
         <h3>Números do período</h3>
-        <p>As abas <b>Hoje</b>, <b>Ontem</b> e <b>Esta semana</b> mudam todos os números abaixo:
-          faturamento, quantidade de vendas (mostrando quantas foram no <b>balcão</b> e quantas no
+        <p>As abas <b>Hoje</b>, <b>Ontem</b> e <b>Esta semana</b> mudam os números de venda:
+          <b>vendido</b>, quantidade de vendas (mostrando quantas foram no <b>balcão</b> e quantas no
           <b>site</b>), ticket médio e margem. Abaixo, o gráfico de vendas por dia.</p>
+        <p>O que conta como <b>venda</b>, aqui e no relatório de lucro: no balcão, <b>toda venda não
+          cancelada, fiado incluso</b> — a peça saiu. No site, só o pedido <b>já pago</b> — pix ou boleto
+          pendente ainda não é venda. Quando parte do dia foi fiado, o número mostra quanto
+          <b>ainda falta receber</b>. Quanto <b>entrou no caixa</b> é outra pergunta: quem responde é o
+          Financeiro.</p>
 
         <h3>Lembretes</h3>
         <p>No pé da tela fica o que não pode escapar: "João paga a segunda parcela dia 10",
@@ -173,7 +178,9 @@
           <li>O <b>estoque baixa</b> aqui e também <b>na sua loja da Nuvemshop</b>.</li>
           <li>A venda entra no <b>caixa</b> com o lucro já calculado (se o custo estiver preenchido).</li>
           <li>Se foi <b>fiado</b>, o valor <b>não entra no caixa</b> — vai para <b>Contas a receber</b>
-            e só entra quando você registrar o recebimento.</li>
+            e só entra quando você registrar o recebimento. Na ficha do cliente, <b>Recebi</b> pergunta
+            <b>como</b> ele pagou (Pix, espécie ou cartão) — é isso que põe o dinheiro na conta certa da
+            gaveta.</li>
         </ul>
 
         <div class="aviso atencao"><span class="ico" id="a1"></span>
@@ -336,9 +343,11 @@
           como "A pagar". O que passou do vencimento fica <b class="hl" style="color:var(--crit)">vermelho</b>.</p>
 
         <h3>Fechamento do caixa</h3>
-        <p>No fim do dia, o sistema mostra quanto <b>esperava</b> ter em espécie (só as vendas do
-          balcão em dinheiro). Você conta a gaveta, digita, e ele mostra a diferença: bateu, faltou
-          ou sobrou. Dá para escolher outro dia no seletor de data e refazer o fechamento — cada dia
+        <p>No fim do dia, o sistema mostra quanto <b>esperava</b> ter em espécie: tudo que <b>entrou
+          em dinheiro naquele dia</b> no balcão — venda paga na hora e fiado recebido em espécie, mesmo
+          que a venda seja de outro dia. Você conta a gaveta, digita, e ele mostra a diferença: bateu,
+          faltou ou sobrou. As despesas do dia aparecem embaixo só para consulta — o sistema não sabe
+          quais saíram da gaveta, então não desconta. Dá para escolher outro dia no seletor de data e refazer o fechamento — cada dia
           guarda um registro só.</p>
 
         <h3>Categorias (plano de contas)</h3>
