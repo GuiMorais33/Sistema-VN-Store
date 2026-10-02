@@ -85,6 +85,30 @@
   .totals .r.big{color:var(--ink);font-size:21px;font-weight:800;align-items:baseline;margin-top:3px}
   .totals .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
   .totals .big .v{color:var(--brand-hi);text-shadow:0 0 16px var(--glow)}
+
+  /* Toque no produto: o cartão acende rapidinho, confirmando que entrou. */
+  .prod.foi{animation:foi .45s ease}
+  @keyframes foi{0%{border-color:var(--brand);box-shadow:0 0 0 0 rgba(47,210,79,.55)}100%{box-shadow:0 0 0 10px rgba(47,210,79,0)}}
+
+  /* Celular: a venda fica lá embaixo, depois do catálogo. Esta barra mostra
+     o total o tempo todo e leva até ela com um toque. */
+  .cart-bar{display:none}
+  @media (max-width:960px){
+    .cart-bar{position:fixed;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));z-index:60;
+      display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:16px;cursor:pointer;
+      font-family:var(--font-body);color:#04170A;border:none;text-align:left;
+      background:linear-gradient(180deg,var(--brand-hi),var(--brand));
+      box-shadow:0 10px 30px rgba(0,0,0,.5),0 0 24px var(--glow);
+      transition:transform var(--t-med),opacity var(--t-med)}
+    .cart-bar[hidden]{display:flex!important;transform:translateY(140%);opacity:0;pointer-events:none}
+    .cart-bar .cb-n{font-weight:800;font-size:12px;background:rgba(4,23,10,.14);padding:4px 9px;border-radius:999px;white-space:nowrap}
+    .cart-bar .cb-t{font-family:var(--font-mono);font-weight:700;font-size:17px;flex:1}
+    .cart-bar .cb-go{font-weight:800;font-size:13px;white-space:nowrap}
+    .cart-bar.bump{animation:bump .35s ease}
+    body.tem-barra .app{padding-bottom:96px}
+    body.tem-barra .toast{bottom:92px}
+  }
+  @keyframes bump{40%{transform:scale(1.04)}}
 </style>
 </head>
 <body>
@@ -156,6 +180,9 @@
 </div>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
+<button id="cartBar" class="cart-bar" type="button" hidden>
+  <span class="cb-n" id="cbN"></span><span class="cb-t" id="cbT"></span><span class="cb-go">Ver venda ↓</span>
+</button>
 
 <script src="/icons.js"></script>
 <script src="/nav.js"></script>
@@ -190,7 +217,7 @@ async function carregar(q=''){
     b.innerHTML=`<span class="thumb">${img}</span><span class="nm">${v.product_name}</span>
       <span class="vr">${v.variant_name||''}${v.brand?' · '+v.brand:''}</span>
       <span class="bot"><span class="pr">${BRL(v.price)}</span><span class="st ${cls}">${txt}</span></span>`;
-    b.addEventListener('click',()=>add(v));g.appendChild(b);
+    b.addEventListener('click',()=>{add(v);b.classList.remove('foi');void b.offsetWidth;b.classList.add('foi');});g.appendChild(b);
   }
 }
 function add(v){const c=S.cart.get(v.id)||{v,qty:0};
@@ -229,7 +256,25 @@ function totais(){
   document.getElementById('dsc').textContent=BRL(d);
   document.getElementById('tot').textContent=BRL(Math.max(0,sub-d));
   document.getElementById('finish').disabled=!S.cart.size;
+  barra(Math.max(0,sub-d));
 }
+/* barra do celular: some quando a venda já está na tela */
+let vendaNaTela=false, nAntes=0;
+new IntersectionObserver(([e])=>{vendaNaTela=e.isIntersecting;barra();},{threshold:.25}).observe(document.querySelector('.cart'));
+function barra(total){
+  const bar=document.getElementById('cartBar');
+  const n=[...S.cart.values()].reduce((s,i)=>s+i.qty,0);
+  if(total!==undefined){
+    document.getElementById('cbN').textContent=n+(n===1?' item':' itens');
+    document.getElementById('cbT').textContent=BRL(total);
+    if(n>nAntes){bar.classList.remove('bump');void bar.offsetWidth;bar.classList.add('bump');}
+    nAntes=n;
+  }
+  bar.hidden=!n||vendaNaTela;
+  document.body.classList.toggle('tem-barra',!!n);
+}
+document.getElementById('cartBar').addEventListener('click',()=>
+  document.querySelector('.cart').scrollIntoView({behavior:'smooth',block:'start'}));
 
 /* cliente */
 let ct;const ci=document.getElementById('cust'),cl=document.getElementById('custList'),ch=document.getElementById('chip');

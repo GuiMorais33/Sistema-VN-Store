@@ -54,6 +54,9 @@ app.use((req, res, next) => {
   return res.redirect('/login');
 });
 
+// Fontes e o Three.js quase nunca mudam: o navegador guarda por uma semana.
+app.use('/fonts', express.static(join(PUBLIC, 'fonts'), { maxAge: '7d' }));
+app.use('/vendor', express.static(join(PUBLIC, 'vendor'), { maxAge: '7d' }));
 app.use(express.static(PUBLIC));
 
 const isLive = () => nuvem.isConfigured();

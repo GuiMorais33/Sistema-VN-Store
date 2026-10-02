@@ -59,6 +59,12 @@
   .m-tag.warn{color:var(--warn);border-color:rgba(232,163,23,.35);background:rgba(232,163,23,.08)}
   .m-tag.ok{color:var(--ok);border-color:rgba(53,192,138,.3);background:rgba(53,192,138,.08)}
   @media (max-width:560px){.maestro{grid-template-columns:1fr}}
+  /* pulso 3D atrás do texto, apagando para a esquerda */
+  .m-fx{position:absolute;top:0;right:0;bottom:0;width:62%;pointer-events:none;opacity:0;transition:opacity 1.2s ease;
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 45%);mask-image:linear-gradient(90deg,transparent,#000 45%)}
+  .m-fx.fx-on{opacity:1}
+  .maestro>.m-ava,.maestro>.m-body{position:relative;z-index:2}
+  @media (max-width:560px){.m-fx{width:100%;opacity:0}.m-fx.fx-on{opacity:.55}}
 
   .settle{display:flex;align-items:center;gap:var(--s3)}
 
@@ -137,6 +143,7 @@
   </div>
 
   <div class="card maestro" style="margin-bottom:var(--s4)">
+    <div class="m-fx" id="mFx"></div>
     <div class="m-ava"><img src="/logo.webp" alt=""></div>
     <div class="m-body">
       <div class="m-top"><h3>Maestro</h3></div>
@@ -221,6 +228,14 @@
 
 <script src="/icons.js"></script>
 <script src="/nav.js"></script>
+<script type="module">
+// Enfeite: se o 3D não carregar, o Maestro continua igual.
+try {
+  const { montarPulso } = await import('/fx/pulso.js');
+  window.vnPulso = montarPulso(document.getElementById('mFx'));
+  if (typeof pulsar === 'function') pulsar();
+} catch (_) {}
+</script>
 <script>
 const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const DATA=(s)=>new Date(s).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
@@ -389,9 +404,17 @@ async function load(){
   if(!tags.length) tags.push(`<span class="m-tag ok">${ICO('ok',13)}Tudo em dia</span>`);
   document.getElementById('maestroTags').innerHTML=tags.join('');
 }
+// Força do pulso no Maestro: hoje comparado com a média dos dias anteriores.
+function pulsar(){
+  if(!window.vnPulso||!serie||!serie.length)return;
+  const hoje=serie[serie.length-1].total||0, antes=serie.slice(0,-1);
+  const media=antes.reduce((a,s)=>a+(s.total||0),0)/Math.max(1,antes.length);
+  window.vnPulso.set(media>0 ? hoje/(media*1.6) : (hoje>0?0.8:0));
+}
 async function loadChart(){
   try{const d=await api('/api/sales-series?days=14');serie=d.series;
-    document.getElementById('chartSub').textContent='últimos '+d.days+' dias';renderChart();}catch(e){}
+    document.getElementById('chartSub').textContent='últimos '+d.days+' dias';renderChart();
+    pulsar();}catch(e){}
 }
 /* ================= LEMBRETES (a página virou este painel) ================= */
 const ICO_TIPO={geral:'lembrete',pagamento:'financeiro',encomenda:'entrega',reposicao:'estoque'};

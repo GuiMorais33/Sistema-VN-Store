@@ -6,22 +6,47 @@
 <meta name="theme-color" content="#070907">
 <title>VN Store — Entrar</title>
 <link rel="icon" href="/logo.webp">
+<link rel="modulepreload" href="/vendor/three-vn.min.js">
 <link rel="stylesheet" href="/theme.css">
 <style>
-  body{display:flex;align-items:center;justify-content:center;padding:20px}
-  .box{width:100%;max-width:360px;padding:28px 24px;text-align:center;display:flex;flex-direction:column;gap:16px;
-    background:linear-gradient(180deg,var(--surface-2),var(--surface));border:1px solid var(--line);border-radius:20px;
-    box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 30px rgba(47,210,79,.12)}
+  body{display:flex;align-items:center;justify-content:center;padding:20px;min-height:100svh;overflow:hidden}
+  #palco{position:fixed;inset:0;z-index:0;opacity:0;transition:opacity .9s ease}
+  #palco.fx-on{opacity:1}
+  .box{position:relative;z-index:1;width:100%;max-width:360px;padding:28px 24px;text-align:center;
+    display:flex;flex-direction:column;gap:16px;border-radius:22px;
+    background:linear-gradient(180deg,rgba(21,27,20,.78),rgba(12,16,13,.82));
+    border:1px solid rgba(85,245,118,.16);
+    -webkit-backdrop-filter:blur(14px) saturate(1.2);backdrop-filter:blur(14px) saturate(1.2);
+    box-shadow:0 30px 80px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.4),0 0 40px rgba(47,210,79,.10);
+    animation:sobe .7s cubic-bezier(.2,.8,.2,1) both .1s}
+  @keyframes sobe{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
   .badge{width:66px;height:66px;margin:0 auto}
-  .box .wm{font-family:var(--font-disp);font-weight:900;text-transform:uppercase;font-size:26px;letter-spacing:.5px;transform:skewX(-6deg);
-    background:linear-gradient(180deg,#fff,#c3ccd3 55%,#828b92);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .box .sub{font-size:11.5px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-2);font-weight:700;margin-top:-8px}
-  input{width:100%;padding:13px 15px;border-radius:12px;border:1px solid var(--line);background:var(--bg-elev);color:var(--ink);font-size:16px;text-align:center;font-family:var(--font-body)}
-  input:focus{outline:2px solid var(--brand);border-color:var(--brand)}
+  /* com a moeda 3D na tela, o logo pequeno sobra */
+  body.tem-3d .box .badge{display:none}
+  .box .wm{font-family:var(--font-disp);font-weight:800;text-transform:uppercase;font-size:34px;letter-spacing:.5px;
+    line-height:.95;transform:skewX(-8deg);
+    background:linear-gradient(180deg,#fff 0%,#D3DBE1 46%,#7C858C 56%,#F2F6F9 68%,#A9B2B9 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .box .sub{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--brand-hi);font-weight:700;margin-top:8px;
+    text-shadow:0 0 12px var(--glow)}
+  input#pwd{padding:14px 15px;border-radius:12px;font-size:16px;text-align:center;letter-spacing:2px}
   .err{color:var(--crit);font-size:13px;min-height:16px;font-weight:600}
+  .box .btn{padding:13px 15px;font-size:14px}
+  .box.nega{animation:nega .4s ease}
+  @keyframes nega{20%,60%{transform:translateX(-7px)}40%,80%{transform:translateX(7px)}}
+
+  /* computador: moeda à esquerda, formulário à direita */
+  @media (min-aspect-ratio:21/20) and (min-width:760px){
+    body.tem-3d{justify-content:flex-end;padding-right:max(6vw,32px)}
+  }
+  /* celular em pé: moeda em cima, formulário embaixo */
+  @media (max-aspect-ratio:21/20){
+    body.tem-3d{flex-direction:column;justify-content:flex-end;align-items:center;padding-bottom:max(7svh,24px)}
+  }
 </style>
 </head>
 <body>
+  <div id="palco"></div>
   <form class="box" id="form">
     <div class="badge"><img src="/logo.webp" alt="VN Store"></div>
     <div>
@@ -32,13 +57,31 @@
     <div class="err" id="err"></div>
     <button class="btn primary" type="submit" style="width:100%">Entrar</button>
   </form>
+<script type="module">
+// A moeda 3D é enfeite: se não carregar, a tela de sempre continua funcionando.
+let moeda = null;
+try {
+  const { montarMoeda } = await import('/fx/moeda.js');
+  moeda = await montarMoeda(document.getElementById('palco'));
+  if (moeda) document.body.classList.add('tem-3d');
+} catch (_) {}
+window.vnMoeda = moeda;
+</script>
 <script>
-document.getElementById('form').addEventListener('submit', async (e)=>{
+const form = document.getElementById('form');
+form.addEventListener('submit', async (e)=>{
   e.preventDefault();
   const err=document.getElementById('err'); err.textContent='';
   try{
     const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('pwd').value})});
-    if(r.ok){ location.href='/'; } else { const d=await r.json().catch(()=>({})); err.textContent=d.error||'Senha incorreta.'; }
+    if(r.ok){
+      if(window.vnMoeda){ window.vnMoeda.entrar(); setTimeout(()=>location.href='/',380); }
+      else location.href='/';
+    } else {
+      const d=await r.json().catch(()=>({})); err.textContent=d.error||'Senha incorreta.';
+      window.vnMoeda?.negar();
+      form.classList.remove('nega'); void form.offsetWidth; form.classList.add('nega');
+    }
   }catch(_){ err.textContent='Falha ao entrar. Tente de novo.'; }
 });
 </script>

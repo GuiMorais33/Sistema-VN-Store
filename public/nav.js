@@ -58,6 +58,19 @@ window.mesLocal = (d = new Date()) => window.diaLocal(d).slice(0, 7);
     location.href = '/login';
   });
 
+  // Luz na borda do cartão sob o mouse (o desenho está no theme.css).
+  let aceso = null;
+  document.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const c = e.target.closest?.('.card,.kpi');
+    if (c !== aceso) { aceso?.classList.remove('luz'); aceso = c; c?.classList.add('luz'); }
+    if (!c) return;
+    const r = c.getBoundingClientRect();
+    c.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    c.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  }, { passive: true });
+  document.addEventListener('pointerleave', () => { aceso?.classList.remove('luz'); aceso = null; });
+
   // Estado da conexão
   fetch('/api/health').then((r) => r.json()).then((h) => {
     const p = side.querySelector('#navStatus');

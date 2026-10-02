@@ -5,6 +5,24 @@
    estados com cor própria, e densidade de painel operacional.
    ============================================================ */
 
+/* --- Fontes da casa (servidas pelo próprio sistema, sem depender de terceiros) --- */
+@font-face{font-family:"Inter";src:url(/fonts/inter.woff2) format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:"Barlow Condensed";src:url(/fonts/barlow-condensed-600.woff2) format("woff2");font-weight:600;font-style:normal;font-display:swap}
+@font-face{font-family:"Barlow Condensed";src:url(/fonts/barlow-condensed-800.woff2) format("woff2");font-weight:700 900;font-style:normal;font-display:swap}
+@font-face{font-family:"JetBrains Mono";src:url(/fonts/jetbrains-mono-500.woff2) format("woff2");font-weight:400 500;font-style:normal;font-display:swap}
+@font-face{font-family:"JetBrains Mono";src:url(/fonts/jetbrains-mono-700.woff2) format("woff2");font-weight:600 800;font-style:normal;font-display:swap}
+
+/* Troca de página suave: a barra lateral fica parada e só o conteúdo cruza.
+   Navegador que não entende isso simplesmente troca de página como antes. */
+@view-transition{navigation:auto}
+::view-transition-old(root),::view-transition-new(root){animation-duration:.22s;animation-timing-function:cubic-bezier(.2,.8,.3,1)}
+::view-transition-old(root){animation-name:vt-sai}
+::view-transition-new(root){animation-name:vt-entra}
+@keyframes vt-sai{to{opacity:0;transform:translateY(-4px)}}
+@keyframes vt-entra{from{opacity:0;transform:translateY(6px)}}
+.sidebar{view-transition-name:vn-nav}
+::view-transition-group(vn-nav){animation:none}
+
 :root{
   color-scheme: dark;
   /* --- Fundos: preto com viés frio-esverdeado (escolhido, não cinza) --- */
@@ -53,12 +71,13 @@
   --sh-3: 0 4px 12px rgba(0,0,0,.45), 0 16px 40px rgba(0,0,0,.4);
 
   /* --- Tipografia --- */
-  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-disp: "Arial Narrow", "Helvetica Neue Condensed", "Liberation Sans Narrow", Impact, "Franklin Gothic Bold", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-disp: "Barlow Condensed", "Arial Narrow", "Helvetica Neue Condensed", Impact, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Roboto Mono", Menlo, Consolas, monospace;
 
   --t-fast:120ms cubic-bezier(.2,.8,.3,1);
   --t-med:200ms cubic-bezier(.2,.8,.3,1);
+  --t-slow:420ms cubic-bezier(.2,.8,.2,1);
 }
 
 *{box-sizing:border-box}
@@ -172,18 +191,49 @@ a{color:inherit}
 /* Título de seção */
 .sec{display:flex;align-items:center;gap:var(--s3);margin:var(--s6) 0 var(--s3)}
 .sec h2{margin:0;font-family:var(--font-disp);font-weight:900;text-transform:uppercase;
-  font-size:17px;letter-spacing:.6px;transform:skewX(-6deg)}
+  font-size:19px;letter-spacing:1px;transform:skewX(-6deg)}
 .sec .rule{height:1px;flex:1;background:linear-gradient(90deg,var(--line),transparent)}
 .sec .meta{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-3)}
 
 /* ============ Superfícies ============ */
 .card{
   background:linear-gradient(180deg,var(--surface-2),var(--surface));
-  border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-1);
+  border:1px solid var(--line);border-radius:var(--r-lg);
+  box-shadow:var(--sh-1),inset 0 1px 0 rgba(255,255,255,.035);
 }
+/* Luz que acompanha o mouse: acende a borda do cartão onde o cursor está.
+   As coordenadas (--mx/--my) vêm do nav.js; no celular não aparece. */
+.card,.kpi{position:relative}
+.card::before,.kpi::before{
+  /* inset 0, não -1px: o .kpi tem overflow:hidden e cortaria o anel em cima da borda */
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:1;
+  padding:1px;opacity:0;transition:opacity var(--t-med);
+  background:radial-gradient(220px circle at var(--mx,50%) var(--my,0%),rgba(120,255,150,.95),rgba(47,210,79,.25) 45%,transparent 75%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+}
+/* e um brilho bem fraco no fundo, no mesmo ponto */
+.card::after,.kpi::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity var(--t-med);
+  background:radial-gradient(320px circle at var(--mx,50%) var(--my,0%),rgba(47,210,79,.07),transparent 65%);
+}
+.card.luz::before,.kpi.luz::before,.card.luz::after,.kpi.luz::after{opacity:1}
+
+/* Entrada da página: os blocos sobem em sequência, rápido, uma vez só. */
+.app>*{animation:entra var(--t-slow) both}
+.app>*:nth-child(2){animation-delay:40ms}
+.app>*:nth-child(3){animation-delay:80ms}
+.app>*:nth-child(4){animation-delay:120ms}
+.app>*:nth-child(5){animation-delay:160ms}
+.app>*:nth-child(6){animation-delay:200ms}
+.app>*:nth-child(n+7){animation-delay:240ms}
+@keyframes entra{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+/* listas e cartões que chegam depois (via API) aparecem com um fade curto */
+.rows>*,.kpis>*{animation:aparece .32s ease both}
+@keyframes aparece{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .panel{padding:var(--s4)}
 .panel h3{margin:0 0 var(--s3);font-family:var(--font-disp);text-transform:uppercase;
-  letter-spacing:.5px;font-size:15px;transform:skewX(-5deg)}
+  letter-spacing:.9px;font-size:17px;transform:skewX(-5deg)}
 
 /* ============ Pílulas de estado ============ */
 .pill{
@@ -258,7 +308,7 @@ textarea:-webkit-autofill, select:-webkit-autofill{
 .kpi{
   position:relative;padding:var(--s4);border-radius:var(--r-lg);overflow:hidden;
   background:linear-gradient(180deg,var(--surface-2),var(--surface));
-  border:1px solid var(--line);box-shadow:var(--sh-1);
+  border:1px solid var(--line);box-shadow:var(--sh-1),inset 0 1px 0 rgba(255,255,255,.035);
   transition:border-color var(--t-fast),transform var(--t-fast);
 }
 .kpi:hover{border-color:var(--line-str);transform:translateY(-1px)}

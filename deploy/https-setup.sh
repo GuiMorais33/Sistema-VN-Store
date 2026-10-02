@@ -29,6 +29,7 @@ sudo -E apt-get install -y caddy
 echo "==> Configurando o Caddy (proxy para o sistema na porta 3000)..."
 sudo tee /etc/caddy/Caddyfile >/dev/null <<CADDY
 $DOMAIN {
+    encode zstd gzip
     reverse_proxy localhost:3000
 }
 CADDY
