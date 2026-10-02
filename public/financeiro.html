@@ -374,7 +374,8 @@ async function load(){
       sub:d.anterior?cmp(d.lucro,d.anterior.lucro):'depois do custo da mercadoria',
       color:lucroPos?'var(--brand-hi)':'var(--crit)'}),
     kpi({label:'A receber',ico:'relogio',tone:d.a_receber>0?'warn':'',mod:d.a_receber>0?'is-warn':'',
-      val:BRL(d.a_receber),sub:'fiado em aberto'}),
+      val:BRL(d.a_receber),sub:'fiado em aberto'+(d.pix_pendente&&d.pix_pendente.n
+        ?` · fora daqui: ${BRL(d.pix_pendente.t)} em pix do site aguardando`:'')}),
   ].join('');
 
   // duas frentes

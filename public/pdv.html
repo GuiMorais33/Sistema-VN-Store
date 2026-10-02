@@ -279,6 +279,9 @@ document.addEventListener('click',e=>{if(!e.target.closest('#cust')&&!e.target.c
     // Lembra de quem estava no balcão neste aparelho.
     const ult=localStorage.getItem('vn_vendedor');
     if(ult&&vs.some(m=>String(m.id)===ult))sel.value=ult;
+    // Uma pessoa só vendendo: não há o que escolher. Deixar "não informar"
+    // fazia venda ficar sem dono e a meta sair incompleta.
+    else if(vs.length===1)sel.value=String(vs[0].id);
     sel.onchange=()=>{localStorage.setItem('vn_vendedor',sel.value);atendimentos();};
     document.getElementById('wrapVend').hidden=false;
     atendimentos();

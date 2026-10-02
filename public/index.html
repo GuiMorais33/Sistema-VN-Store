@@ -241,7 +241,7 @@ function kpi(o){
 let OP=null, periodo='hoje', DASH=null;
 
 const FILAS=[
-  {k:'por_cobrar',ico:'financeiro',lab:'Por cobrar',tit:'Aguardando pagamento'},
+  {k:'por_cobrar',ico:'financeiro',lab:'Fiado por cobrar',tit:'Vendas do balcão que o cliente ainda deve'},
   {k:'por_embalar',ico:'estoque',lab:'Por embalar',tit:'Pagos, aguardando separação'},
   {k:'por_enviar',ico:'entrega',lab:'Por enviar',tit:'Embalados, aguardando despacho'},
   {k:'por_retirar',ico:'pdv',lab:'Por retirar',tit:'Retirada na loja'},
@@ -254,7 +254,9 @@ function renderFilas(){
     return `<button class="fila ${zero?'zero':(f.k==='por_cobrar'?'alerta':'')}" data-fila="${f.k}" type="button" title="${f.tit}">
       <span class="ico-box ${zero?'':(f.k==='por_cobrar'?'warn':'brand')}">${ICO(f.ico,17)}</span>
       <span class="txt"><span class="n">${v.n} ${v.n===1?'venda':'vendas'}</span>
-      <span class="l">${f.lab}${v.t>0?' · '+BRL(v.t):''}</span></span></button>`;
+      <span class="l">${f.lab}${v.t>0?' · '+BRL(v.t):''}${
+        f.k==='por_cobrar'&&OP.filas.aguardando_pix&&OP.filas.aguardando_pix.n
+          ?` · ${OP.filas.aguardando_pix.n} pix do site aguardando`:''}</span></span></button>`;
   }).join('');
   document.querySelectorAll('[data-fila]').forEach(b=>b.onclick=()=>abrirFila(b.dataset.fila));
 }
@@ -267,12 +269,9 @@ function renderKpis(){
       sub:p.a_receber>0?`${rot} · ${BRL(p.a_receber)} ainda em fiado`:rot}),
     kpi({label:'Vendas',ico:'recibo',val:p.pedidos,sub:`${p.pdv.n} no balcão · ${p.site.n} no site`}),
     kpi({label:'Ticket médio',ico:'grafico',val:BRL(p.ticket),sub:'por venda'}),
-    kpi({label:'Margem',ico:'subiu',val:p.margem_pct+'%',sub:'do faturamento'}),
-    kpi({label:'A receber',ico:'relogio',tone:DASH.receivable_count?'warn':'',mod:DASH.receivable_count?'is-warn':'',
-         val:BRL(DASH.receivable_total),sub:DASH.receivable_count+' em aberto'}),
-    kpi({label:'Estoque a custo',ico:'estoque',val:BRL(DASH.stock_value_cost),sub:'capital parado'}),
-    kpi({label:'Ruptura',ico:'alerta',tone:DASH.low_stock?'warn':'',mod:DASH.low_stock?'is-warn':'',
-         val:DASH.low_stock,sub:'itens com 4 un. ou menos'}),
+    kpi({label:'Margem',ico:'subiu',val:p.margem_pct+'%',sub:'do vendido'}),
+    // Só o que muda com a aba (Hoje/Ontem/Semana) fica nesta grade. A receber
+    // e ruptura já estão nas pastilhas, na fila "Por cobrar" e no painel de estoque.
   ].join('');
 }
 document.getElementById('tabs').onclick=e=>{

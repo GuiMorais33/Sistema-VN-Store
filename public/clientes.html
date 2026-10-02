@@ -854,7 +854,8 @@ async function ficha(id){
       ${e.texto?`<div class="d">${esc(e.texto)}</div>`:''}
       <div class="q">${quando(e.quando)}</div></div>`;
   // Fiado em aberto fica no topo, com o botão de baixar na hora.
-  const devendo=d.vendas.filter(v=>v.payment_status==='pendente');
+  // Só fiado tem botão de receber. Pix pendente do site quem confirma é a loja.
+  const devendo=d.vendas.filter(v=>v.payment_status==='pendente'&&v.channel!=='site');
 
   document.getElementById('fCorpo').innerHTML=`
     ${devendo.length?`<div>${devendo.map(v=>`<div class="devendo">

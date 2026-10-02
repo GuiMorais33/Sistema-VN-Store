@@ -64,7 +64,13 @@ const money = (n) => Math.round((Number(n) || 0) * 100) / 100;
 //  - no balcão, toda venda não cancelada — fiado incluso, a peça saiu;
 //  - no site, só o pedido pago — pix ou boleto pendente ainda não é venda.
 // "Quanto entrou no caixa" é outra pergunta, e quem responde é o Financeiro.
-const SQL_VENDA = `payment_status <> 'cancelado' AND (channel <> 'site' OR payment_status = 'pago')`;
+const VENDA = (a = '') => `${a}payment_status <> 'cancelado' AND (${a}channel <> 'site' OR ${a}payment_status = 'pago')`;
+const SQL_VENDA = VENDA();
+// FIADO é dinheiro que o cliente deve à loja: venda do balcão não paga.
+// Pix ou boleto pendente do site é outra coisa — o cliente ainda não levou
+// nada, e muitas vezes nunca paga. Não entra em "a receber" nem em "deve".
+const FIADO = (a = '') => `${a}payment_status = 'pendente' AND ${a}channel <> 'site'`;
+const PIX_PENDENTE = `payment_status = 'pendente' AND channel = 'site'`;
 // Diferença entre o relógio da loja e o UTC, para o SQLite agrupar por dia local.
 const OFFSET_SQL = () => `${-new Date().getTimezoneOffset()} minutes`;
 const nameOf = (obj) => {
@@ -745,11 +751,11 @@ app.get('/api/customers', (req, res) => {
   // visível à parte, em "a receber".
   const rows = db.prepare(`
     SELECT c.*,
-      COUNT(CASE WHEN s.payment_status <> 'cancelado' THEN s.id END) AS orders,
-      COALESCE(SUM(CASE WHEN s.payment_status IN ('pago','pendente') THEN s.total ELSE 0 END),0) AS total_spent,
+      COUNT(CASE WHEN ${VENDA('s.')} THEN s.id END) AS orders,
+      COALESCE(SUM(CASE WHEN ${VENDA('s.')} THEN s.total ELSE 0 END),0) AS total_spent,
       COALESCE(SUM(CASE WHEN s.payment_status='pago' THEN s.total ELSE 0 END),0) AS paid,
-      COALESCE(SUM(CASE WHEN s.payment_status='pendente' THEN s.total ELSE 0 END),0) AS pending,
-      MAX(CASE WHEN s.payment_status <> 'cancelado' THEN s.created_at END) AS last_purchase,
+      COALESCE(SUM(CASE WHEN ${FIADO('s.')} THEN s.total ELSE 0 END),0) AS pending,
+      MAX(CASE WHEN ${VENDA('s.')} THEN s.created_at END) AS last_purchase,
       CASE WHEN c.nuvemshop_customer_id IS NOT NULL THEN 1 ELSE 0 END AS da_loja
     FROM customers c LEFT JOIN sales s ON s.customer_id = c.id
     WHERE ${SEM_NOME} ${q ? 'AND (c.name LIKE ? OR c.instagram LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)' : ''}
@@ -763,10 +769,10 @@ app.get('/api/customers/:id', (req, res) => {
   if (!c) return res.status(404).json({ error: 'Cliente não encontrado.' });
   c.sales = db.prepare('SELECT id, code, total, payment_method, payment_status, created_at FROM sales WHERE customer_id = ? ORDER BY id DESC').all(c.id);
   const agg = db.prepare(`SELECT
-    COUNT(CASE WHEN payment_status <> 'cancelado' THEN 1 END) AS orders,
-    COALESCE(SUM(CASE WHEN payment_status IN ('pago','pendente') THEN total ELSE 0 END),0) AS total_spent,
+    COUNT(CASE WHEN ${SQL_VENDA} THEN 1 END) AS orders,
+    COALESCE(SUM(CASE WHEN ${SQL_VENDA} THEN total ELSE 0 END),0) AS total_spent,
     COALESCE(SUM(CASE WHEN payment_status='pago' THEN total ELSE 0 END),0) AS paid,
-    COALESCE(SUM(CASE WHEN payment_status='pendente' THEN total ELSE 0 END),0) AS pending
+    COALESCE(SUM(CASE WHEN ${FIADO()} THEN total ELSE 0 END),0) AS pending
     FROM sales WHERE customer_id = ?`).get(c.id);
   res.json({ ...c, ...agg });
 });
@@ -958,6 +964,11 @@ app.post('/api/sales/:id/settle', (req, res) => {
   const s = db.prepare('SELECT * FROM sales WHERE id = ?').get(req.params.id);
   if (!s) return res.status(404).json({ error: 'Venda não encontrada.' });
   if (s.payment_status === 'pago') return res.json({ ok: true, already: true });
+  // Pagamento de pedido do site quem confirma é a Nuvemshop: dar baixa aqui
+  // seria desfeito na próxima leitura da loja.
+  if (s.channel === 'site') {
+    return res.status(400).json({ error: 'Pedido do site: o pagamento é confirmado pela loja, não aqui.' });
+  }
   const ts = now();
   const method = (req.body && req.body.payment_method) || s.payment_method || '';
   const cat = s.channel === 'site' ? 'Venda Site' : 'Venda PDV';
@@ -982,12 +993,12 @@ app.get('/api/dashboard', (req, res) => {
   const BAIXO = `FROM variants v JOIN products p ON p.id = v.product_id
     WHERE v.stock_management = 1 AND p.on_demand = 0 AND v.stock <= 4`;
   const lowStock = db.prepare(`SELECT COUNT(*) AS n ${BAIXO}`).get().n;
-  const recv = db.prepare(`SELECT COALESCE(SUM(total),0) AS total, COUNT(*) AS n FROM sales WHERE payment_status='pendente'`).get();
+  const recv = db.prepare(`SELECT COALESCE(SUM(total),0) AS total, COUNT(*) AS n FROM sales WHERE ${FIADO()}`).get();
   const stockVal = db.prepare(`SELECT COALESCE(SUM(${REAL} * v.cost),0) AS v
     FROM variants v LEFT JOIN products p ON p.id = v.product_id WHERE v.stock_management = 1`).get().v;
   const recent = db.prepare('SELECT code, customer_name, payment_method, payment_status, total, created_at, synced_nuvemshop FROM sales ORDER BY id DESC LIMIT 8').all();
   const lowList = db.prepare(`SELECT v.product_name, v.variant_name, v.stock ${BAIXO} ORDER BY v.stock ASC LIMIT 8`).all();
-  const pendingList = db.prepare(`SELECT id, code, customer_name, total, created_at FROM sales WHERE payment_status='pendente' ORDER BY created_at ASC LIMIT 8`).all();
+  const pendingList = db.prepare(`SELECT id, code, customer_name, total, created_at FROM sales WHERE ${FIADO()} ORDER BY created_at ASC LIMIT 8`).all();
   // Lembretes: o que vence hoje ou já passou
   const hojeStr = diaLocal();
   const remResumo = db.prepare(`SELECT
@@ -1491,11 +1502,11 @@ function crmBase() {
   const hoje = dia(Date.now());
   const rows = db.prepare(`
     SELECT c.*,
-      COUNT(CASE WHEN s.payment_status IN ('pago','pendente') THEN s.id END) compras,
-      COALESCE(SUM(CASE WHEN s.payment_status IN ('pago','pendente') THEN s.total ELSE 0 END),0) gasto,
-      COALESCE(SUM(CASE WHEN s.payment_status = 'pendente' THEN s.total ELSE 0 END),0) aberto,
-      MIN(CASE WHEN s.payment_status IN ('pago','pendente') THEN s.created_at END) primeira,
-      MAX(CASE WHEN s.payment_status IN ('pago','pendente') THEN s.created_at END) ultima
+      COUNT(CASE WHEN ${VENDA('s.')} THEN s.id END) compras,
+      COALESCE(SUM(CASE WHEN ${VENDA('s.')} THEN s.total ELSE 0 END),0) gasto,
+      COALESCE(SUM(CASE WHEN ${FIADO('s.')} THEN s.total ELSE 0 END),0) aberto,
+      MIN(CASE WHEN ${VENDA('s.')} THEN s.created_at END) primeira,
+      MAX(CASE WHEN ${VENDA('s.')} THEN s.created_at END) ultima
     FROM customers c LEFT JOIN sales s ON s.customer_id = c.id
     WHERE ${SQL_PESSOA}
     GROUP BY c.id`).all();
@@ -1515,7 +1526,7 @@ function crmBase() {
       JOIN variants v ON v.id = si.variant_id
       JOIN products p ON p.id = v.product_id
       WHERE s.customer_id IS NOT NULL AND COALESCE(p.brand,'') <> ''
-        AND s.payment_status IN ('pago','pendente')
+        AND ${VENDA('s.')}
       GROUP BY s.customer_id, p.brand`).all()) {
     const at = marcas.get(String(r.cid));
     if (!at || r.n > at.n) marcas.set(String(r.cid), r);
@@ -1524,7 +1535,7 @@ function crmBase() {
   const ultimaPeca = new Map();
   for (const r of db.prepare(`SELECT s.customer_id cid, si.name peca, s.created_at
       FROM sale_items si JOIN sales s ON s.id = si.sale_id
-      WHERE s.customer_id IS NOT NULL AND s.payment_status IN ('pago','pendente')
+      WHERE s.customer_id IS NOT NULL AND ${VENDA('s.')}
       ORDER BY s.created_at ASC`).all()) ultimaPeca.set(String(r.cid), r.peca);
 
   // Ciclo da loja: a mediana do intervalo entre compras de quem repetiu.
@@ -1627,14 +1638,14 @@ app.get('/api/crm/cliente/:id', (req, res) => {
     || db.prepare('SELECT * FROM customers WHERE id = ?').get(id);
   if (!c) return res.status(404).json({ error: 'Cliente não encontrado.' });
 
-  const vendas = db.prepare(`SELECT id, code, total, payment_method, payment_status, created_at, seller_name
-    FROM sales WHERE customer_id = ? ORDER BY created_at DESC LIMIT 60`).all(id);
+  const vendas = db.prepare(`SELECT id, code, channel, total, payment_method, payment_status, created_at, seller_name
+    FROM sales WHERE customer_id = ? AND payment_status <> 'cancelado' ORDER BY created_at DESC LIMIT 60`).all(id);
   const itens = db.prepare(`SELECT si.name, si.qty, si.unit_price, s.created_at, s.code,
       COALESCE(p.brand,'') marca, COALESCE(v.variant_name,'') tamanho
     FROM sale_items si JOIN sales s ON s.id = si.sale_id
     LEFT JOIN variants v ON v.id = si.variant_id
     LEFT JOIN products p ON p.id = v.product_id
-    WHERE s.customer_id = ? AND s.payment_status IN ('pago','pendente')
+    WHERE s.customer_id = ? AND ${VENDA('s.')}
     ORDER BY s.created_at DESC LIMIT 120`).all(id);
   const conversas = db.prepare(`SELECT a.*, t.name vendedor FROM atendimentos a
     LEFT JOIN team_members t ON t.id = a.member_id
@@ -1652,7 +1663,7 @@ app.get('/api/crm/cliente/:id', (req, res) => {
   // Linha do tempo única: compra, conversa e anotação misturadas em ordem.
   const linha = [
     ...vendas.map((v) => ({ t: 'venda', quando: v.created_at, titulo: `${v.code} · ${brl(v.total)}`,
-      texto: `${v.payment_status === 'pendente' ? 'Fiado em aberto' : 'Pago'}${v.payment_method ? ' · ' + v.payment_method : ''}${v.seller_name ? ' · ' + v.seller_name : ''}`, ref: v.id })),
+      texto: `${v.payment_status !== 'pendente' ? 'Pago' : (v.channel === 'site' ? 'Aguardando o pagamento no site' : 'Fiado em aberto')}${v.payment_method ? ' · ' + v.payment_method : ''}${v.seller_name ? ' · ' + v.seller_name : ''}`, ref: v.id })),
     ...conversas.map((a) => ({ t: 'conversa', quando: a.created_at,
       titulo: (PIPE.find((p) => p.id === a.stage) || { label: a.stage }).label,
       texto: [a.querendo, a.motivo, a.vendedor].filter(Boolean).join(' · '), ref: a.id })),
@@ -2123,9 +2134,10 @@ function semearMapa() {
   const plano = [
     ['Descoberta', [['Anúncio', ''], ['Reels e orgânico', ''], ['Indicação', 'canal:indicacao']]],
     ['Perfil no Instagram', [['Visitas ao perfil', ''], ['Cliques na bio', '']]],
-    ['Conversa', [['Direct', 'canal:direct'], ['WhatsApp', 'canal:whatsapp'], ['Veio na loja', 'canal:loja']]],
+    ['Conversa', [['Direct', 'canal:direct'], ['WhatsApp', 'canal:whatsapp'], ['Site', 'canal:site'],
+      ['Veio na loja', 'canal:loja']]],
     ['Proposta', [['Mandou peça ou preço', 'etapa:proposta']]],
-    ['Venda', [['Fechou', 'etapa:vendido'], ['Pelo site', 'venda:site']]],
+    ['Venda', [['Fechou', 'etapa:vendido']]],
   ];
   db.transaction(() => {
     plano.forEach(([label, nos], i) => {
@@ -2160,8 +2172,30 @@ function numeroDaFonte(fonte, desdeISO, desdeDia) {
   return null;
 }
 
+// O desenho inicial punha "Pelo site" (vendas do site) na etapa Venda.
+// Venda do site não passa pela proposta, então a conta entre as etapas
+// estourava 100%. O site é um canal de contato, ao lado do WhatsApp.
+// Só mexe se o nó continua exatamente como foi criado — se o dono já
+// mexeu nele, fica como está.
+function ajustarMapaAntigo() {
+  const velho = db.prepare(`SELECT n.id FROM funnel_nodes n JOIN funnel_levels l ON l.id = n.level_id
+    WHERE l.label = 'Venda' AND n.label = 'Pelo site' AND n.fonte = 'venda:site'
+      AND n.valor IS NULL AND n.meta IS NULL AND COALESCE(n.nota,'') = ''`).get();
+  if (!velho) return;
+  const conversa = db.prepare("SELECT id FROM funnel_levels WHERE label = 'Conversa'").get();
+  db.transaction(() => {
+    db.prepare('DELETE FROM funnel_nodes WHERE id = ?').run(velho.id);
+    if (conversa && !db.prepare("SELECT 1 FROM funnel_nodes WHERE level_id = ? AND fonte = 'canal:site'").get(conversa.id)) {
+      const prox = db.prepare('SELECT COALESCE(MAX(ordem),-1)+1 n FROM funnel_nodes WHERE level_id = ?').get(conversa.id).n;
+      db.prepare(`INSERT INTO funnel_nodes (level_id, ordem, label, fonte, valor, meta, nota, created_at)
+        VALUES (?,?, 'Site', 'canal:site', NULL, NULL, '', ?)`).run(conversa.id, prox, now());
+    }
+  })();
+}
+
 app.get('/api/mapa', (req, res) => {
   semearMapa();
+  ajustarMapaAntigo();
   const dias = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
   const desdeISO = new Date(Date.now() - dias * 864e5).toISOString();
   const desdeDia = diaLocal(new Date(desdeISO));
@@ -2379,7 +2413,9 @@ app.get('/api/financial', (req, res) => {
     WHERE type='despesa' AND paid = 1 ${cond}`).get(...a).n;
   const agendada = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries
     WHERE type='despesa' AND paid = 0`).get().n;
-  const aReceber = db.prepare("SELECT COALESCE(SUM(total),0) n FROM sales WHERE payment_status='pendente'").get().n;
+  const aReceber = db.prepare(`SELECT COALESCE(SUM(total),0) n FROM sales WHERE ${FIADO()}`).get().n;
+  const pixPendente = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
+    WHERE ${PIX_PENDENTE} AND COALESCE(ns_status,'open') <> 'cancelled'`).get();
   const byMethod = db.prepare(`SELECT COALESCE(NULLIF(payment_method,''),'—') label, COUNT(*) n, COALESCE(SUM(total),0) total
     FROM sales WHERE payment_status='pago' ${cond} GROUP BY payment_method ORDER BY total DESC`).all(...a);
   const entries = db.prepare(`SELECT id, type, category, description, amount, ref, paid, due_date, created_at
@@ -2429,7 +2465,8 @@ app.get('/api/financial', (req, res) => {
     lucro: money(margemVendas - despesaSemMercadoria),
     margem_vendas: money(margemVendas), despesas_operacao: money(despesaSemMercadoria),
     anterior,
-    a_receber: money(aReceber), by_method: byMethod, entries,
+    a_receber: money(aReceber), pix_pendente: { n: pixPendente.n, t: money(pixPendente.t) },
+    by_method: byMethod, entries,
     por_categoria_receita: porCategoria('receita'), por_categoria_despesa: porCategoria('despesa'),
     por_origem: porOrigem, ultima_importacao: getSetting('last_orders_import'),
   });
@@ -2861,7 +2898,9 @@ app.get('/api/operacao', (req, res) => {
   const ativo = `COALESCE(ns_status,'open') <> 'cancelled' AND payment_status <> 'cancelado'`;
 
   const porCobrar = fila(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
-    WHERE payment_status='pendente' AND ${ativo}`);
+    WHERE ${FIADO()} AND ${ativo}`);
+  const aguardandoPix = fila(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
+    WHERE ${PIX_PENDENTE} AND ${ativo}`);
   const porEmbalar = fila(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
     WHERE channel='site' AND payment_status='pago' AND ${ativo} AND COALESCE(ns_shipping_type,'envio')='envio'
       AND COALESCE(ns_shipping_status,'') IN ('','unpacked','unfulfilled')`);
@@ -2878,6 +2917,7 @@ app.get('/api/operacao', (req, res) => {
   res.json({
     filas: {
       por_cobrar: { ...porCobrar, t: money(porCobrar.t) },
+      aguardando_pix: { ...aguardandoPix, t: money(aguardandoPix.t) },
       por_embalar: { ...porEmbalar, t: money(porEmbalar.t) },
       por_enviar: { ...porEnviar, t: money(porEnviar.t) },
       por_retirar: { ...porRetirar, t: money(porRetirar.t) },
@@ -2897,7 +2937,7 @@ app.get('/api/operacao', (req, res) => {
 app.get('/api/operacao/:fila', (req, res) => {
   const ativo = `COALESCE(ns_status,'open') <> 'cancelled' AND payment_status <> 'cancelado'`;
   const mapa = {
-    por_cobrar: `payment_status='pendente' AND ${ativo}`,
+    por_cobrar: `${FIADO()} AND ${ativo}`,
     por_embalar: `channel='site' AND payment_status='pago' AND ${ativo} AND COALESCE(ns_shipping_type,'envio')='envio' AND COALESCE(ns_shipping_status,'') IN ('','unpacked','unfulfilled')`,
     por_enviar: `channel='site' AND payment_status='pago' AND ${ativo} AND COALESCE(ns_shipping_type,'envio')='envio' AND COALESCE(ns_shipping_status,'') IN ('packed','ready','unshipped')`,
     por_retirar: `channel='site' AND payment_status='pago' AND ${ativo} AND ns_shipping_type='retirada' AND COALESCE(ns_shipping_status,'') NOT IN ('shipped','fulfilled','delivered')`,
