@@ -158,8 +158,16 @@ export async function listAllCategories() {
   return all;
 }
 
-// Define o estoque ABSOLUTO de uma variante (idempotente e seguro
-// contra corridas — enviamos o valor final, não um decremento).
+// Uma variante como ela está na loja agora (stock vem null quando a loja
+// não controla o estoque dela).
+export async function getVariant(productId, variantId) {
+  const { data } = await request('GET', `/products/${productId}/variants/${variantId}`);
+  return data;
+}
+
+// Define o estoque ABSOLUTO de uma variante. O valor tem que sair do que
+// a loja tem agora (getVariant) — nunca do número guardado aqui, que não
+// sabe das vendas do site. Quem calcula é o server/estoque.js.
 export async function setVariantStock(productId, variantId, stock) {
   const { data } = await request(
     'PUT',
@@ -170,6 +178,10 @@ export async function setVariantStock(productId, variantId, stock) {
 }
 
 // -------- Produtos (criar / atualizar na Nuvemshop) --------
+export async function getProduct(nuvemshopProductId) {
+  const { data } = await request('GET', `/products/${nuvemshopProductId}`);
+  return data; // inclui variants[] com o estoque atual da loja
+}
 export async function createProduct(payload) {
   const { data } = await request('POST', '/products', payload);
   return data; // inclui id e variants[] criados

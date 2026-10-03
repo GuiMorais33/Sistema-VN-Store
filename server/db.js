@@ -433,6 +433,20 @@ ensureColumn('variants', 'on_hand', 'on_hand INTEGER NOT NULL DEFAULT 0');
 // Quantas peças da linha saíram por encomenda (não estavam aqui).
 ensureColumn('sale_items', 'encomenda', 'encomenda INTEGER NOT NULL DEFAULT 0');
 
+// ---- Estoque a caminho da loja ----
+// O site também vende, e essa baixa só chega aqui na sincronização. Por
+// isso o número daqui pode estar velho, e mandá-lo para a loja desfaria
+// a venda do site. O que vai para a loja é a DIFERENÇA, somada ao que a
+// loja tem na hora:
+//   ns_delta  = peças que entraram/saíram aqui e a loja ainda não sabe
+//   ns_fixar  = 1 quando o número foi digitado à mão (contagem) e deve
+//               valer na loja como está
+//   ns_versao = muda a cada contagem à mão; impede que um envio antigo
+//               apague uma contagem feita enquanto ele estava no ar
+ensureColumn('variants', 'ns_delta', 'ns_delta INTEGER NOT NULL DEFAULT 0');
+ensureColumn('variants', 'ns_fixar', 'ns_fixar INTEGER NOT NULL DEFAULT 0');
+ensureColumn('variants', 'ns_versao', 'ns_versao INTEGER NOT NULL DEFAULT 0');
+
 // ---- Despesa a pagar ----
 // Uma despesa pode já ter saído do caixa ou estar só agendada. Sem isso
 // o "sobrou" do mês contaria dinheiro que ainda não saiu.

@@ -705,6 +705,7 @@ document.getElementById('lancar').onclick=async()=>{
         paid:pago==='1',due_date:document.getElementById('venc').value||null,
         note:document.getElementById('obs').value.trim()})});
     const sinc=r.stock_synced?' · estoque atualizado na loja'
+      :r.stock_na_fila?' · estoque sobe para a loja na próxima rodada'
       :(r.notes&&r.notes.length?' · estoque não sincronizou':'');
     toast(`${r.code} · ${BRL(r.total)}`,
       `${r.pecas} peça(s) em ${r.itens} item(ns)${r.fornecedor?' · '+r.fornecedor:''}`

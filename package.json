@@ -6,7 +6,8 @@
   "description": "Sistema vivo com time de agentes autônomos para a VN Store — PDV próprio + gestão integrada à Nuvemshop.",
   "scripts": {
     "start": "node --env-file-if-exists=.env server/index.js",
-    "dev": "node --env-file-if-exists=.env --watch server/index.js"
+    "dev": "node --env-file-if-exists=.env --watch server/index.js",
+    "test": "node --test"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",

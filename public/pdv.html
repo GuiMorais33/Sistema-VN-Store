@@ -377,7 +377,7 @@ async function finalizar(){
     const vend=r.vendedor?' · '+r.vendedor:'';
     const sit=r.payment_status==='pendente'?'Fiado — foi para Contas a receber':'Pago';
     // Só diz que mexeu no site quando mexeu: sob encomenda mantém a grade de propósito.
-    const sinc=r.mode==='demo'?'':(!r.stock_synced?' · estoque não sincronizou'
+    const sinc=r.mode==='demo'?'':(!r.stock_synced?(r.stock_na_fila?' · estoque sobe para a loja na próxima rodada':' · estoque não sincronizou')
       :(r.stock_enviados>0?' · estoque atualizado na loja':' · grade do site mantida'));
     const enc=(r.encomendas&&r.encomendas.length)
       ? `<br><b style="color:var(--warn)">Pegar no fornecedor hoje:</b> ${r.encomendas.join(', ')}` : '';

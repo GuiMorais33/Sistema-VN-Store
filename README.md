@@ -24,6 +24,7 @@ assim que você preenche o `.env` com as credenciais da Nuvemshop.
 npm install
 npm start
 # abre em http://localhost:3000  (PDV em /pdv)
+npm test   # testes (sobem o sistema contra uma Nuvemshop de mentira)
 ```
 
 ### Conectar na sua loja (modo ao vivo)
@@ -39,6 +40,7 @@ server/
   index.js      API (Express) + páginas + regra de negócio da venda
   db.js         Banco SQLite — vendas, estoque, financeiro, movimentações
   nuvemshop.js  Cliente da API da Nuvemshop (auth + estoque)
+  estoque.js    Como o estoque daqui chega na loja sem desfazer as vendas do site
 public/
   index.html    Sala de Comando (painel ao vivo)
   pdv.html      PDV

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import db, { seedDemoIfEmpty, getSetting, setSetting, seedCategories, categoryId, migrateOldCategories } from './db.js';
 import * as nuvem from './nuvemshop.js';
+import { naFila, enviarEstoque, enviarPendentes, gravarEnviado, contagemAMao } from './estoque.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, '..', 'public');
@@ -88,6 +89,21 @@ const nameOf = (obj) => {
 // "quanto vale" usa ESTE número, nunca a grade do site.
 // Exige que a consulta tenha "v" (variants) e "p" (products) no FROM.
 const REAL = `CASE WHEN p.on_demand = 1 THEN COALESCE(v.on_hand,0) ELSE v.stock END`;
+
+// Sobe para a loja o que estas linhas (de venda ou de entrada) mudaram
+// no estoque, e resume o resultado para a tela. Como o número é
+// calculado está em server/estoque.js.
+async function subirEstoque(linhas) {
+  const nome = new Map(linhas.map((l) => [l.v.id, `${l.v.product_name} ${l.v.variant_name}`]));
+  const r = await enviarEstoque([...nome.keys()]);
+  const falhas = r.filter((x) => x.erro);
+  return {
+    ok: !falhas.length,
+    enviados: r.filter((x) => x.enviado).length,
+    notas: falhas.map((x) => `${nome.get(x.id)}: ${x.erro}${x.naFila ? ' (vai de novo na próxima rodada)' : ''}`),
+    naFila: falhas.some((x) => x.naFila),
+  };
+}
 
 if (seedCategories()) console.log('› Plano de contas padrão criado.');
 { const m = migrateOldCategories(); if (m) console.log(`› ${m} categoria(s) antiga(s) traduzida(s) para o plano de contas.`); }
@@ -265,14 +281,22 @@ app.put('/api/catalog/:id', async (req, res) => {
         b.image_url ?? p.image_url, b.weight !== undefined ? (b.weight ? Number(b.weight) : null) : p.weight,
         sobEncomenda, b.published === false ? 0 : 1, ts, p.id);
     if (Array.isArray(b.variants)) {
+      // Estoque que você mudou no formulário é contagem: vale na loja como
+      // está. O que não mudou não vai — o número da tela pode estar sem as
+      // vendas do site, e mandá-lo de volta desfaria essas vendas.
+      const estoqueAntes = new Map(db.prepare('SELECT id, stock FROM variants WHERE product_id = ?')
+        .all(p.id).map((r) => [r.id, r.stock]));
       // A lista recebida é a lista COMPLETA de variações do produto.
       const upd = db.prepare('UPDATE variants SET variant_name=?, sku=?, price=?, cost=?, stock=?, on_hand=?, product_name=?, updated_at=? WHERE id=? AND product_id=?');
       const insV = db.prepare(`INSERT INTO variants (product_id, product_name, variant_name, sku, price, cost, stock, on_hand, stock_management, updated_at) VALUES (?,?,?,?,?,?,?,?,1,?)`);
       const mantidos = new Set();
       for (const v of b.variants) {
         if (v.id) {
-          upd.run(v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost), parseInt(v.stock, 10) || 0,
+          const estoque = parseInt(v.stock, 10) || 0;
+          upd.run(v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost), estoque,
             emMaos(v, sobEncomenda), b.name ?? p.name, ts, v.id, p.id);
+          const antes = estoqueAntes.get(Number(v.id));
+          if (antes !== undefined && antes !== estoque) contagemAMao(v.id);
           mantidos.add(Number(v.id));
         } else {
           const novo = insV.run(p.id, b.name ?? p.name, v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost),
@@ -347,19 +371,14 @@ async function pushProduct(productId) {
     //  - stock_management:true garante controle de estoque (pra sincronizar);
     //  - weight alimenta o cálculo de frete no checkout;
     //  - sku é OPCIONAL: só enviamos se estiver preenchido (você não usa SKU).
-    const mkVariant = (v, withValues) => {
-      const o = { price: String(v.price), stock: parseInt(v.stock, 10) || 0, stock_management: true };
+    const mkVariant = (v, estoque) => {
+      const o = { price: String(v.price), stock: estoque, stock_management: true };
       if (p.weight > 0) o.weight = String(p.weight);
       if (v.sku && String(v.sku).trim()) o.sku = String(v.sku).trim();
-      if (withValues) o.values = [{ pt: v.variant_name }];
+      if (hasSizes) o.values = [{ pt: v.variant_name }];
       return o;
     };
-    if (hasSizes) {
-      payload.attributes = [{ pt: 'Tamanho' }]; // 1 eixo de variação (ex.: P/M/G)
-      payload.variants = variants.map((v) => mkVariant(v, true));
-    } else {
-      payload.variants = variants.map((v) => mkVariant(v, false));
-    }
+    if (hasSizes) payload.attributes = [{ pt: 'Tamanho' }]; // 1 eixo de variação (ex.: P/M/G)
     // Categorias na loja. A loja organiza assim:
     //   MARCAS > Lacoste        (a marca)
     //   Camisetas               (a categoria do produto)
@@ -392,17 +411,52 @@ async function pushProduct(productId) {
       } catch (e) { /* segue sem categoria se falhar */ }
     }
 
-    let result;
-    if (p.nuvemshop_product_id) result = await nuvem.updateProduct(p.nuvemshop_product_id, payload);
-    else result = await nuvem.createProduct(payload);
+    // Da leitura do estoque da loja até gravar, nenhuma venda pode mandar
+    // estoque da mesma peça — por isso vai na fila (server/estoque.js).
+    const avisos = [];
+    const result = await naFila(async () => {
+      const vs = db.prepare('SELECT * FROM variants WHERE product_id = ? ORDER BY id').all(productId);
+      // O estoque que vai junto é o da loja AGORA mais o que mudou aqui.
+      // O número daqui pode não ter as vendas do site, e mandá-lo de volta
+      // desfaria essas vendas. Contagem à mão e peça nova vão como estão.
+      const naLoja = new Map();
+      if (p.nuvemshop_product_id) {
+        const atual = await nuvem.getProduct(p.nuvemshop_product_id);
+        for (const rv of (atual && atual.variants) || []) naLoja.set(String(rv.id), rv.stock);
+      }
+      const alvos = vs.map((v) => {
+        const r = v.nuvemshop_variant_id ? naLoja.get(String(v.nuvemshop_variant_id)) : null;
+        if (v.ns_fixar || r == null) return Math.max(0, parseInt(v.stock, 10) || 0);
+        return Math.max(0, (parseInt(r, 10) || 0) + v.ns_delta);
+      });
+      payload.variants = vs.map((v, i) => mkVariant(v, alvos[i]));
 
-    // Grava os IDs da Nuvemshop de volta (produto e variações, por ordem).
-    const ts = now();
-    db.prepare('UPDATE products SET nuvemshop_product_id=?, synced_nuvemshop=1, sync_note=NULL, updated_at=? WHERE id=?').run(String(result.id), ts, productId);
-    if (Array.isArray(result.variants)) {
+      const res = p.nuvemshop_product_id
+        ? await nuvem.updateProduct(p.nuvemshop_product_id, payload)
+        : await nuvem.createProduct(payload);
+
+      // Grava os IDs da Nuvemshop de volta. Variação que já tinha ID casa
+      // pelo ID; as novas pegam, em ordem, as que sobraram na resposta.
+      db.prepare('UPDATE products SET nuvemshop_product_id=?, synced_nuvemshop=1, sync_note=NULL, updated_at=? WHERE id=?').run(String(res.id), now(), productId);
+      const lista = Array.isArray(res.variants) ? res.variants : [];
+      const porId = new Map(lista.map((rv) => [String(rv.id), rv]));
+      const par = vs.map((v) => (v.nuvemshop_variant_id && porId.get(String(v.nuvemshop_variant_id))) || null);
+      const sobra = lista.filter((rv) => !par.includes(rv));
       const updIds = db.prepare('UPDATE variants SET nuvemshop_product_id=?, nuvemshop_variant_id=? WHERE id=?');
-      variants.forEach((v, i) => { const rv = result.variants[i]; if (rv) updIds.run(String(result.id), String(rv.id), v.id); });
-    }
+      for (const [i, v] of vs.entries()) {
+        const rv = par[i] || sobra.shift();
+        if (!rv) continue;
+        updIds.run(String(res.id), String(rv.id), v.id);
+        // Se a loja não aplicou o estoque mandado junto com o produto,
+        // manda direto na variação.
+        if (rv.stock != null && (parseInt(rv.stock, 10) || 0) !== alvos[i]) {
+          try { await nuvem.setVariantStock(res.id, rv.id, alvos[i]); }
+          catch (err) { avisos.push(`${v.variant_name}: ${err.message}`); continue; }   // fica na fila
+        }
+        gravarEnviado(v, alvos[i], p.on_demand);
+      }
+      return res;
+    });
     // Foto: só sobe quando MUDOU. Antes, cada edição adicionava outra
     // cópia da mesma foto no produto da loja.
     if (p.image_url && p.image_url !== p.image_sent) {
@@ -422,7 +476,8 @@ async function pushProduct(productId) {
       } catch (e) { /* foto é best-effort: o produto já foi publicado */ }
     }
 
-    return { mode: 'live', ok: true, nuvemshop_product_id: String(result.id) };
+    return { mode: 'live', ok: true, nuvemshop_product_id: String(result.id),
+      ...(avisos.length ? { note: `Estoque vai de novo na próxima rodada — ${avisos.join(' | ')}` } : {}) };
   } catch (err) {
     db.prepare('UPDATE products SET synced_nuvemshop=0, sync_note=? WHERE id=?').run(err.message, productId);
     return { mode: 'live', ok: false, note: err.message };
@@ -436,6 +491,9 @@ app.post('/api/sync', async (req, res) => {
   const onlyAvailable = b.only_available !== false;   // padrão: só o que tem unidade
   const publishedOnly = b.published_only !== false;   // padrão: só o que está no ar
   try {
+    // Primeiro sobe o que ficou na fila daqui (venda feita com a loja fora
+    // do ar, etc.); só depois puxa o número da loja.
+    const fila = await enviarPendentes();
     // A loja organiza a MARCA como subcategoria de "MARCAS" (o campo
     // brand da API não é usado). Montamos o índice a partir das
     // categorias reais para espelhar exatamente o site.
@@ -467,12 +525,15 @@ app.post('/api/sync', async (req, res) => {
         synced_nuvemshop=1, updated_at=excluded.updated_at`);
     const getP = db.prepare('SELECT id FROM products WHERE nuvemshop_product_id = ?');
     // O custo é NOSSO: nunca sobrescrever no sync.
+    // Estoque: o da loja, mais o que daqui ainda não conseguiu subir. Uma
+    // contagem à mão que ainda não subiu continua valendo.
     const upV = db.prepare(`INSERT INTO variants (product_id, nuvemshop_product_id, nuvemshop_variant_id, product_name, variant_name, sku, price, cost, stock, stock_management, updated_at)
       VALUES (@product_id,@pid,@vid,@pname,@vname,@sku,@price,0,@stock,@sm,@now)
       ON CONFLICT(nuvemshop_variant_id) DO UPDATE SET
         product_id=excluded.product_id, product_name=excluded.product_name,
         variant_name=excluded.variant_name, sku=excluded.sku, price=excluded.price,
-        stock=excluded.stock, stock_management=excluded.stock_management, updated_at=excluded.updated_at`);
+        stock=CASE WHEN ns_fixar = 1 THEN stock ELSE MAX(0, excluded.stock + ns_delta) END,
+        stock_management=excluded.stock_management, updated_at=excluded.updated_at`);
 
     let variantCount = 0;
     const brands = new Set(), cats = new Set();
@@ -530,6 +591,7 @@ app.post('/api/sync', async (req, res) => {
       skipped_no_stock: skipped, scanned: raw.length,
       brands: brands.size, categories: cats.size,
       only_available: onlyAvailable, published_only: publishedOnly,
+      estoque_enviado: fila.enviados, estoque_na_fila: fila.falhas,
     });
   } catch (err) {
     console.error('Sync falhou:', err.message);
@@ -680,7 +742,7 @@ app.post('/api/purchases', async (req, res) => {
     // Em estoque próprio "em mãos" é o próprio estoque — mantém os dois
     // iguais, senão o número deriva e mente se o produto virar encomenda.
     const updProprio = db.prepare(`UPDATE variants SET stock = stock + ?, on_hand = stock + ?,
-      cost = ?, updated_at = ? WHERE id = ?`);
+      ns_delta = ns_delta + ?, cost = ?, updated_at = ? WHERE id = ?`);
     const updEncomenda = db.prepare(`UPDATE variants SET on_hand = COALESCE(on_hand,0) + ?,
       cost = ?, updated_at = ? WHERE id = ?`);
     const insMove = db.prepare('INSERT INTO stock_movements (variant_id, delta, reason, ref, created_at) VALUES (?,?,?,?,?)');
@@ -688,7 +750,7 @@ app.post('/api/purchases', async (req, res) => {
     for (const l of linhas) {
       insItem.run(id, l.v.id, `${l.v.product_name} ${l.v.variant_name}`, l.qty, l.custo, l.total);
       if (l.v.on_demand) updEncomenda.run(l.qty, l.custo, ts, l.v.id);
-      else updProprio.run(l.qty, l.qty, l.custo, ts, l.v.id);
+      else updProprio.run(l.qty, l.qty, l.qty, l.custo, ts, l.v.id);
       insMove.run(l.v.id, l.qty, 'entrada', code, ts);
     }
 
@@ -702,16 +764,11 @@ app.post('/api/purchases', async (req, res) => {
     return id;
   })();
 
-  // Sobe o novo estoque para a loja (só produto de estoque próprio).
-  let sincOk = true; const notas = [];
-  if (isLive()) {
-    for (const l of linhas) {
-      if (l.v.on_demand || !l.v.stock_management) continue;
-      if (!l.v.nuvemshop_product_id || !l.v.nuvemshop_variant_id) continue;
-      try { await nuvem.setVariantStock(l.v.nuvemshop_product_id, l.v.nuvemshop_variant_id, l.v.stock + l.qty); }
-      catch (err) { sincOk = false; notas.push(`${l.v.product_name} ${l.v.variant_name}: ${err.message}`); }
-    }
-  } else { sincOk = false; notas.push('Modo demonstração — estoque não enviado à Nuvemshop.'); }
+  // Sobe o novo estoque para a loja (só produto de estoque próprio): o
+  // estoque de lá mais o que chegou.
+  const { ok: sincOk, notas, naFila: estoqueNaFila } = isLive()
+    ? await subirEstoque(linhas.filter((l) => !l.v.on_demand && l.v.stock_management))
+    : { ok: false, notas: ['Modo demonstração — estoque não enviado à Nuvemshop.'], naFila: false };
   db.prepare('UPDATE purchases SET synced_nuvemshop = ?, sync_note = ? WHERE id = ?')
     .run(sincOk && isLive() ? 1 : 0, notas.join(' | ') || null, compraId);
 
@@ -719,7 +776,7 @@ app.post('/api/purchases', async (req, res) => {
     ok: true, code, total, itens: linhas.length,
     pecas: linhas.reduce((s, l) => s + l.qty, 0),
     fornecedor: fornNome, paid: !!pago,
-    stock_synced: sincOk && isLive(), notes: notas,
+    stock_synced: sincOk && isLive(), notes: notas, stock_na_fila: estoqueNaFila,
   });
 });
 
@@ -889,7 +946,8 @@ app.post('/api/sales', async (req, res) => {
     // Grade do site e par em mãos baixam separados: o site perde a
     // numeração vendida, o estoque real só perde se o par estava aqui.
     // Estoque próprio: os dois números andam juntos (em mãos = estoque).
-    const updStock = db.prepare('UPDATE variants SET stock = stock - ?, on_hand = MAX(0, stock - ?), updated_at = ? WHERE id = ?');
+    // A diferença também vai para a fila da loja (server/estoque.js).
+    const updStock = db.prepare('UPDATE variants SET stock = stock - ?, on_hand = MAX(0, stock - ?), ns_delta = ns_delta - ?, updated_at = ? WHERE id = ?');
     const updHand = db.prepare('UPDATE variants SET on_hand = MAX(0, COALESCE(on_hand,0) - ?), updated_at = ? WHERE id = ?');
     const insMove = db.prepare('INSERT INTO stock_movements (variant_id, delta, reason, ref, created_at) VALUES (?,?,?,?,?)');
     const insRem = db.prepare(`INSERT INTO reminders (title, notes, due_date, kind, customer_id, created_at)
@@ -902,7 +960,7 @@ app.post('/api/sales', async (req, res) => {
         updHand.run(l.qty, ts, l.v.id);
         insMove.run(l.v.id, -l.qty, 'venda_pdv', code, ts);
       } else if (l.v.stock_management) {
-        updStock.run(l.qty, l.qty, ts, l.v.id); insMove.run(l.v.id, -l.qty, 'venda_pdv', code, ts);
+        updStock.run(l.qty, l.qty, l.qty, ts, l.v.id); insMove.run(l.v.id, -l.qty, 'venda_pdv', code, ts);
       }
       // Vendeu numeração que não tinha: vira lembrete de buscar hoje.
       if (l.encomendar > 0) {
@@ -936,17 +994,12 @@ app.post('/api/sales', async (req, res) => {
     return id;
   })();
 
-  // Empurra o novo estoque para a Nuvemshop.
-  let syncedAll = true; let enviados = 0; const syncNotes = [];
-  if (isLive()) {
-    for (const l of lines) {
-      if (!l.v.stock_management || !l.v.nuvemshop_product_id || !l.v.nuvemshop_variant_id) continue;
-      if (l.v.on_demand) continue;   // a grade do site fica como está
-      try { await nuvem.setVariantStock(l.v.nuvemshop_product_id, l.v.nuvemshop_variant_id, Math.max(0, l.v.stock - l.qty)); enviados += 1; }
-      catch (err) { syncedAll = false; syncNotes.push(`${l.v.product_name} ${l.v.variant_name}: ${err.message}`); }
-    }
-  } else { syncedAll = false; syncNotes.push('Modo demonstração — estoque não enviado à Nuvemshop.'); }
+  // Manda a baixa para a Nuvemshop: o estoque de lá menos o que saiu
+  // aqui. Sob encomenda a grade do site fica como está.
   const live = isLive();
+  const { ok: syncedAll, enviados, notas: syncNotes, naFila: stockNaFila } = live
+    ? await subirEstoque(lines.filter((l) => l.v.stock_management && !l.v.on_demand))
+    : { ok: false, enviados: 0, notas: ['Modo demonstração — estoque não enviado à Nuvemshop.'], naFila: false };
   db.prepare('UPDATE sales SET synced_nuvemshop=?, sync_note=? WHERE id=?').run(syncedAll && live ? 1 : 0, syncNotes.join(' | ') || null, saleId);
 
   const encomendas = lines.filter((l) => l.encomendar > 0)
@@ -957,6 +1010,7 @@ app.post('/api/sales', async (req, res) => {
     mode: live ? 'live' : 'demo', stock_synced: syncedAll && live, notes: syncNotes,
     // quantas variações tiveram o estoque mexido no site (sob encomenda não mexe)
     stock_enviados: enviados,
+    stock_na_fila: stockNaFila,   // a loja falhou agora; vai de novo sozinho
     encomendas,   // o PDV avisa na tela e o lembrete já foi criado
   });
 });
@@ -2820,6 +2874,10 @@ async function tickAutomatico(motivo = 'automático') {
   if (sincronizando || !isLive()) return;
   sincronizando = true;
   try {
+    // Estoque que não subiu na hora da venda (loja fora do ar) vai agora.
+    const e = await enviarPendentes();
+    if (e.enviados) console.log(`› Estoque: ${e.enviados} variação(ões) acertada(s) na loja.`);
+    if (e.falhas) console.error(`Estoque: ${e.falhas} variação(ões) ainda na fila — ${e.erro}`);
     const r = await sincronizarPedidos();
     if (r && !r.skipped && (r.novos || r.lancados)) {
       console.log(`› Pedidos do site (${motivo}): ${r.novos} novo(s), ${r.lancados} lançado(s) no caixa.`);
