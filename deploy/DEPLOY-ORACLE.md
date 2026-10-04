@@ -57,6 +57,26 @@ Abra esse endereço no navegador ou no celular, entre com a senha — e a VN Sto
 - **Conectar a Nuvemshop**: com o HTTPS pronto, criamos o app no Portal de Parceiros,
   colocamos o token no `.env` do servidor e publicamos 1 produto de teste.
 
+## Atualizar o sistema (quando sair versão nova)
+Do seu computador, entre na VM (a chave é o arquivo `.key` que você baixou no passo 2; o IP
+está no painel da Oracle, em *Compute → Instances*, ou no começo do seu endereço `….sslip.io`):
+```bash
+ssh -i CAMINHO_DA_SUA_CHAVE.key ubuntu@SEU_IP_PUBLICO
+```
+Já dentro da VM:
+```bash
+cd ~/Sistema-VN-Store
+sudo systemctl stop vnstore                                   # para o sistema
+mkdir -p ~/backup-$(date +%F) && cp vnstore.db* ~/backup-$(date +%F)/   # cópia dos dados
+git pull --ff-only                                            # baixa a versão nova
+npm install --omit=dev                                        # pacotes (se mudaram)
+sudo systemctl start vnstore                                  # sobe de novo
+sudo systemctl --no-pager status vnstore | head -n 5          # tem que dizer "active (running)"
+```
+Se der erro de permissão da chave (`UNPROTECTED PRIVATE KEY FILE`): no Mac/Linux rode
+`chmod 400 CAMINHO_DA_SUA_CHAVE.key`; no Windows (PowerShell),
+`icacls CAMINHO_DA_SUA_CHAVE.key /inheritance:r /grant:r "$($env:USERNAME):R"`.
+
 ## Comandos úteis (dentro da VM)
 ```bash
 sudo systemctl status vnstore     # ver se está rodando
