@@ -104,7 +104,7 @@ async function load(){
      link:'/pdv',linkTxt:'Abrir PDV',meta:'tempo real'},
     {nome:'Estoque',fn:'Inventário & reposição',ico:'estoque',tone:d.low_stock?'warn':'brand',
      estado:d.low_stock?'Atenção':'Em dia',pill:d.low_stock?'demo':'ok',k:'Situação',
-     txt:d.low_stock?`<b>${d.low_stock}</b> item(ns) com 4 unidades ou menos. Vale repor os campeões.`:'Estoque saudável em todas as variações.',
+     txt:d.low_stock?`<b>${d.low_stock}</b> produto(s) que estão vendendo têm 2 peças ou menos. Vale repor.`:'Nenhum produto que vende está acabando.',
      link:'/produtos',linkTxt:'Ver estoque',meta:BRL(d.stock_value_cost)+' a custo'},
     {nome:'Financeiro',fn:'Caixa & margem',ico:'financeiro',tone:'brand',estado:'Ativo',pill:'live',k:'Hoje',
      txt:`Faturamento <b>${BRL(d.revenue_today)}</b> com margem de <b>${d.margin_pct}%</b>. Toda venda entra sozinha no caixa.`,
@@ -139,7 +139,7 @@ async function load(){
   else p.push('Sem vendas hoje ainda.');
   if(d.receivable_count>0)p.push(`<b class="hl">${BRL(d.receivable_total)}</b> em fiado pra receber.`);
   if(R.atrasados>0)p.push(`<b>${R.atrasados}</b> lembrete(s) atrasado(s).`);
-  if(d.low_stock>0)p.push(`<b>${d.low_stock}</b> item(ns) perto da ruptura.`);
+  if(d.low_stock>0)p.push(`<b>${d.low_stock}</b> produto(s) vendendo e acabando.`);
   document.getElementById('msg').innerHTML='Fala, chefe. '+p.join(' ')+' O resto do time está no aguardo pra você acionar.';
 }
 load();

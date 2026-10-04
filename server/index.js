@@ -92,7 +92,27 @@ const SQL_VENDA = VENDA();
 // Pix ou boleto pendente do site é outra coisa — o cliente ainda não levou
 // nada, e muitas vezes nunca paga. Não entra em "a receber" nem em "deve".
 const FIADO = (a = '') => `${a}payment_status = 'pendente' AND ${a}channel <> 'site'`;
-const PIX_PENDENTE = `payment_status = 'pendente' AND channel = 'site'`;
+// Pix e boleto vencem em horas ou dias. Pedido do site "pendente" há mais
+// de uma semana é pagamento abandonado: não entra em "aguardando pix" nem
+// no que está por receber. (Se pagar depois, a leitura da loja traz.)
+const PIX_VALE_DIAS = 7;
+const desdeDias = (d) => new Date(Date.now() - d * 864e5).toISOString();
+const PIX_PENDENTE = () => `payment_status = 'pendente' AND channel = 'site' AND created_at >= '${desdeDias(PIX_VALE_DIAS)}'`;
+// A leitura automática relê os pedidos do site destes últimos dias. Pedido
+// mais velho não tem mais o status atualizado: fica fora das filas de
+// trabalho (por embalar, enviar, retirar), senão ficaria lá para sempre.
+const JANELA_PEDIDOS_DIAS = 45;
+const NA_JANELA = () => `created_at >= '${desdeDias(JANELA_PEDIDOS_DIAS)}'`;
+// "Acabando", para roupa: cada tamanho tem 1 ou 2 peças, então olhar
+// tamanho por tamanho marca a loja inteira. O que importa é o produto que
+// está VENDENDO e já tem pouca peça no total (somando as numerações).
+const ACABANDO_PECAS = 2;
+const ACABANDO_DIAS = 30;
+const acabando = (p) => !p.on_demand && p.vendidas > 0 && p.pecas <= ACABANDO_PECAS;
+// Peças vendidas do produto "p" desde a data do parâmetro.
+const SQL_VENDIDAS = `(SELECT COALESCE(SUM(i.qty),0) FROM sale_items i
+    JOIN sales s ON s.id = i.sale_id JOIN variants vv ON vv.id = i.variant_id
+   WHERE vv.product_id = p.id AND s.created_at >= ? AND ${VENDA('s.')})`;
 // Diferença entre o relógio da loja e o UTC, para o SQLite agrupar por dia local.
 const OFFSET_SQL = () => `${-new Date().getTimezoneOffset()} minutes`;
 const nameOf = (obj) => {
@@ -180,11 +200,13 @@ app.get('/api/catalog', (req, res) => {
       COALESCE(SUM(CASE WHEN p.on_demand = 1 THEN MAX(v.stock - COALESCE(v.on_hand,0), 0) ELSE 0 END),0) AS enc_stock,
       COALESCE(SUM(${REAL} * v.cost),0) AS stock_value_cost,
       COALESCE(MIN(v.price),0) AS min_price,
-      COALESCE(MAX(v.price),0) AS max_price
+      COALESCE(MAX(v.price),0) AS max_price,
+      ${SQL_VENDIDAS} AS vendidas_30d
     FROM products p LEFT JOIN variants v ON v.product_id = p.id
     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
     GROUP BY p.id ORDER BY p.name
-  `).all(...args);
+  `).all(desdeDias(ACABANDO_DIAS), ...args);
+  for (const r of rows) r.acabando = acabando({ on_demand: r.on_demand, vendidas: r.vendidas_30d, pecas: r.total_stock });
   res.json(rows);
 });
 
@@ -226,7 +248,7 @@ app.get('/api/catalog/summary', (req, res) => {
       COALESCE(SUM((i.qty - i.encomenda) * i.unit_price),0) AS valor_real,
       COALESCE(SUM(i.encomenda * i.unit_price),0) AS valor_encomenda
     FROM sale_items i JOIN sales s ON s.id = i.sale_id
-    WHERE s.created_at >= ? AND s.payment_status <> 'cancelado'`).get(desde);
+    WHERE s.created_at >= ? AND ${VENDA('s.')}`).get(desde);
   const byCategory = db.prepare(`
     SELECT COALESCE(NULLIF(p.category,''),'(sem categoria)') AS label,
            COUNT(DISTINCT p.id) AS products,
@@ -332,6 +354,7 @@ app.put('/api/catalog/:id', async (req, res) => {
       }
     }
   })();
+  preencherCustosQueFaltavam();   // o custo pode ter sido preenchido agora
   const sync = await pushProduct(p.id);
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(p.id);
   product.variants = db.prepare('SELECT * FROM variants WHERE product_id = ?').all(p.id);
@@ -682,9 +705,10 @@ app.post('/api/custos', (req, res) => {
       if (r.changes) n += r.changes; else ignorados += 1;
     }
   })();
+  const vendasComCusto = preencherCustosQueFaltavam();
   const resumo = db.prepare(`SELECT COUNT(*) total,
     SUM(CASE WHEN COALESCE(cost,0) <= 0 THEN 1 ELSE 0 END) sem_custo FROM variants`).get();
-  res.json({ ok: true, salvos: n, ignorados, resumo });
+  res.json({ ok: true, salvos: n, ignorados, resumo, vendas_com_custo: vendasComCusto });
 });
 
 // ==================== FORNECEDORES ====================
@@ -781,6 +805,7 @@ app.post('/api/purchases', async (req, res) => {
     db.prepare('UPDATE purchases SET fin_posted = 1 WHERE id = ?').run(id);
     return id;
   })();
+  preencherCustosQueFaltavam();   // a entrada grava o custo da peça
 
   // Sobe o novo estoque para a loja (só produto de estoque próprio): o
   // estoque de lá mais o que chegou.
@@ -1063,16 +1088,19 @@ app.get('/api/dashboard', (req, res) => {
     FROM sales WHERE created_at >= ? AND ${SQL_VENDA}`).get(iso);
   const ticket = today.orders > 0 ? money(today.revenue / today.orders) : 0;
   const marginPct = today.revenue > 0 ? Math.round((today.margin / today.revenue) * 100) : 0;
-  // "Acabando" olha o que existe de verdade. Produto sob encomenda fica
-  // de fora: a grade do site não é estoque, e repor é com o fornecedor.
-  const BAIXO = `FROM variants v JOIN products p ON p.id = v.product_id
-    WHERE v.stock_management = 1 AND p.on_demand = 0 AND v.stock <= 4`;
-  const lowStock = db.prepare(`SELECT COUNT(*) AS n ${BAIXO}`).get().n;
+  // "Acabando": produto que vende e já tem pouca peça (regra no topo).
+  // Sob encomenda fica de fora: a grade do site não é estoque.
+  const acabandoLista = db.prepare(`SELECT p.name, SUM(v.stock) pecas, ${SQL_VENDIDAS} vendidas
+    FROM products p JOIN variants v ON v.product_id = p.id
+    WHERE p.on_demand = 0 AND v.stock_management = 1
+    GROUP BY p.id HAVING vendidas > 0 AND pecas <= ?
+    ORDER BY vendidas DESC, pecas ASC`).all(desdeDias(ACABANDO_DIAS), ACABANDO_PECAS);
   const recv = db.prepare(`SELECT COALESCE(SUM(total),0) AS total, COUNT(*) AS n FROM sales WHERE ${FIADO()}`).get();
   const stockVal = db.prepare(`SELECT COALESCE(SUM(${REAL} * v.cost),0) AS v
     FROM variants v LEFT JOIN products p ON p.id = v.product_id WHERE v.stock_management = 1`).get().v;
   const recent = db.prepare('SELECT code, customer_name, payment_method, payment_status, total, created_at, synced_nuvemshop FROM sales ORDER BY id DESC LIMIT 8').all();
-  const lowList = db.prepare(`SELECT v.product_name, v.variant_name, v.stock ${BAIXO} ORDER BY v.stock ASC LIMIT 8`).all();
+  const lowList = acabandoLista.slice(0, 8).map((a) => ({
+    product_name: a.name, variant_name: `vendeu ${a.vendidas} em ${ACABANDO_DIAS} dias`, stock: a.pecas }));
   const pendingList = db.prepare(`SELECT id, code, customer_name, total, created_at FROM sales WHERE ${FIADO()} ORDER BY created_at ASC LIMIT 8`).all();
   // Lembretes: o que vence hoje ou já passou
   const hojeStr = diaLocal();
@@ -1092,7 +1120,7 @@ app.get('/api/dashboard', (req, res) => {
     mode: isLive() ? 'live' : 'demo',
     reminders: remResumo, reminders_list: remLista, por_origem_hoje: origemHoje,
     revenue_today: money(today.revenue), orders_today: today.orders, ticket, margin_pct: marginPct,
-    low_stock: lowStock, stock_value_cost: money(stockVal),
+    low_stock: acabandoLista.length, stock_value_cost: money(stockVal),
     receivable_total: money(recv.total), receivable_count: recv.n,
     recent_sales: recent, low_stock_list: lowList, pending_list: pendingList,
   });
@@ -2402,15 +2430,18 @@ app.get('/api/relatorios', (req, res) => {
       ROUND(SUM(i.line_total - i.unit_cost * i.qty),2) lucro
     ${base} GROUP BY label ORDER BY lucro DESC`).all(desde);
 
+  // Peça de produto que não está no catálogo daqui (esgotou antes da
+  // leitura) soma pelo produto da Nuvemshop, ou pelo nome — nunca tudo junto.
   const produtos = db.prepare(`
-    SELECT COALESCE(v.product_id, 0) pid,
+    SELECT COALESCE('p' || v.product_id, 'ns' || i.ns_product_id, 'n' || i.name) chave,
+      COALESCE(v.product_id, 0) pid,
       MAX(COALESCE(p.name, i.name)) produto,
       MAX(p.brand) marca, MAX(p.category) categoria, MAX(p.image_url) imagem,
       SUM(i.qty) pecas,
       ROUND(SUM(i.line_total),2) receita,
       ROUND(SUM(i.unit_cost * i.qty),2) custo,
       ROUND(SUM(i.line_total - i.unit_cost * i.qty),2) lucro
-    ${base} GROUP BY pid ORDER BY lucro DESC`).all(desde);
+    ${base} GROUP BY chave ORDER BY lucro DESC`).all(desde);
 
   const totais = produtos.reduce((t, p) => ({
     pecas: t.pecas + p.pecas, receita: money(t.receita + p.receita),
@@ -2490,7 +2521,7 @@ app.get('/api/financial', (req, res) => {
     WHERE type='despesa' AND paid = 0`).get().n;
   const aReceber = db.prepare(`SELECT COALESCE(SUM(total),0) n FROM sales WHERE ${FIADO()}`).get().n;
   const pixPendente = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
-    WHERE ${PIX_PENDENTE} AND COALESCE(ns_status,'open') <> 'cancelled'`).get();
+    WHERE ${PIX_PENDENTE()} AND COALESCE(ns_status,'open') <> 'cancelled'`).get();
   const byMethod = db.prepare(`SELECT COALESCE(NULLIF(payment_method,''),'—') label, COUNT(*) n, COALESCE(SUM(total),0) total
     FROM sales WHERE payment_status='pago' ${cond} GROUP BY payment_method ORDER BY total DESC`).all(...a);
   const entries = db.prepare(`SELECT id, type, category, description, amount, ref, paid, due_date, created_at
@@ -2714,6 +2745,29 @@ app.delete('/api/fin-categories/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ==================== CUSTO DA VENDA ====================
+// Custo e margem da venda saem das peças dela.
+const recalcularCusto = db.prepare(`UPDATE sales SET
+    cost_total = (SELECT ROUND(COALESCE(SUM(unit_cost * qty),0),2) FROM sale_items WHERE sale_id = sales.id),
+    margin = ROUND(total - (SELECT COALESCE(SUM(unit_cost * qty),0) FROM sale_items WHERE sale_id = sales.id),2)
+  WHERE id = ?`);
+
+// A loja começou a usar o sistema sem custo cadastrado. Quando o custo de
+// uma peça é preenchido, as vendas em que ela saiu SEM custo passam a usar
+// esse valor — senão todo o histórico mostraria lucro de 100%. Venda que
+// já tinha custo não muda: vale o custo que a peça tinha na hora.
+function preencherCustosQueFaltavam() {
+  return db.transaction(() => {
+    const vendas = db.prepare(`SELECT DISTINCT i.sale_id id FROM sale_items i
+      JOIN variants v ON v.id = i.variant_id WHERE i.unit_cost = 0 AND v.cost > 0`).all();
+    if (!vendas.length) return 0;
+    db.prepare(`UPDATE sale_items SET unit_cost = (SELECT cost FROM variants WHERE id = sale_items.variant_id)
+      WHERE unit_cost = 0 AND variant_id IN (SELECT id FROM variants WHERE cost > 0)`).run();
+    for (const v of vendas) recalcularCusto.run(v.id);
+    return vendas.length;
+  })();
+}
+
 // ==================== VENDAS DO SITE (Nuvemshop) ====================
 // Lê os pedidos da loja e lança a receita. NÃO mexe no estoque: quem
 // vende no site é a Nuvemshop, e ela já baixa o estoque dela — o nosso
@@ -2797,7 +2851,7 @@ function limparClientesGenericos() {
 
 // Sincroniza os pedidos do site: cria os novos e ATUALIZA os que mudaram
 // de status (pagou, embalou, enviou). Roda sozinho de tempos em tempos.
-async function sincronizarPedidos(dias = 45) {
+async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
   if (!isLive()) return { skipped: true };
   const desde = diaLocal(new Date(Date.now() - dias * 864e5));
   const orders = await nuvem.listOrders({ since: desde });
@@ -2817,6 +2871,30 @@ async function sincronizarPedidos(dias = 45) {
   const insFin = db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, ref, created_at)
     VALUES ('receita','Venda Site',?,?,?,?,?)`);
   const catSite = categoryId('Venda Site', 'receita');
+
+  // As peças de cada pedido. Sem elas o sistema não sabe O QUE vende no
+  // site: curva ABC, margem por produto, "acabando" e o CRM ficam cegos.
+  // O custo é o da peça na hora (o que faltar é preenchido quando o custo
+  // for cadastrado — veja preencherCustosQueFaltavam).
+  const temItens = db.prepare('SELECT 1 FROM sale_items WHERE sale_id = ? LIMIT 1');
+  const acharVariante = db.prepare('SELECT id, cost FROM variants WHERE nuvemshop_variant_id = ?');
+  const insItem = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, ns_product_id, name, qty, unit_price, unit_cost, line_total)
+    VALUES (?,?,?,?,?,?,?,?)`);
+  // Roda em toda leitura: a atualização do pedido regrava o total, e o
+  // custo/margem tem que sair de novo das peças.
+  const gravarItens = (saleId, o) => {
+    if (Array.isArray(o.products) && !temItens.get(saleId)) {
+      for (const it of o.products) {
+        const qty = parseInt(it.quantity, 10) || 0;
+        if (qty <= 0) continue;
+        const v = it.variant_id != null ? acharVariante.get(String(it.variant_id)) : null;
+        const preco = money(parseFloat(it.price) || 0);
+        insItem.run(saleId, v ? v.id : null, it.product_id != null ? String(it.product_id) : null,
+          nameOf(it.name) || 'Peça do site', qty, preco, v ? v.cost : 0, money(preco * qty));
+      }
+    }
+    recalcularCusto.run(saleId);
+  };
 
   let novos = 0, atualizados = 0, lancados = 0;
   db.transaction(() => {
@@ -2862,6 +2940,7 @@ async function sincronizarPedidos(dias = 45) {
         const id = insSale.run(code, oid, cliId, nsCli, cliente, forma, nosso, pago ? quando : null, total, total, total, quando,
           nsPay, nsShip, nsStat, retirada ? 'retirada' : 'envio', nItens, 0).lastInsertRowid;
         novos += 1;
+        gravarItens(id, o);
         if (pago && !cancelado) { insFin.run(catSite, `Venda no site ${code}`, total, code, quando); marcarFin.run(id); lancados += 1; }
       } else {
         updSale.run(nosso, pago ? quando : null, total, total, total,
@@ -2869,6 +2948,7 @@ async function sincronizarPedidos(dias = 45) {
         // Corrige o vínculo (não usa COALESCE: se estava errado, conserta).
         db.prepare('UPDATE sales SET customer_id = ?, ns_customer_id = ? WHERE id = ?').run(cliId, nsCli, ex.id);
         atualizados += 1;
+        gravarItens(ex.id, o);
         // Pagou depois? Agora entra no caixa (uma única vez).
         if (pago && !cancelado && !ex.fin_posted) {
           insFin.run(catSite, `Venda no site ${code}`, total, code, now());
@@ -2899,6 +2979,13 @@ async function tickAutomatico(motivo = 'automático') {
     const r = await sincronizarPedidos();
     if (r && !r.skipped && (r.novos || r.lancados)) {
       console.log(`› Pedidos do site (${motivo}): ${r.novos} novo(s), ${r.lancados} lançado(s) no caixa.`);
+    }
+    // Uma vez só: relê dois anos de pedidos para trazer as peças dos
+    // antigos (antes o sistema guardava só o total).
+    if (!getSetting('itens_site_historico')) {
+      const h = await sincronizarPedidos(730);
+      setSetting('itens_site_historico', now());
+      console.log(`› Histórico do site: ${h.analisados} pedido(s) relidos com as peças.`);
     }
     const c = await sincronizarCarrinhos();
     if (c && c.novos) console.log(`› Carrinhos abandonados: ${c.novos} novo(s).`);
@@ -2976,19 +3063,20 @@ app.get('/api/operacao', (req, res) => {
   const fila = (sql, ...a) => db.prepare(sql).get(...a);
   const naoEnviado = `(COALESCE(ns_shipping_status,'') NOT IN ('shipped','fulfilled','delivered'))`;
   const ativo = `COALESCE(ns_status,'open') <> 'cancelled' AND payment_status <> 'cancelado'`;
+  const recente = NA_JANELA();
 
   const porCobrar = fila(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
     WHERE ${FIADO()} AND ${ativo}`);
   const aguardandoPix = fila(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
-    WHERE ${PIX_PENDENTE} AND ${ativo}`);
+    WHERE ${PIX_PENDENTE()} AND ${ativo}`);
   const porEmbalar = fila(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
-    WHERE channel='site' AND payment_status='pago' AND ${ativo} AND COALESCE(ns_shipping_type,'envio')='envio'
+    WHERE channel='site' AND payment_status='pago' AND ${ativo} AND ${recente} AND COALESCE(ns_shipping_type,'envio')='envio'
       AND COALESCE(ns_shipping_status,'') IN ('','unpacked','unfulfilled')`);
   const porEnviar = fila(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
-    WHERE channel='site' AND payment_status='pago' AND ${ativo} AND COALESCE(ns_shipping_type,'envio')='envio'
+    WHERE channel='site' AND payment_status='pago' AND ${ativo} AND ${recente} AND COALESCE(ns_shipping_type,'envio')='envio'
       AND COALESCE(ns_shipping_status,'') IN ('packed','ready','unshipped')`);
   const porRetirar = fila(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
-    WHERE channel='site' AND payment_status='pago' AND ${ativo} AND ns_shipping_type='retirada' AND ${naoEnviado}`);
+    WHERE channel='site' AND payment_status='pago' AND ${ativo} AND ${recente} AND ns_shipping_type='retirada' AND ${naoEnviado}`);
 
   const listar = (where, args = []) => db.prepare(`SELECT id, code, channel, customer_name, total, created_at,
       payment_status, ns_shipping_status, ns_shipping_type FROM sales WHERE ${where}
@@ -3016,11 +3104,12 @@ app.get('/api/operacao', (req, res) => {
 // Lista de uma fila específica (ao clicar no card)
 app.get('/api/operacao/:fila', (req, res) => {
   const ativo = `COALESCE(ns_status,'open') <> 'cancelled' AND payment_status <> 'cancelado'`;
+  const site = `channel='site' AND payment_status='pago' AND ${ativo} AND ${NA_JANELA()}`;
   const mapa = {
     por_cobrar: `${FIADO()} AND ${ativo}`,
-    por_embalar: `channel='site' AND payment_status='pago' AND ${ativo} AND COALESCE(ns_shipping_type,'envio')='envio' AND COALESCE(ns_shipping_status,'') IN ('','unpacked','unfulfilled')`,
-    por_enviar: `channel='site' AND payment_status='pago' AND ${ativo} AND COALESCE(ns_shipping_type,'envio')='envio' AND COALESCE(ns_shipping_status,'') IN ('packed','ready','unshipped')`,
-    por_retirar: `channel='site' AND payment_status='pago' AND ${ativo} AND ns_shipping_type='retirada' AND COALESCE(ns_shipping_status,'') NOT IN ('shipped','fulfilled','delivered')`,
+    por_embalar: `${site} AND COALESCE(ns_shipping_type,'envio')='envio' AND COALESCE(ns_shipping_status,'') IN ('','unpacked','unfulfilled')`,
+    por_enviar: `${site} AND COALESCE(ns_shipping_type,'envio')='envio' AND COALESCE(ns_shipping_status,'') IN ('packed','ready','unshipped')`,
+    por_retirar: `${site} AND ns_shipping_type='retirada' AND COALESCE(ns_shipping_status,'') NOT IN ('shipped','fulfilled','delivered')`,
   };
   const where = mapa[req.params.fila];
   if (!where) return res.status(404).json({ error: 'Fila desconhecida.' });

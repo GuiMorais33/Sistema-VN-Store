@@ -391,6 +391,8 @@ CREATE TABLE IF NOT EXISTS agent_log (
   status  INTEGER NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id);
+CREATE INDEX IF NOT EXISTS idx_sale_items_variant ON sale_items(variant_id);
 CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at);
 CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales(customer_id);
 CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(payment_status);
@@ -441,6 +443,9 @@ ensureColumn('products', 'on_demand', 'on_demand INTEGER NOT NULL DEFAULT 0');
 ensureColumn('variants', 'on_hand', 'on_hand INTEGER NOT NULL DEFAULT 0');
 // Quantas peças da linha saíram por encomenda (não estavam aqui).
 ensureColumn('sale_items', 'encomenda', 'encomenda INTEGER NOT NULL DEFAULT 0');
+// Produto da Nuvemshop da peça vendida no site. Produto esgotado não vem
+// na leitura do catálogo, e sem isto as vendas dele não teriam a quem somar.
+ensureColumn('sale_items', 'ns_product_id', 'ns_product_id TEXT');
 
 // ---- Estoque a caminho da loja ----
 // O site também vende, e essa baixa só chega aqui na sincronização. Por

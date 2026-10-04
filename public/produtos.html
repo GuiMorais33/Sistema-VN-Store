@@ -463,8 +463,9 @@ async function lista(){
     q||cat||br||modoAtual?'Tente limpar os filtros.':'Importe da sua loja em Conectar, ou cadastre um novo.');return;}
   box.innerHTML='';
   for(const p of rows){
-    // Sob encomenda: "acabando" não se aplica — repor é com o fornecedor.
-    const low=!p.on_demand&&p.total_stock<=4;
+    // "Acabando" vem do servidor: produto que vende e tem pouca peça.
+    // Sob encomenda não se aplica — repor é com o fornecedor.
+    const low=p.acabando;
     const el=document.createElement('div');el.className='trow';
     const img=p.image_url?`<img src="${p.image_url}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:ICO('estoque',20)}))">`:ICO('estoque',20);
     el.innerHTML=`<span class="thumb">${img}</span>

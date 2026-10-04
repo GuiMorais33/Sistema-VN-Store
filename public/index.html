@@ -376,8 +376,8 @@ async function load(){
   const low=document.getElementById('low');
   low.innerHTML = d.low_stock_list && d.low_stock_list.length ? d.low_stock_list.map(v=>
     `<div class="row-item"><div class="l"><span>${v.product_name}</span><span class="s">${v.variant_name||''}</span></div>
-     <span class="r" style="color:var(--warn)">${v.stock} un.</span></div>`).join('')
-    : vazio('ok','Estoque saudável','Nenhum item perto da ruptura.');
+     <span class="r" style="color:var(--warn)">${v.stock} peça(s)</span></div>`).join('')
+    : vazio('ok','Estoque saudável','Nenhum produto que vende está acabando.');
 
   const R=d.reminders||{};   // o Maestro ainda avisa dos lembretes
 
@@ -393,14 +393,14 @@ async function load(){
   if(d.receivable_count>0) p.push(`Tem <b class="hl">${BRL(d.receivable_total)}</b> em fiado pra receber.`);
   if(R.atrasados>0) p.push(`E <b>${R.atrasados}</b> lembrete(s) já passaram da data.`);
   else if(R.hoje>0) p.push(`Tem <b>${R.hoje}</b> lembrete(s) pra hoje.`);
-  if(d.low_stock>0) p.push(`Fica de olho: <b>${d.low_stock}</b> item(ns) perto da ruptura.`);
+  if(d.low_stock>0) p.push(`Fica de olho: <b>${d.low_stock}</b> produto(s) vendendo e acabando.`);
   document.getElementById('maestroMsg').innerHTML='Fala, chefe. '+p.join(' ');
 
   const tags=[];
   if(R.atrasados>0) tags.push(`<a class="m-tag crit" href="#painelLem">${ICO('alerta',13)}${R.atrasados} lembrete(s) atrasado(s)</a>`);
   if(R.hoje>0) tags.push(`<a class="m-tag warn" href="#painelLem">${ICO('calendario',13)}${R.hoje} pra hoje</a>`);
   if(d.receivable_count>0) tags.push(`<a class="m-tag warn" href="/clientes">${ICO('recibo',13)}${BRL(d.receivable_total)} a receber</a>`);
-  if(d.low_stock>0) tags.push(`<a class="m-tag warn" href="/produtos">${ICO('estoque',13)}${d.low_stock} perto da ruptura</a>`);
+  if(d.low_stock>0) tags.push(`<a class="m-tag warn" href="/produtos">${ICO('estoque',13)}${d.low_stock} acabando</a>`);
   if(!tags.length) tags.push(`<span class="m-tag ok">${ICO('ok',13)}Tudo em dia</span>`);
   document.getElementById('maestroTags').innerHTML=tags.join('');
 }

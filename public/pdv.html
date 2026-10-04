@@ -200,7 +200,7 @@ function estado(v){
   if(v.on_demand)return v.real_stock>0?['ok','na loja']:['enc','encomenda'];
   if(!v.stock_management)return['ok','disponível'];
   if(v.stock<=0)return['out','esgotado'];
-  if(v.stock<=4)return['low',v.stock+' un.'];
+  if(v.stock===1)return['low','última'];   // roupa: 1 ou 2 por tamanho, a última é que importa
   return['ok',v.stock+' un.'];
 }
 const sobEnc=(v)=>v.on_demand&&(v.real_stock||0)<=0;
