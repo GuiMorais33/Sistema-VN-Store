@@ -77,6 +77,27 @@ Se der erro de permissão da chave (`UNPROTECTED PRIVATE KEY FILE`): no Mac/Linu
 `chmod 400 CAMINHO_DA_SUA_CHAVE.key`; no Windows (PowerShell),
 `icacls CAMINHO_DA_SUA_CHAVE.key /inheritance:r /grant:r "$($env:USERNAME):R"`.
 
+## Cópia de segurança (backup)
+O sistema tira sozinho uma cópia por dia (logo depois da meia-noite) e guarda as últimas 14
+em `~/vnstore-backups`. Na tela **Conectar**, o botão **Baixar cópia agora** baixa uma cópia
+feita na hora — guarde uma por semana fora do servidor: cópia que fica só na VM some com ela.
+
+**Voltar uma cópia** (dentro da VM; troque a data pela que você quer):
+```bash
+cd ~/Sistema-VN-Store
+sudo systemctl stop vnstore
+mkdir -p ~/antes-de-voltar && mv vnstore.db* ~/antes-de-voltar/
+cp ~/vnstore-backups/vnstore-2026-10-04.db vnstore.db
+sudo systemctl start vnstore
+```
+(Para voltar uma cópia baixada no seu computador, envie o arquivo para a VM com
+`scp -i CAMINHO_DA_SUA_CHAVE.key ARQUIVO.db ubuntu@SEU_IP:~/vnstore-backups/` e use o mesmo comando.)
+
+**Opcional — cópia automática fora do servidor:** na Oracle, crie um bucket
+(☰ → Storage → Buckets), abra ele → *Pre-Authenticated Requests* → crie um com alvo
+**Bucket** e acesso **Permit object writes**. Copie o endereço (termina em `/o/`), coloque no
+`.env` como `BACKUP_UPLOAD_URL=...` e reinicie (`sudo systemctl restart vnstore`).
+
 ## Comandos úteis (dentro da VM)
 ```bash
 sudo systemctl status vnstore     # ver se está rodando

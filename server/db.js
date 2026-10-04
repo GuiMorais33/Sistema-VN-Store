@@ -382,6 +382,15 @@ CREATE TABLE IF NOT EXISTS cash_closings (
   created_at TEXT NOT NULL
 );
 
+-- O que o agente (Claude) consultou: cada pedido dele vira uma linha.
+CREATE TABLE IF NOT EXISTS agent_log (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  quando  TEXT NOT NULL,
+  metodo  TEXT NOT NULL,
+  caminho TEXT NOT NULL,
+  status  INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at);
 CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales(customer_id);
 CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(payment_status);

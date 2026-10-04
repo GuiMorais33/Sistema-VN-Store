@@ -4,15 +4,8 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import net from 'node:net';
-import fs from 'node:fs';
-import os from 'node:os';
-import { join, dirname } from 'node:path';
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import Database from 'better-sqlite3';
+import { subirServidor } from './servidor.js';
 
-const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
 const LOJA = '123';
 
 // ---- A Nuvemshop de mentira ----
@@ -63,21 +56,13 @@ function mock(req, res) {
   });
 }
 
-const portaLivre = () => new Promise((ok) => {
-  const s = net.createServer().listen(0, () => { const { port } = s.address(); s.close(() => ok(port)); });
-});
-
-let servidor, nuvem, base, banco, pasta, saida = '';
+let servidor, nuvem;
 const api = async (metodo, caminho, corpo) => {
-  const r = await fetch(base + caminho, {
-    method: metodo, headers: { 'Content-Type': 'application/json' },
-    body: corpo ? JSON.stringify(corpo) : undefined,
-  });
-  const d = await r.json();
-  if (!r.ok) throw new Error(`${metodo} ${caminho} → ${r.status}: ${JSON.stringify(d)}\n${saida}`);
-  return d;
+  const r = await servidor.pedir(metodo, caminho, { corpo });
+  if (r.status >= 400) throw new Error(`${metodo} ${caminho} → ${r.status}: ${r.bytes}\n${servidor.saida()}`);
+  return r.json;
 };
-const aqui = () => banco.prepare(`SELECT v.id, v.stock, v.on_hand, v.ns_delta, v.ns_fixar, v.product_id
+const aqui = () => servidor.banco().prepare(`SELECT v.id, v.stock, v.on_hand, v.ns_delta, v.ns_fixar, v.product_id
   FROM variants v WHERE v.nuvemshop_variant_id = '1001'`).get();
 const venderNoBalcao = (qty = 1) => api('POST', '/api/sales', { items: [{ variant_id: aqui().id, qty }], payment_method: 'pix' });
 const venderNoSite = () => { variante().stock -= 1; };
@@ -85,36 +70,17 @@ const venderNoSite = () => { variante().stock -= 1; };
 before(async () => {
   nuvem = http.createServer(mock);
   await new Promise((ok) => nuvem.listen(0, '127.0.0.1', ok));
-  pasta = fs.mkdtempSync(join(os.tmpdir(), 'vn-estoque-'));
-  const porta = await portaLivre();
-  base = `http://127.0.0.1:${porta}`;
-  servidor = spawn(process.execPath, ['server/index.js'], {
-    cwd: RAIZ,
-    env: {
-      ...process.env, PORT: String(porta), DB_FILE: join(pasta, 'teste.db'),
-      NUVEMSHOP_STORE_ID: LOJA, NUVEMSHOP_ACCESS_TOKEN: 'token-de-teste',
-      NUVEMSHOP_API_BASE: `http://127.0.0.1:${nuvem.address().port}`,
-      APP_PASSWORD: '', SYNC_MINUTES: '60',
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
+  servidor = await subirServidor({
+    NUVEMSHOP_STORE_ID: LOJA, NUVEMSHOP_ACCESS_TOKEN: 'token-de-teste',
+    NUVEMSHOP_API_BASE: `http://127.0.0.1:${nuvem.address().port}`,
   });
-  servidor.stdout.on('data', (d) => { saida += d; });
-  servidor.stderr.on('data', (d) => { saida += d; });
-  for (let i = 0; ; i += 1) {
-    try { if ((await fetch(base + '/api/health')).ok) break; } catch (_) { /* ainda subindo */ }
-    if (i > 100) throw new Error('servidor não subiu:\n' + saida);
-    await new Promise((ok) => setTimeout(ok, 50));
-  }
   await api('POST', '/api/sync', {});
-  banco = new Database(join(pasta, 'teste.db'), { readonly: true });
   assert.equal(aqui().stock, 5);
 });
 
 after(() => {
-  banco?.close();
-  servidor?.kill();
+  servidor?.parar();
   nuvem?.close();
-  if (pasta) fs.rmSync(pasta, { recursive: true, force: true });
 });
 
 test('venda no balcão parte do estoque da loja, não do número velho daqui', async () => {

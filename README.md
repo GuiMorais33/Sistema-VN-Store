@@ -53,6 +53,15 @@ public/
   que a Nuvemshop não guarda (custo, margem, caixa).
 - **Referência de funções**: Bling (a fatia que cabe no tamanho da operação).
 
+### Cópia de segurança
+Uma por dia, automática, em `~/vnstore-backups` (as últimas 14) — `server/backup.js`.
+Baixar na hora e voltar uma cópia: `deploy/DEPLOY-ORACLE.md`.
+
+### Agente (Claude)
+O agente entra com uma **chave própria** (gerada na tela **Agentes**, revogável), nunca com a
+senha. Por enquanto **só lê**, e só o que está na lista de `server/agente.js`; tudo o que ele
+pede fica registrado na tela Agentes. Índice do que ele pode consultar: `GET /api/agente`.
+
 ## Paleta
 
 | Elemento | Cor |

@@ -7,12 +7,15 @@
 import { diaLocal, mesLocal, inicioDoDia, inicioDoMes } from './fuso.js';
 import express from 'express';
 import fs from 'node:fs';
+import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import db, { seedDemoIfEmpty, getSetting, setSetting, seedCategories, categoryId, migrateOldCategories } from './db.js';
 import * as nuvem from './nuvemshop.js';
 import { naFila, enviarEstoque, enviarPendentes, gravarEnviado, contagemAMao } from './estoque.js';
+import * as backup from './backup.js';
+import * as agente from './agente.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, '..', 'public');
@@ -22,6 +25,21 @@ fs.mkdirSync(UPLOADS, { recursive: true });
 const app = express();
 app.set('trust proxy', true); // atrás do Caddy (HTTPS): usa X-Forwarded-Proto/Host
 app.use(express.json({ limit: '10mb' }));
+
+// ---- Agente (Claude): entra com chave própria, nunca com a senha ----
+// Só passa o que está na lista de leituras (server/agente.js); todo
+// pedido dele fica registrado, inclusive os recusados.
+app.use((req, res, next) => {
+  const chave = agente.chaveDoPedido(req);
+  if (!chave) return next();
+  if (!agente.chaveValida(chave)) return res.status(401).json({ error: 'Chave do agente inválida ou revogada.' });
+  req.agente = true;
+  res.on('finish', () => agente.registrar(req.method, req.originalUrl, res.statusCode));
+  if (!agente.podeLer(req.method, req.path)) {
+    return res.status(403).json({ error: 'O agente só tem acesso de leitura. Veja o que ele pode consultar em GET /api/agente.' });
+  }
+  next();
+});
 
 // ---- Login por senha única (protege o sistema quando publicado) ----
 // Se APP_PASSWORD estiver vazio (ex.: rodando local), não exige login.
@@ -48,7 +66,7 @@ app.post('/api/logout', (req, res) => {
 });
 // Barreira: libera login, health e assets; bloqueia o resto sem sessão.
 app.use((req, res, next) => {
-  if (authed(req)) return next();
+  if (req.agente || authed(req)) return next();
   const p = req.path;
   if (p === '/login' || p === '/api/login' || p === '/api/health' || p === '/oauth/callback' || /\.(css|js|webp|png|jpe?g|svg|ico|woff2?)$/i.test(p)) return next();
   if (p.startsWith('/api/')) return res.status(401).json({ error: 'não autenticado' });
@@ -2893,6 +2911,7 @@ async function tickAutomatico(motivo = 'automático') {
 }
 setInterval(() => tickAutomatico(), INTERVALO_MIN * 60 * 1000);
 setTimeout(() => tickAutomatico('início'), 8000);
+backup.agendarBackups();
 
 // Traz clientes + histórico de vendas da loja e monta o ranking real.
 // Pode demorar em lojas com muitos pedidos — por isso o retorno é um
@@ -3055,6 +3074,66 @@ app.put('/api/reminders/:id', (req, res) => {
 });
 app.delete('/api/reminders/:id', (req, res) => {
   db.prepare('DELETE FROM reminders WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ==================== CÓPIA DE SEGURANÇA ====================
+app.get('/api/backup/status', (req, res) => res.json(backup.situacao()));
+
+// Baixa uma cópia do banco feita agora. Só o dono: a cópia tem tudo,
+// inclusive a chave da Nuvemshop.
+app.get('/api/backup/baixar', async (req, res) => {
+  if (req.agente) return res.status(403).json({ error: 'Só o dono baixa a cópia.' });
+  const tmp = join(os.tmpdir(), `vnstore-${process.pid}-${Date.now()}.db`);
+  try {
+    await backup.copiarBanco(tmp);
+    res.download(tmp, `vnstore-${diaLocal()}.db`, () => fs.rm(tmp, { force: true }, () => {}));
+  } catch (err) {
+    fs.rm(tmp, { force: true }, () => {});
+    res.status(500).json({ error: 'Não deu para gerar a cópia: ' + err.message });
+  }
+});
+
+// ==================== AGENTE (Claude) ====================
+// O que o agente precisa para se achar: o que pode consultar e as regras
+// que dão sentido aos números.
+app.get('/api/agente', (req, res) => {
+  res.json({
+    loja: 'VN Store', modo: isLive() ? 'live' : 'demo', acesso: 'somente leitura',
+    agora: now(), dia_local: diaLocal(), fuso: process.env.TZ,
+    leituras: agente.LEITURAS.map(([caminho, o_que]) => ({ caminho, o_que })),
+    regras: {
+      venda: 'Conta como venda: no balcão, toda venda não cancelada (fiado incluso); no site, só pedido pago.',
+      fiado: 'Fiado é venda do balcão não paga. Pix/boleto pendente do site não é fiado: o cliente ainda não levou nada.',
+      estoque: 'Produto sob encomenda (on_demand) tem dois números: stock é a grade do site, on_hand é o que existe aqui.',
+      datas: 'Datas gravadas em ISO (UTC). "Hoje" e "mês" são sempre no fuso da loja.',
+    },
+  });
+});
+
+app.get('/api/agente/status', (req, res) => res.json(agente.situacao()));
+
+// Vendas do período com os itens (site não tem itens: só o total).
+app.get('/api/agente/vendas', (req, res) => {
+  const dias = Math.min(366, Math.max(1, parseInt(req.query.dias, 10) || 7));
+  const desde = inicioDoDia(diaLocal(new Date(Date.now() - (dias - 1) * 864e5)));
+  const vendas = db.prepare(`SELECT id, code, channel, created_at, customer_id, customer_name, seller_name,
+      payment_method, payment_status, paid_at, subtotal, discount, total, cost_total, margin, items_count,
+      ns_payment_status, ns_shipping_status, (${SQL_VENDA}) AS conta_como_venda
+    FROM sales WHERE created_at >= ? ORDER BY id DESC LIMIT 500`).all(desde);
+  const itens = db.prepare('SELECT variant_id, name, qty, unit_price, unit_cost, line_total, encomenda FROM sale_items WHERE sale_id = ?');
+  for (const v of vendas) { v.conta_como_venda = Boolean(v.conta_como_venda); v.itens = itens.all(v.id); }
+  res.json({ desde, dias, vendas });
+});
+
+// Gerar e revogar a chave: só o dono, logado com a senha.
+app.post('/api/agente/chave', (req, res) => {
+  if (req.agente) return res.status(403).json({ error: 'O agente não gera chave.' });
+  res.json({ ok: true, chave: agente.gerarChave() });
+});
+app.delete('/api/agente/chave', (req, res) => {
+  if (req.agente) return res.status(403).json({ error: 'O agente não revoga chave.' });
+  agente.revogarChave();
   res.json({ ok: true });
 });
 

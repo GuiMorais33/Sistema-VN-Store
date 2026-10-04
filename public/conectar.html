@@ -68,6 +68,15 @@
     <div class="note">A leitura só <b>traz</b> os dados da sua loja pra cá. Nada é criado ou alterado na Nuvemshop.</div>
   </div>
 
+  <div class="card" id="backupCard">
+    <h3>Cópia de segurança</h3>
+    <p class="note" style="margin-top:0" id="bkInfo">Verificando…</p>
+    <a class="btn" href="/api/backup/baixar" download>Baixar cópia agora</a>
+    <div class="note">O sistema tira uma cópia sozinho todo dia e guarda as últimas 14 no servidor.
+      Uma vez por semana, <b>baixe uma e guarde fora do servidor</b> (no computador ou no Google Drive):
+      se o servidor sumir, as cópias dele somem junto. O arquivo tem todos os dados da loja — guarde como guarda uma senha.</div>
+  </div>
+
   <div class="card" id="cleanCard" style="display:none">
     <h3>Começar limpo</h3>
     <p class="note" style="margin-top:0">Apaga <b>tudo que está aqui no sistema</b> — catálogo, vendas, clientes e financeiro —
@@ -209,6 +218,19 @@ document.getElementById('disconnectBtn').addEventListener('click', async ()=>{
 
 const oi=document.getElementById('okIco'); if(oi) oi.innerHTML=ICO('ok',20);
 load();
+
+async function backupInfo(){
+  const el=document.getElementById('bkInfo');
+  try{
+    const b=await api('/api/backup/status');
+    const quando=b.ultimo?new Date(b.ultimo.quando).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):null;
+    el.innerHTML=(quando?`Última cópia automática: <b>${quando}</b> · ${b.copias} guardada(s) no servidor`
+      :'A primeira cópia automática sai alguns minutos depois que o sistema liga.')
+      +(b.envio_para_fora&&b.ultimo&&b.ultimo.enviado?' · <b>enviada para fora do servidor</b>':'')
+      +(b.erro?`<br><span style="color:#ff8377">A última tentativa falhou: ${b.erro}</span>`:'');
+  }catch(err){ el.textContent='Não deu para ver a situação da cópia: '+err.message; }
+}
+backupInfo();
 </script>
 </body>
 </html>
