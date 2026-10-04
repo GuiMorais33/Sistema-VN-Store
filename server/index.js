@@ -103,12 +103,14 @@ const PIX_PENDENTE = () => `payment_status = 'pendente' AND channel = 'site' AND
 // trabalho (por embalar, enviar, retirar), senão ficaria lá para sempre.
 const JANELA_PEDIDOS_DIAS = 45;
 const NA_JANELA = () => `created_at >= '${desdeDias(JANELA_PEDIDOS_DIAS)}'`;
-// "Acabando", para roupa: cada tamanho tem 1 ou 2 peças, então olhar
-// tamanho por tamanho marca a loja inteira. O que importa é o produto que
-// está VENDENDO e já tem pouca peça no total (somando as numerações).
+// "Acabando", para esta loja: a maior parte dos produtos tem UMA peça só,
+// então "vendeu uma e sobrou pouca" é quase todo produto. O sinal de
+// reposição é o produto que vendeu de novo no mês (2 ou mais) e já tem
+// pouca peça no total, somando as numerações — esgotado incluso.
 const ACABANDO_PECAS = 2;
+const ACABANDO_VENDIDAS = 2;
 const ACABANDO_DIAS = 30;
-const acabando = (p) => !p.on_demand && p.vendidas > 0 && p.pecas <= ACABANDO_PECAS;
+const acabando = (p) => !p.on_demand && p.vendidas >= ACABANDO_VENDIDAS && p.pecas <= ACABANDO_PECAS;
 // Peças vendidas do produto "p" desde a data do parâmetro.
 const SQL_VENDIDAS = `(SELECT COALESCE(SUM(i.qty),0) FROM sale_items i
     JOIN sales s ON s.id = i.sale_id JOIN variants vv ON vv.id = i.variant_id
@@ -525,6 +527,91 @@ async function pushProduct(productId) {
   }
 }
 
+// ==================== PRODUTOS DA LOJA → AQUI ====================
+// A loja organiza a MARCA como subcategoria de "MARCAS" (o campo brand da
+// API não é usado). O índice sai das categorias reais, para espelhar o site.
+async function lerCategoriasDaLoja() {
+  const allCats = await nuvem.listAllCategories();
+  const catById = new Map(allCats.map((c) => [c.id, c]));
+  const rootMarcasIds = new Set(allCats.filter((c) => /^marcas?$/i.test(nameOf(c.name).trim())).map((c) => c.id));
+  const brandIds = new Set(allCats.filter((c) => rootMarcasIds.has(c.parent)).map((c) => c.id));
+  return { catById, isBrandCat: (id) => brandIds.has(id), isMarcasRoot: (id) => rootMarcasIds.has(id) };
+}
+
+// Cria ou atualiza aqui os produtos que vieram da loja.
+function gravarProdutosDaLoja(products, { catById, isBrandCat, isMarcasRoot }) {
+  const upP = db.prepare(`INSERT INTO products (nuvemshop_product_id, name, brand, category, categories_all, description, image_url, published, synced_nuvemshop, created_at, updated_at)
+    VALUES (@pid,@name,@brand,@category,@cats,@description,@image,@published,1,@now,@now)
+    ON CONFLICT(nuvemshop_product_id) DO UPDATE SET
+      name=excluded.name, brand=excluded.brand, category=excluded.category,
+      categories_all=excluded.categories_all, description=excluded.description,
+      image_url=excluded.image_url, published=excluded.published,
+      synced_nuvemshop=1, updated_at=excluded.updated_at`);
+  const getP = db.prepare('SELECT id FROM products WHERE nuvemshop_product_id = ?');
+  // O custo é NOSSO: nunca sobrescrever no sync.
+  // Estoque: o da loja, mais o que daqui ainda não conseguiu subir. Uma
+  // contagem à mão que ainda não subiu continua valendo.
+  const upV = db.prepare(`INSERT INTO variants (product_id, nuvemshop_product_id, nuvemshop_variant_id, product_name, variant_name, sku, price, cost, stock, stock_management, updated_at)
+    VALUES (@product_id,@pid,@vid,@pname,@vname,@sku,@price,0,@stock,@sm,@now)
+    ON CONFLICT(nuvemshop_variant_id) DO UPDATE SET
+      product_id=excluded.product_id, product_name=excluded.product_name,
+      variant_name=excluded.variant_name, sku=excluded.sku, price=excluded.price,
+      stock=CASE WHEN ns_fixar = 1 THEN stock ELSE MAX(0, excluded.stock + ns_delta) END,
+      stock_management=excluded.stock_management, updated_at=excluded.updated_at`);
+
+  let variantCount = 0;
+  const brands = new Set(), cats = new Set();
+
+  db.transaction(() => {
+    for (const p of products) {
+      const name = nameOf(p.name);
+      const image = (p.images && p.images[0] && p.images[0].src) || '';
+      const prodCats = (p.categories || []);
+
+      // MARCA = a categoria do produto que é filha de "MARCAS".
+      // (Ex.: "Jaqueta Zara" → MARCAS > Zara → marca "Zara".)
+      const brandCat = prodCats.find((c) => isBrandCat(c.id));
+      const brand = brandCat ? nameOf(brandCat.name).trim() : (typeof p.brand === 'string' ? p.brand.trim() : '');
+
+      // CATEGORIAS = as demais (tirando "MARCAS" e as marcas).
+      const realCats = prodCats.filter((c) => !isBrandCat(c.id) && !isMarcasRoot(c.id));
+      const catNames = realCats.map((c) => nameOf(c.name).trim()).filter(Boolean);
+      // A principal é a mais específica (subcategoria vence a raiz):
+      // ex.: "Coleção Inverno > Jaquetas" → "Jaquetas".
+      const specific = realCats.find((c) => c.parent && catById.has(c.parent));
+      const category = (specific ? nameOf(specific.name).trim() : catNames[0]) || '';
+
+      if (brand) brands.add(brand);
+      catNames.forEach((c) => cats.add(c));
+
+      upP.run({
+        pid: String(p.id), name, brand, category,
+        cats: catNames.join(' | '),
+        description: nameOf(p.description), image,
+        published: p.published === false ? 0 : 1, now: now(),
+      });
+      const productId = getP.get(String(p.id)).id;
+
+      for (const v of (p.variants || [])) {
+        // Nome da variação: junta os valores dos atributos (ex.: "P / Verde").
+        const vname = (v.values || []).map((x) => nameOf(x)).filter(Boolean).join(' / ') || 'Único';
+        upV.run({
+          product_id: productId, pid: String(p.id), vid: String(v.id), pname: name, vname,
+          sku: v.sku || '', price: parseFloat(v.price) || 0,
+          stock: v.stock == null ? 0 : parseInt(v.stock, 10),
+          sm: v.stock_management === false ? 0 : 1, now: now(),
+        });
+        variantCount += 1;
+      }
+    }
+    // O estoque veio da loja; em produto de estoque próprio "em mãos" é
+    // o mesmo número. (Sob encomenda é nosso, e não se toca nele.)
+    db.exec(`UPDATE variants SET on_hand = stock WHERE product_id IN
+      (SELECT id FROM products WHERE on_demand = 0)`);
+  })();
+  return { variants: variantCount, brands: brands.size, categories: cats.size };
+}
+
 // ==================== SINCRONIZAR (puxar da Nuvemshop) ====================
 app.post('/api/sync', async (req, res) => {
   if (!isLive()) { const seeded = seedDemoIfEmpty(); return res.json({ mode: 'demo', seeded, message: 'Modo demonstração — sem loja conectada.' }); }
@@ -535,17 +622,7 @@ app.post('/api/sync', async (req, res) => {
     // Primeiro sobe o que ficou na fila daqui (venda feita com a loja fora
     // do ar, etc.); só depois puxa o número da loja.
     const fila = await enviarPendentes();
-    // A loja organiza a MARCA como subcategoria de "MARCAS" (o campo
-    // brand da API não é usado). Montamos o índice a partir das
-    // categorias reais para espelhar exatamente o site.
-    const allCats = await nuvem.listAllCategories();
-    const catById = new Map(allCats.map((c) => [c.id, c]));
-    const rootMarcas = allCats.filter((c) => /^marcas?$/i.test(nameOf(c.name).trim()));
-    const rootMarcasIds = new Set(rootMarcas.map((c) => c.id));
-    const brandIds = new Set(allCats.filter((c) => rootMarcasIds.has(c.parent)).map((c) => c.id));
-    const isBrandCat = (id) => brandIds.has(id);
-    const isMarcasRoot = (id) => rootMarcasIds.has(id);
-
+    const cats = await lerCategoriasDaLoja();
     const raw = await nuvem.listAllProducts({ publishedOnly });
 
     // Estoque total do produto (variação sem controle de estoque conta como disponível).
@@ -556,81 +633,12 @@ app.post('/api/sync', async (req, res) => {
 
     const products = onlyAvailable ? raw.filter((p) => unitsOf(p) > 0) : raw;
     const skipped = raw.length - products.length;
-
-    const upP = db.prepare(`INSERT INTO products (nuvemshop_product_id, name, brand, category, categories_all, description, image_url, published, synced_nuvemshop, created_at, updated_at)
-      VALUES (@pid,@name,@brand,@category,@cats,@description,@image,@published,1,@now,@now)
-      ON CONFLICT(nuvemshop_product_id) DO UPDATE SET
-        name=excluded.name, brand=excluded.brand, category=excluded.category,
-        categories_all=excluded.categories_all, description=excluded.description,
-        image_url=excluded.image_url, published=excluded.published,
-        synced_nuvemshop=1, updated_at=excluded.updated_at`);
-    const getP = db.prepare('SELECT id FROM products WHERE nuvemshop_product_id = ?');
-    // O custo é NOSSO: nunca sobrescrever no sync.
-    // Estoque: o da loja, mais o que daqui ainda não conseguiu subir. Uma
-    // contagem à mão que ainda não subiu continua valendo.
-    const upV = db.prepare(`INSERT INTO variants (product_id, nuvemshop_product_id, nuvemshop_variant_id, product_name, variant_name, sku, price, cost, stock, stock_management, updated_at)
-      VALUES (@product_id,@pid,@vid,@pname,@vname,@sku,@price,0,@stock,@sm,@now)
-      ON CONFLICT(nuvemshop_variant_id) DO UPDATE SET
-        product_id=excluded.product_id, product_name=excluded.product_name,
-        variant_name=excluded.variant_name, sku=excluded.sku, price=excluded.price,
-        stock=CASE WHEN ns_fixar = 1 THEN stock ELSE MAX(0, excluded.stock + ns_delta) END,
-        stock_management=excluded.stock_management, updated_at=excluded.updated_at`);
-
-    let variantCount = 0;
-    const brands = new Set(), cats = new Set();
-
-    db.transaction(() => {
-      for (const p of products) {
-        const name = nameOf(p.name);
-        const image = (p.images && p.images[0] && p.images[0].src) || '';
-        const prodCats = (p.categories || []);
-
-        // MARCA = a categoria do produto que é filha de "MARCAS".
-        // (Ex.: "Jaqueta Zara" → MARCAS > Zara → marca "Zara".)
-        const brandCat = prodCats.find((c) => isBrandCat(c.id));
-        const brand = brandCat ? nameOf(brandCat.name).trim() : (typeof p.brand === 'string' ? p.brand.trim() : '');
-
-        // CATEGORIAS = as demais (tirando "MARCAS" e as marcas).
-        const realCats = prodCats.filter((c) => !isBrandCat(c.id) && !isMarcasRoot(c.id));
-        const catNames = realCats.map((c) => nameOf(c.name).trim()).filter(Boolean);
-        // A principal é a mais específica (subcategoria vence a raiz):
-        // ex.: "Coleção Inverno > Jaquetas" → "Jaquetas".
-        const specific = realCats.find((c) => c.parent && catById.has(c.parent));
-        const category = (specific ? nameOf(specific.name).trim() : catNames[0]) || '';
-
-        if (brand) brands.add(brand);
-        catNames.forEach((c) => cats.add(c));
-
-        upP.run({
-          pid: String(p.id), name, brand, category,
-          cats: catNames.join(' | '),
-          description: nameOf(p.description), image,
-          published: p.published === false ? 0 : 1, now: now(),
-        });
-        const productId = getP.get(String(p.id)).id;
-
-        for (const v of (p.variants || [])) {
-          // Nome da variação: junta os valores dos atributos (ex.: "P / Verde").
-          const vname = (v.values || []).map((x) => nameOf(x)).filter(Boolean).join(' / ') || 'Único';
-          upV.run({
-            product_id: productId, pid: String(p.id), vid: String(v.id), pname: name, vname,
-            sku: v.sku || '', price: parseFloat(v.price) || 0,
-            stock: v.stock == null ? 0 : parseInt(v.stock, 10),
-            sm: v.stock_management === false ? 0 : 1, now: now(),
-          });
-          variantCount += 1;
-        }
-      }
-      // O estoque veio da loja; em produto de estoque próprio "em mãos" é
-      // o mesmo número. (Sob encomenda é nosso, e não se toca nele.)
-      db.exec(`UPDATE variants SET on_hand = stock WHERE product_id IN
-        (SELECT id FROM products WHERE on_demand = 0)`);
-    })();
+    const r = gravarProdutosDaLoja(products, cats);
 
     res.json({
-      mode: 'live', products: products.length, variants: variantCount,
+      mode: 'live', products: products.length, variants: r.variants,
       skipped_no_stock: skipped, scanned: raw.length,
-      brands: brands.size, categories: cats.size,
+      brands: r.brands, categories: r.categories,
       only_available: onlyAvailable, published_only: publishedOnly,
       estoque_enviado: fila.enviados, estoque_na_fila: fila.falhas,
     });
@@ -1093,8 +1101,8 @@ app.get('/api/dashboard', (req, res) => {
   const acabandoLista = db.prepare(`SELECT p.name, SUM(v.stock) pecas, ${SQL_VENDIDAS} vendidas
     FROM products p JOIN variants v ON v.product_id = p.id
     WHERE p.on_demand = 0 AND v.stock_management = 1
-    GROUP BY p.id HAVING vendidas > 0 AND pecas <= ?
-    ORDER BY vendidas DESC, pecas ASC`).all(desdeDias(ACABANDO_DIAS), ACABANDO_PECAS);
+    GROUP BY p.id HAVING vendidas >= ? AND pecas <= ?
+    ORDER BY vendidas DESC, pecas ASC`).all(desdeDias(ACABANDO_DIAS), ACABANDO_VENDIDAS, ACABANDO_PECAS);
   const recv = db.prepare(`SELECT COALESCE(SUM(total),0) AS total, COUNT(*) AS n FROM sales WHERE ${FIADO()}`).get();
   const stockVal = db.prepare(`SELECT COALESCE(SUM(${REAL} * v.cost),0) AS v
     FROM variants v LEFT JOIN products p ON p.id = v.product_id WHERE v.stock_management = 1`).get().v;
@@ -2851,10 +2859,34 @@ function limparClientesGenericos() {
 
 // Sincroniza os pedidos do site: cria os novos e ATUALIZA os que mudaram
 // de status (pagou, embalou, enviou). Roda sozinho de tempos em tempos.
+// Produtos da loja já procurados nesta execução (um produto apagado da
+// loja nunca vai aparecer — não adianta reler o catálogo a cada rodada).
+const produtosProcurados = new Set();
+
 async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
   if (!isLive()) return { skipped: true };
   const desde = diaLocal(new Date(Date.now() - dias * 864e5));
   const orders = await nuvem.listOrders({ since: desde });
+
+  // Peça de produto que não está aqui (a leitura do catálogo só traz o que
+  // tem estoque, e o que esgotou ficou de fora): traz o produto da loja,
+  // mesmo zerado, para a venda ter a quem somar e o custo poder ser
+  // cadastrado. Se falhar, segue: a venda soma pelo id da loja.
+  const conhecida = db.prepare('SELECT 1 FROM variants WHERE nuvemshop_variant_id = ?');
+  const faltam = new Set();
+  for (const o of orders) {
+    for (const it of o.products || []) {
+      const pid = it.product_id != null ? String(it.product_id) : null;
+      if (pid && it.variant_id != null && !produtosProcurados.has(pid) && !conhecida.get(String(it.variant_id))) faltam.add(pid);
+    }
+  }
+  if (faltam.size) {
+    faltam.forEach((pid) => produtosProcurados.add(pid));
+    try {
+      const daLoja = (await nuvem.listAllProducts()).filter((p) => faltam.has(String(p.id)));
+      if (daLoja.length) gravarProdutosDaLoja(daLoja, await lerCategoriasDaLoja());
+    } catch (err) { console.error('Produtos dos pedidos:', err.message); }
+  }
 
   const achar = db.prepare('SELECT id, payment_status, fin_posted FROM sales WHERE nuvemshop_order_id = ?');
   const insSale = db.prepare(`INSERT INTO sales (code, channel, nuvemshop_order_id, customer_id, ns_customer_id, customer_name, payment_method,
@@ -2877,20 +2909,33 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
   // O custo é o da peça na hora (o que faltar é preenchido quando o custo
   // for cadastrado — veja preencherCustosQueFaltavam).
   const temItens = db.prepare('SELECT 1 FROM sale_items WHERE sale_id = ? LIMIT 1');
+  const ligadas = db.prepare('SELECT variant_id, unit_cost FROM sale_items WHERE sale_id = ? AND variant_id IS NOT NULL');
+  const apagarItens = db.prepare('DELETE FROM sale_items WHERE sale_id = ?');
   const acharVariante = db.prepare('SELECT id, cost FROM variants WHERE nuvemshop_variant_id = ?');
   const insItem = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, ns_product_id, name, qty, unit_price, unit_cost, line_total)
     VALUES (?,?,?,?,?,?,?,?)`);
   // Roda em toda leitura: a atualização do pedido regrava o total, e o
   // custo/margem tem que sair de novo das peças.
   const gravarItens = (saleId, o) => {
-    if (Array.isArray(o.products) && !temItens.get(saleId)) {
+    if (!Array.isArray(o.products)) return recalcularCusto.run(saleId);
+    // Peça que entrou sem variação (o produto não estava aqui) é refeita
+    // quando o produto chega — senão ficaria solta para sempre. Só refaz
+    // se tem peça NOVA para ligar, e cada peça mantém o custo que já tinha.
+    const jaLigadas = ligadas.all(saleId);
+    const linkaveis = o.products.filter((it) => (parseInt(it.quantity, 10) || 0) > 0
+      && it.variant_id != null && acharVariante.get(String(it.variant_id))).length;
+    const refazer = temItens.get(saleId) && linkaveis > jaLigadas.length;
+    const custoAntes = new Map(jaLigadas.map((i) => [i.variant_id, i.unit_cost]));
+    if (refazer) apagarItens.run(saleId);
+    if (refazer || !temItens.get(saleId)) {
       for (const it of o.products) {
         const qty = parseInt(it.quantity, 10) || 0;
         if (qty <= 0) continue;
         const v = it.variant_id != null ? acharVariante.get(String(it.variant_id)) : null;
         const preco = money(parseFloat(it.price) || 0);
+        const custo = v ? (custoAntes.has(v.id) ? custoAntes.get(v.id) : v.cost) : 0;
         insItem.run(saleId, v ? v.id : null, it.product_id != null ? String(it.product_id) : null,
-          nameOf(it.name) || 'Peça do site', qty, preco, v ? v.cost : 0, money(preco * qty));
+          nameOf(it.name) || 'Peça do site', qty, preco, custo, money(preco * qty));
       }
     }
     recalcularCusto.run(saleId);
@@ -2981,10 +3026,11 @@ async function tickAutomatico(motivo = 'automático') {
       console.log(`› Pedidos do site (${motivo}): ${r.novos} novo(s), ${r.lancados} lançado(s) no caixa.`);
     }
     // Uma vez só: relê dois anos de pedidos para trazer as peças dos
-    // antigos (antes o sistema guardava só o total).
-    if (!getSetting('itens_site_historico')) {
+    // antigos (antes o sistema guardava só o total) e os produtos que já
+    // esgotaram. (v2: a primeira leitura não buscava os esgotados.)
+    if (!getSetting('itens_site_historico_v2')) {
       const h = await sincronizarPedidos(730);
-      setSetting('itens_site_historico', now());
+      setSetting('itens_site_historico_v2', now());
       console.log(`› Histórico do site: ${h.analisados} pedido(s) relidos com as peças.`);
     }
     const c = await sincronizarCarrinhos();

@@ -377,7 +377,7 @@ async function load(){
   low.innerHTML = d.low_stock_list && d.low_stock_list.length ? d.low_stock_list.map(v=>
     `<div class="row-item"><div class="l"><span>${v.product_name}</span><span class="s">${v.variant_name||''}</span></div>
      <span class="r" style="color:var(--warn)">${v.stock} peça(s)</span></div>`).join('')
-    : vazio('ok','Estoque saudável','Nenhum produto que vende está acabando.');
+    : vazio('ok','Estoque saudável','Nenhum campeão de venda está acabando.');
 
   const R=d.reminders||{};   // o Maestro ainda avisa dos lembretes
 
