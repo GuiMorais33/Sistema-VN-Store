@@ -446,6 +446,9 @@ ensureColumn('sale_items', 'encomenda', 'encomenda INTEGER NOT NULL DEFAULT 0');
 // Produto da Nuvemshop da peça vendida no site. Produto esgotado não vem
 // na leitura do catálogo, e sem isto as vendas dele não teriam a quem somar.
 ensureColumn('sale_items', 'ns_product_id', 'ns_product_id TEXT');
+// Pedido do site já baixou o par da loja (produto sob encomenda)?
+// 0 = ainda não · 1 = baixou · 2 = pedido cancelado, par devolvido.
+ensureColumn('sales', 'estoque_baixado', 'estoque_baixado INTEGER NOT NULL DEFAULT 0');
 
 // ---- Estoque a caminho da loja ----
 // O site também vende, e essa baixa só chega aqui na sincronização. Por

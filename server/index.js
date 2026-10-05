@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import db, { seedDemoIfEmpty, getSetting, setSetting, seedCategories, categoryId, migrateOldCategories } from './db.js';
 import * as nuvem from './nuvemshop.js';
-import { naFila, enviarEstoque, enviarPendentes, gravarEnviado, contagemAMao } from './estoque.js';
+import { naFila, enviarEstoque, enviarPendentes, gravarEnviado, contagemAMao, lerDaLoja } from './estoque.js';
 import * as backup from './backup.js';
 import * as agente from './agente.js';
 
@@ -717,6 +717,77 @@ app.post('/api/custos', (req, res) => {
   const resumo = db.prepare(`SELECT COUNT(*) total,
     SUM(CASE WHEN COALESCE(cost,0) <= 0 THEN 1 ELSE 0 END) sem_custo FROM variants`).get();
   res.json({ ok: true, salvos: n, ignorados, resumo, vendas_com_custo: vendasComCusto });
+});
+
+// ==================== NA LOJA × SOB ENCOMENDA ====================
+// Duas coisas que não podem se misturar:
+//   - NA LOJA (variants.on_hand): o que existe aqui de verdade. É o que
+//     entra no valor do estoque — o dinheiro parado da loja;
+//   - GRADE DO SITE (variants.stock): os números à venda para não perder
+//     venda. Quando sai um que não está aqui, o par vem do fornecedor.
+// Vale para o produto marcado como sob encomenda (products.on_demand).
+
+// Produtos sob encomenda com a grade e os pares na loja, para conferir.
+app.get('/api/encomenda', (req, res) => {
+  const where = ['p.on_demand = 1'], args = [];
+  const cat = (req.query.category || '').trim(), q = (req.query.q || '').trim();
+  if (cat) { where.push('(p.category = ? OR p.categories_all LIKE ?)'); args.push(cat, `%${cat}%`); }
+  if (q) { where.push('(p.name LIKE ? OR p.brand LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
+  const produtos = db.prepare(`SELECT p.id, p.name, p.brand, p.category, p.image_url FROM products p
+    WHERE ${where.join(' AND ')} ORDER BY p.name`).all(...args);
+  const grade = db.prepare(`SELECT id, variant_name, stock, COALESCE(on_hand,0) on_hand, cost, price
+    FROM variants WHERE product_id = ? ORDER BY id`);
+  let pares = 0, valor = 0, naGrade = 0;
+  for (const p of produtos) {
+    p.variants = grade.all(p.id);
+    p.na_loja = p.variants.reduce((t, v) => t + v.on_hand, 0);
+    pares += p.na_loja;
+    valor += p.variants.reduce((t, v) => t + v.on_hand * v.cost, 0);
+    naGrade += p.variants.reduce((t, v) => t + Math.max(0, v.stock), 0);
+  }
+  res.json({ produtos, resumo: { produtos: produtos.length, pares_na_loja: pares, valor_custo: money(valor), grade_site: naGrade } });
+});
+
+// Marca produtos como sob encomenda. Os pares na loja começam em 0: até
+// alguém conferir, nada disso conta como estoque (melhor faltar do que
+// mostrar dinheiro parado que não existe).
+app.post('/api/encomenda/marcar', (req, res) => {
+  const ids = (Array.isArray((req.body || {}).product_ids) ? req.body.product_ids : [])
+    .map((x) => parseInt(x, 10)).filter((x) => x > 0);
+  if (!ids.length) return res.status(400).json({ error: 'Nenhum produto escolhido.' });
+  const ts = now();
+  const marcar = db.prepare('UPDATE products SET on_demand = 1, updated_at = ? WHERE id = ? AND on_demand = 0');
+  const zerar = db.prepare('UPDATE variants SET on_hand = 0, updated_at = ? WHERE product_id = ?');
+  let n = 0;
+  db.transaction(() => {
+    for (const id of ids) if (marcar.run(ts, id).changes) { zerar.run(ts, id); n += 1; }
+  })();
+  res.json({ ok: true, marcados: n });
+});
+
+// Conferência: quantos pares de cada número estão na loja.
+app.post('/api/encomenda/maos', (req, res) => {
+  const itens = Array.isArray((req.body || {}).itens) ? req.body.itens : [];
+  const get = db.prepare(`SELECT v.id, COALESCE(v.on_hand,0) on_hand, COALESCE(p.on_demand,0) on_demand
+    FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ?`);
+  const upd = db.prepare('UPDATE variants SET on_hand = ?, updated_at = ? WHERE id = ?');
+  const mov = db.prepare(`INSERT INTO stock_movements (variant_id, delta, reason, ref, created_at)
+    VALUES (?,?,'conferencia',NULL,?)`);
+  const ts = now();
+  let salvos = 0, ignorados = 0;
+  db.transaction(() => {
+    for (const it of itens) {
+      const v = get.get(it.variant_id);
+      const n = Number(it.on_hand);
+      // Só produto sob encomenda: no estoque próprio "na loja" é o estoque.
+      if (!v || !v.on_demand || !Number.isInteger(n) || n < 0) { ignorados += 1; continue; }
+      if (n === v.on_hand) continue;
+      upd.run(n, ts, v.id);
+      mov.run(v.id, n - v.on_hand, ts);
+      salvos += 1;
+    }
+  })();
+  res.json({ ok: true, salvos, ignorados });
 });
 
 // ==================== FORNECEDORES ====================
@@ -2888,7 +2959,7 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
     } catch (err) { console.error('Produtos dos pedidos:', err.message); }
   }
 
-  const achar = db.prepare('SELECT id, payment_status, fin_posted FROM sales WHERE nuvemshop_order_id = ?');
+  const achar = db.prepare('SELECT id, payment_status, fin_posted, estoque_baixado FROM sales WHERE nuvemshop_order_id = ?');
   const insSale = db.prepare(`INSERT INTO sales (code, channel, nuvemshop_order_id, customer_id, ns_customer_id, customer_name, payment_method,
       payment_status, paid_at, subtotal, discount, total, cost_total, margin, synced_nuvemshop, created_at,
       ns_payment_status, ns_shipping_status, ns_status, ns_shipping_type, items_count, fin_posted)
@@ -2909,11 +2980,11 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
   // O custo é o da peça na hora (o que faltar é preenchido quando o custo
   // for cadastrado — veja preencherCustosQueFaltavam).
   const temItens = db.prepare('SELECT 1 FROM sale_items WHERE sale_id = ? LIMIT 1');
-  const ligadas = db.prepare('SELECT variant_id, unit_cost FROM sale_items WHERE sale_id = ? AND variant_id IS NOT NULL');
+  const ligadas = db.prepare('SELECT variant_id, unit_cost, encomenda FROM sale_items WHERE sale_id = ? AND variant_id IS NOT NULL');
   const apagarItens = db.prepare('DELETE FROM sale_items WHERE sale_id = ?');
   const acharVariante = db.prepare('SELECT id, cost FROM variants WHERE nuvemshop_variant_id = ?');
-  const insItem = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, ns_product_id, name, qty, unit_price, unit_cost, line_total)
-    VALUES (?,?,?,?,?,?,?,?)`);
+  const insItem = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, ns_product_id, name, qty, unit_price, unit_cost, line_total, encomenda)
+    VALUES (?,?,?,?,?,?,?,?,?)`);
   // Roda em toda leitura: a atualização do pedido regrava o total, e o
   // custo/margem tem que sair de novo das peças.
   const gravarItens = (saleId, o) => {
@@ -2925,7 +2996,7 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
     const linkaveis = o.products.filter((it) => (parseInt(it.quantity, 10) || 0) > 0
       && it.variant_id != null && acharVariante.get(String(it.variant_id))).length;
     const refazer = temItens.get(saleId) && linkaveis > jaLigadas.length;
-    const custoAntes = new Map(jaLigadas.map((i) => [i.variant_id, i.unit_cost]));
+    const antes = new Map(jaLigadas.map((i) => [i.variant_id, i]));
     if (refazer) apagarItens.run(saleId);
     if (refazer || !temItens.get(saleId)) {
       for (const it of o.products) {
@@ -2933,13 +3004,52 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
         if (qty <= 0) continue;
         const v = it.variant_id != null ? acharVariante.get(String(it.variant_id)) : null;
         const preco = money(parseFloat(it.price) || 0);
-        const custo = v ? (custoAntes.has(v.id) ? custoAntes.get(v.id) : v.cost) : 0;
+        const era = v ? antes.get(v.id) : null;
         insItem.run(saleId, v ? v.id : null, it.product_id != null ? String(it.product_id) : null,
-          nameOf(it.name) || 'Peça do site', qty, preco, custo, money(preco * qty));
+          nameOf(it.name) || 'Peça do site', qty, preco, era ? era.unit_cost : (v ? v.cost : 0), money(preco * qty),
+          era ? era.encomenda : 0);
       }
     }
     recalcularCusto.run(saleId);
   };
+
+  // Produto sob encomenda vendido no site: se o par estava na loja, sai da
+  // loja; se não estava, vira "pegar no fornecedor". Só para pedido NOVO:
+  // reler o histórico não mexe no que está na loja hoje.
+  let desdeBaixa = getSetting('estoque_site_desde');
+  if (!desdeBaixa) { desdeBaixa = now(); setSetting('estoque_site_desde', desdeBaixa); }
+  const itensEnc = db.prepare(`SELECT i.id, i.variant_id, i.qty, i.encomenda, COALESCE(v.on_hand,0) on_hand,
+      v.product_name, v.variant_name FROM sale_items i
+    JOIN variants v ON v.id = i.variant_id JOIN products p ON p.id = v.product_id
+    WHERE i.sale_id = ? AND p.on_demand = 1`);
+  const mexerNaLoja = db.prepare('UPDATE variants SET on_hand = MAX(0, COALESCE(on_hand,0) + ?), updated_at = ? WHERE id = ?');
+  const marcarEnc = db.prepare('UPDATE sale_items SET encomenda = ? WHERE id = ?');
+  const movSite = db.prepare('INSERT INTO stock_movements (variant_id, delta, reason, ref, created_at) VALUES (?,?,?,?,?)');
+  const insRem = db.prepare(`INSERT INTO reminders (title, notes, due_date, kind, customer_id, created_at)
+    VALUES (?,?,?, 'encomenda', ?, ?)`);
+  const marcarBaixa = db.prepare('UPDATE sales SET estoque_baixado = ? WHERE id = ?');
+  const baixarEncomenda = (saleId, code, cliId, cliente) => {
+    for (const i of itensEnc.all(saleId)) {
+      const daLoja = Math.min(i.on_hand, i.qty);
+      const pegar = i.qty - daLoja;
+      if (daLoja) { mexerNaLoja.run(-daLoja, now(), i.variant_id); movSite.run(i.variant_id, -daLoja, 'venda_site', code, now()); }
+      marcarEnc.run(pegar, i.id);
+      if (pegar > 0) {
+        insRem.run(`Pegar no fornecedor: ${i.product_name} ${i.variant_name}`,
+          `${pegar} peça(s) · pedido ${code}${nomeUtil(cliente) ? ' · ' + cliente : ''}`, diaLocal(), cliId, now());
+      }
+    }
+    marcarBaixa.run(1, saleId);
+  };
+  // Pedido cancelado depois de pago: o par que saiu da loja volta.
+  const devolverEncomenda = (saleId, code) => {
+    for (const i of itensEnc.all(saleId)) {
+      const voltou = i.qty - i.encomenda;
+      if (voltou > 0) { mexerNaLoja.run(voltou, now(), i.variant_id); movSite.run(i.variant_id, voltou, 'cancelado_site', code, now()); }
+    }
+    marcarBaixa.run(2, saleId);
+  };
+  const mexidos = [];   // vendas que mudaram o estoque da loja
 
   let novos = 0, atualizados = 0, lancados = 0;
   db.transaction(() => {
@@ -2986,6 +3096,10 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
           nsPay, nsShip, nsStat, retirada ? 'retirada' : 'envio', nItens, 0).lastInsertRowid;
         novos += 1;
         gravarItens(id, o);
+        if (quando >= desdeBaixa) {
+          mexidos.push(id);
+          if (pago && !cancelado) baixarEncomenda(id, code, cliId, cliente);
+        }
         if (pago && !cancelado) { insFin.run(catSite, `Venda no site ${code}`, total, code, quando); marcarFin.run(id); lancados += 1; }
       } else {
         updSale.run(nosso, pago ? quando : null, total, total, total,
@@ -2994,6 +3108,11 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
         db.prepare('UPDATE sales SET customer_id = ?, ns_customer_id = ? WHERE id = ?').run(cliId, nsCli, ex.id);
         atualizados += 1;
         gravarItens(ex.id, o);
+        if (quando >= desdeBaixa) {
+          if (ex.payment_status !== nosso) mexidos.push(ex.id);
+          if (pago && !cancelado && !ex.estoque_baixado) baixarEncomenda(ex.id, code, cliId, cliente);
+          if (cancelado && ex.estoque_baixado === 1) devolverEncomenda(ex.id, code);
+        }
         // Pagou depois? Agora entra no caixa (uma única vez).
         if (pago && !cancelado && !ex.fin_posted) {
           insFin.run(catSite, `Venda no site ${code}`, total, code, now());
@@ -3003,6 +3122,14 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
     }
   })();
   setSetting('last_orders_import', now());
+
+  // O site vendeu ou devolveu: relê da loja o número dessas variações, para
+  // o estoque daqui não ficar atrás até a próxima leitura do catálogo.
+  if (mexidos.length) {
+    const ids = db.prepare(`SELECT DISTINCT variant_id FROM sale_items
+      WHERE variant_id IS NOT NULL AND sale_id IN (${mexidos.map(() => '?').join(',')})`).all(...mexidos).map((r) => r.variant_id);
+    if (ids.length) await lerDaLoja(ids.slice(0, 60));
+  }
   return { novos, atualizados, lancados, analisados: orders.length, desde };
 }
 
@@ -3324,7 +3451,8 @@ app.get('/financeiro', page('financeiro.html'));
 app.get('/negocio', page('negocio.html'));
 app.get('/agentes', page('agentes.html'));
 app.get('/lembretes', page('index.html'));   // virou o painel do Início
-app.get('/compras', page('produtos.html'));   // virou a aba Entradas
+app.get('/compras', page('produtos.html'));
+app.get('/encomenda', page('produtos.html'));   // aba Na loja × encomenda   // virou a aba Entradas
 app.get('/custos', page('custos.html'));
 app.get('/relatorios', page('financeiro.html'));   // virou a aba Lucro
 app.get('/equipe', page('equipe.html'));

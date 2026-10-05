@@ -102,6 +102,32 @@ export function enviarEstoque(ids) {
   });
 }
 
+// O site vendeu: o número daqui ficou velho. Relê da loja o estoque destas
+// variações (o que a loja tem, mais o que daqui ainda não subiu). Contagem
+// à mão que ainda não subiu continua valendo. Se a loja falhar, fica para
+// a próxima leitura do catálogo.
+const atualizar = db.prepare(`UPDATE variants SET
+    stock   = MAX(0, @remoto + ns_delta),
+    on_hand = CASE WHEN @proprio = 1 THEN MAX(0, @remoto + ns_delta) ELSE on_hand END,
+    updated_at = @ts
+  WHERE id = @id AND ns_fixar = 0`);
+export function lerDaLoja(ids) {
+  return naFila(async () => {
+    let lidas = 0;
+    for (const id of ids) {
+      const v = ler.get(id);
+      if (!v || !v.nuvemshop_product_id || !v.nuvemshop_variant_id || !v.stock_management || v.ns_fixar) continue;
+      try {
+        const naLoja = await nuvem.getVariant(v.nuvemshop_product_id, v.nuvemshop_variant_id);
+        if (!naLoja || naLoja.stock == null) continue;
+        atualizar.run({ id: v.id, remoto: parseInt(naLoja.stock, 10) || 0, proprio: v.on_demand ? 0 : 1, ts: new Date().toISOString() });
+        lidas += 1;
+      } catch (_) { /* fica para a próxima leitura do catálogo */ }
+    }
+    return lidas;
+  });
+}
+
 // Tudo que ficou para trás (loja fora do ar na hora da venda, etc.).
 export async function enviarPendentes() {
   if (!nuvem.isConfigured()) return { enviados: 0, falhas: 0 };

@@ -25,6 +25,7 @@ export const LEITURAS = [
   ['/api/products', 'Variações à venda (como o PDV vê)'],
   ['/api/catalog', 'Produtos com variações, custo e estoque; /summary traz o resumo'],
   ['/api/custos', 'Custo de cada variação'],
+  ['/api/encomenda', 'Produtos sob encomenda: a grade do site e os pares que estão na loja'],
   ['/api/suppliers', 'Fornecedores'],
   ['/api/purchases', 'Entradas de mercadoria'],
   ['/api/customers', 'Clientes e histórico de compras'],

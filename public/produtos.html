@@ -114,6 +114,30 @@
   .hint{font-size:11.5px;color:var(--ink-3);line-height:1.5}
 
   /* Abas: Produtos (o que tem) e Entradas (o que chegou) */
+  /* Na loja × encomenda: a grade de cada produto vira botões de número */
+  .conf-intro{padding:var(--s4);margin-bottom:var(--s3);display:flex;flex-direction:column;gap:var(--s3)}
+  .conf-intro p{margin:0;color:var(--ink-2);line-height:1.6;font-size:13px;max-width:80ch}
+  .conf-intro b.g{color:var(--brand-hi)} .conf-intro b.a{color:var(--warn)}
+  .conf-acao{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center}
+  .conf-acao select{padding:9px 11px;border-radius:9px;border:1px solid var(--line);background:var(--bg-elev);color:var(--ink);
+    flex:1;min-width:200px;max-width:320px}
+  .conf-res{display:flex;gap:var(--s4);flex-wrap:wrap;font-size:12.5px;color:var(--ink-3);margin:0 0 var(--s3)}
+  .conf-res b{font-family:var(--font-mono);color:var(--ink)} .conf-res b.g{color:var(--brand-hi)}
+  .conf-p{display:grid;grid-template-columns:52px minmax(0,1fr);gap:6px var(--s3);align-items:center;
+    padding:10px var(--s4);border:1px solid var(--line);border-radius:var(--r);margin-bottom:6px;background:var(--surface)}
+  .conf-p .thumb{width:52px;height:52px;grid-row:1/span 2}
+  .conf-p .nm{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .conf-p .meta{font-size:11.5px;color:var(--ink-3)}
+  .conf-p .meta b{color:var(--brand-hi)}
+  .grade{display:flex;gap:5px;flex-wrap:wrap}
+  .tam{position:relative;min-width:44px;padding:7px 9px;border-radius:9px;border:1px solid var(--line);background:var(--bg-elev);
+    color:var(--ink-3);font-family:var(--font-mono);font-size:12.5px;font-weight:700;cursor:pointer;text-align:center}
+  .tam:hover{border-color:var(--line-str);color:var(--ink)}
+  .tam.tem{border-color:var(--brand);background:rgba(47,210,79,.12);color:var(--brand-hi)}
+  .tam .n{position:absolute;top:-7px;right:-7px;min-width:17px;height:17px;border-radius:999px;background:var(--brand);
+    color:#061006;font-size:10.5px;line-height:17px;padding:0 4px}
+  .tam.fora{opacity:.45;text-decoration:line-through}
+  .conf-salvo{font-size:11px;color:var(--brand-hi);margin-left:6px}
   .abas{display:flex;gap:4px;margin-bottom:var(--s4);border-bottom:1px solid var(--line);flex-wrap:wrap}
   .aba{padding:10px 15px;background:none;border:none;border-bottom:2px solid transparent;color:var(--ink-3);
     font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
@@ -206,6 +230,32 @@
   <div class="abas">
     <button class="aba on" data-t="produtos" type="button">Produtos</button>
     <button class="aba" data-t="entradas" type="button">Entradas</button>
+    <button class="aba" data-t="conferir" type="button">Na loja × encomenda</button>
+  </div>
+
+  <div data-pane="conferir" hidden>
+    <div class="card conf-intro">
+      <p><b class="g">Na loja</b> é o que existe aqui de verdade: é só isso que entra no valor do estoque.
+        <b class="a">Sob encomenda</b> é a grade que fica no site para não perder venda — quando sai um número
+        que não está aqui, o sistema avisa para pegar no fornecedor.</p>
+      <p>Toque no número que está na loja (cada toque soma uma peça; depois de 2 volta a zero). Salva sozinho.
+        Número riscado é o que não está à venda no site agora.</p>
+      <div class="conf-acao">
+        <select id="cCat"><option value="">Escolha uma categoria…</option></select>
+        <button class="btn" id="cMarcar" type="button" disabled>Marcar como sob encomenda</button>
+        <span class="hint" id="cMarcarInfo"></span>
+      </div>
+    </div>
+    <div class="bar">
+      <div class="search-wrap"><input id="cQ" type="search" placeholder="Buscar produto sob encomenda…"></div>
+      <select id="cFiltro">
+        <option value="">Todos sob encomenda</option>
+        <option value="com">Com pares na loja</option>
+        <option value="sem">Sem nenhum par na loja</option>
+      </select>
+    </div>
+    <div class="conf-res" id="cRes"></div>
+    <div id="cLista"></div>
   </div>
 
   <div data-pane="produtos">
@@ -741,13 +791,98 @@ async function fornecedores(){
 
 function iniciarEntradas(){render();historico();fornecedores();}
 
+// ---- Na loja × encomenda ----
+let CONF=[];
+function pintarResumo(r){
+  document.getElementById('cRes').innerHTML=`<span>Produtos sob encomenda: <b>${r.produtos}</b></span>
+    <span>Peças na loja: <b class="g">${r.pares_na_loja}</b></span>
+    <span>Na loja a custo: <b class="g">${BRL(r.valor_custo)}</b></span>
+    <span>Números à venda no site: <b>${r.grade_site}</b></span>`;
+}
+const NOMEAR=(p)=>p.variants.length===1&&/^único$/i.test(p.variants[0].variant_name||'')?'Único':null;
+async function conferir(){
+  const q=document.getElementById('cQ').value.trim(),f=document.getElementById('cFiltro').value;
+  const d=await api(`/api/encomenda?q=${encodeURIComponent(q)}`);
+  CONF=d.produtos;
+  const r=d.resumo;
+  pintarResumo(r);
+  const lista=CONF.filter(p=>f==='com'?p.na_loja>0:f==='sem'?p.na_loja===0:true);
+  const box=document.getElementById('cLista');
+  if(!lista.length){box.innerHTML=vazio('estoque','Nada por aqui',r.produtos
+    ?'Tente outro filtro.':'Nenhum produto está como sob encomenda. Escolha uma categoria acima para marcar.');return;}
+  box.innerHTML=lista.map(p=>{
+    const img=p.image_url?`<img src="${esc(p.image_url)}" alt="" loading="lazy">`:ICO('estoque',20);
+    return `<div class="conf-p" data-p="${p.id}"><span class="thumb">${img}</span>
+      <div><div class="nm">${esc(p.name)}</div>
+        <div class="meta">${esc(p.brand||'sem marca')} · na loja: <b>${p.na_loja}</b> peça(s)<span class="conf-salvo"></span></div></div>
+      <div class="grade" style="grid-column:2">${p.variants.map(v=>`<button type="button" class="tam${v.on_hand>0?' tem':''}${v.stock<=0?' fora':''}"
+        data-v="${v.id}" data-n="${v.on_hand}" title="${v.stock>0?'à venda no site':'fora do site agora'}">${esc(NOMEAR(p)||v.variant_name)}${v.on_hand>0?`<span class="n">${v.on_hand}</span>`:''}</button>`).join('')}</div>
+    </div>`;}).join('');
+}
+// Toque: soma um par; depois de 2 volta a zero. Salva o produto inteiro um
+// instante depois do último toque (dá para tocar vários números seguidos).
+const pendentes=new Map();
+document.getElementById('cLista').addEventListener('click',(e)=>{
+  const b=e.target.closest('.tam');if(!b)return;
+  const n=(parseInt(b.dataset.n,10)+1)%3;
+  b.dataset.n=n;b.classList.toggle('tem',n>0);
+  b.querySelector('.n')?.remove();
+  if(n>0)b.insertAdjacentHTML('beforeend',`<span class="n">${n}</span>`);
+  const card=b.closest('.conf-p');
+  const total=[...card.querySelectorAll('.tam')].reduce((t,x)=>t+parseInt(x.dataset.n,10),0);
+  card.querySelector('.meta b').textContent=total;
+  clearTimeout(pendentes.get(card));
+  pendentes.set(card,setTimeout(async()=>{
+    const itens=[...card.querySelectorAll('.tam')].map(x=>({variant_id:+x.dataset.v,on_hand:+x.dataset.n}));
+    const ok=card.querySelector('.conf-salvo');
+    try{await api('/api/encomenda/maos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itens})});
+      ok.textContent=' · salvo ✓';setTimeout(()=>{ok.textContent='';},1500);resumo();
+      api(`/api/encomenda?q=${encodeURIComponent(document.getElementById('cQ').value.trim())}`).then(d=>pintarResumo(d.resumo)).catch(()=>{});}
+    catch(err){ok.style.color='var(--crit)';ok.textContent=' · não salvou: '+err.message;}
+  },700));
+});
+let cTimer;
+document.getElementById('cQ').oninput=()=>{clearTimeout(cTimer);cTimer=setTimeout(conferir,250);};
+document.getElementById('cFiltro').onchange=conferir;
+// Marcar uma categoria inteira como sob encomenda.
+async function prepararMarcar(){
+  const sel=document.getElementById('cCat'),btn=document.getElementById('cMarcar'),info=document.getElementById('cMarcarInfo');
+  const cat=sel.value;btn.disabled=true;info.textContent='';
+  if(!cat)return;
+  const rows=await api(`/api/catalog?category=${encodeURIComponent(cat)}&modo=proprio`);
+  btn.dataset.ids=JSON.stringify(rows.map(p=>p.id));
+  btn.disabled=!rows.length;
+  info.textContent=rows.length?`${rows.length} produto(s) de ${cat} ainda como estoque próprio.`:`Todos de ${cat} já estão como sob encomenda.`;
+}
+document.getElementById('cCat').onchange=prepararMarcar;
+document.getElementById('cMarcar').onclick=async()=>{
+  const btn=document.getElementById('cMarcar'),ids=JSON.parse(btn.dataset.ids||'[]'),cat=document.getElementById('cCat').value;
+  if(!ids.length)return;
+  if(!confirm(`Marcar ${ids.length} produto(s) de ${cat} como sob encomenda?\n\nA grade do site não muda. As peças na loja começam em zero: depois é só tocar nos números que estão aqui.`))return;
+  btn.disabled=true;
+  try{const r=await api('/api/encomenda/marcar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_ids:ids})});
+    document.getElementById('cMarcarInfo').textContent=`${r.marcados} produto(s) marcados. Agora toque nas peças que estão na loja.`;
+    await conferir();resumo();}
+  catch(err){alert(err.message);btn.disabled=false;}
+};
+async function iniciarConferir(){
+  const s=await api('/api/catalog/summary');
+  document.getElementById('cCat').innerHTML='<option value="">Escolha uma categoria…</option>'
+    +s.by_category.filter(c=>c.label[0]!=='(').map(c=>`<option>${esc(c.label)}</option>`).join('');
+  document.querySelector('[data-pane="conferir"] .search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
+  conferir();
+}
+let conferirCarregado=false;
+
 document.querySelectorAll('.aba').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.aba').forEach(x=>x.classList.toggle('on',x===b));
   document.querySelectorAll('[data-pane]').forEach(x=>{x.hidden=x.dataset.pane!==b.dataset.t;});
   if(b.dataset.t==='entradas'&&!entradasCarregadas){entradasCarregadas=true;iniciarEntradas();}
+  if(b.dataset.t==='conferir'&&!conferirCarregado){conferirCarregado=true;iniciarConferir();}
 });
 // Quem chega por /compras cai direto na aba certa — depois dos cliques existirem.
 if(location.pathname.startsWith('/compras'))document.querySelector('.aba[data-t="entradas"]').click();
+if(location.pathname.startsWith('/encomenda'))document.querySelector('.aba[data-t="conferir"]').click();
 </script>
 </body>
 </html>
