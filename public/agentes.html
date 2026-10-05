@@ -107,7 +107,7 @@ async function load(){
      txt:d.low_stock?`<b>${d.low_stock}</b> produto(s) que venderam 2 ou mais no mês têm 2 peças ou menos. Vale repor.`:'Nenhum campeão de venda está acabando.',
      link:'/produtos',linkTxt:'Ver estoque',meta:BRL(d.stock_value_cost)+' a custo'},
     {nome:'Financeiro',fn:'Caixa & margem',ico:'financeiro',tone:'brand',estado:'Ativo',pill:'live',k:'Hoje',
-     txt:`Faturamento <b>${BRL(d.revenue_today)}</b> com margem de <b>${d.margin_pct}%</b>. Toda venda entra sozinha no caixa.`,
+     txt:`Faturamento <b>${BRL(d.revenue_today)}</b>${semCusto(d.custo_cobertura)?'':` com margem de <b>${d.margin_pct}%</b>`}. Toda venda entra sozinha no caixa.`,
      link:'/financeiro',linkTxt:'Ver caixa',meta:'automático'},
     {nome:'Cobrança',fn:'Contas a receber',ico:'recibo',tone:d.receivable_count?'warn':'brand',
      estado:d.receivable_count?'Atenção':'Em dia',pill:d.receivable_count?'demo':'ok',k:'Fiado em aberto',
@@ -179,10 +179,13 @@ async function acesso(chaveNova){
     </div>`;
   if(s.log.length){
     h+=`<div><span class="label">O que ele consultou por último</span>
-      <table class="log">${s.log.map((l)=>`<tr><td class="n">${quando(l.quando)}</td><td class="c">${esc(l.metodo)} ${esc(l.caminho)}</td>
-        <td class="n">${l.status<400?'ok':(l.status===403?'recusado':l.status)}</td></tr>`).join('')}</table></div>`;
+      <table class="log">${s.log.map((l,i)=>`<tr${i>=10?' class="extra" hidden':''}><td class="n">${quando(l.quando)}</td><td class="c">${esc(l.metodo)} ${esc(l.caminho)}</td>
+        <td class="n">${l.status<400?'ok':(l.status===403?'recusado':l.status)}</td></tr>`).join('')}</table>
+      ${s.log.length>10?'<button type="button" class="btn ghost sm" id="logMais" style="margin-top:6px">Ver as 30 últimas</button>':''}</div>`;
   }
   el.innerHTML=h;
+  document.getElementById('logMais')?.addEventListener('click',(e)=>{
+    el.querySelectorAll('tr.extra').forEach((t)=>{t.hidden=false;});e.target.remove();});
   document.getElementById('copiar')?.addEventListener('click',(e)=>{
     const i=document.getElementById('chaveTxt'); i.select(); navigator.clipboard?.writeText(i.value);
     e.target.textContent='Copiado!'; setTimeout(()=>{e.target.textContent='Copiar';},1500);

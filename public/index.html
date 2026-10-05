@@ -80,6 +80,14 @@
   .fila.zero{opacity:.55}
   .fila.zero .n{color:var(--ink-2)}
   .fila.alerta .n{color:var(--warn)}
+  /* Celular: duas por linha, sem o ícone (uma por linha empurrava o resto para longe). */
+  @media (max-width:560px){
+    .filas{grid-template-columns:1fr 1fr;gap:var(--s2)}
+    .fila{padding:11px 12px;gap:0}
+    .fila .ico-box{display:none}
+    .fila .n{font-size:16px}
+    .fila .l{font-size:11px}
+  }
 
   /* Abas de período */
   .per-wrap{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);
@@ -284,7 +292,9 @@ function renderKpis(){
       sub:p.a_receber>0?`${rot} · ${BRL(p.a_receber)} ainda em fiado`:rot}),
     kpi({label:'Vendas',ico:'recibo',val:p.pedidos,sub:`${p.pdv.n} no balcão · ${p.site.n} no site`}),
     kpi({label:'Ticket médio',ico:'grafico',val:BRL(p.ticket),sub:'por venda'}),
-    kpi({label:'Margem',ico:'subiu',val:p.margem_pct+'%',sub:'do vendido'}),
+    semCusto(p.custo_cobertura)
+      ? kpi({label:'Margem',ico:'subiu',val:'—',sub:'preencha os custos'})
+      : kpi({label:'Margem',ico:'subiu',val:p.margem_pct+'%',sub:avisoCusto(p.custo_cobertura)||'do vendido'}),
     // Só o que muda com a aba (Hoje/Ontem/Semana) fica nesta grade. A receber
     // e ruptura já estão nas pastilhas, na fila "Por cobrar" e no painel de estoque.
   ].join('');
@@ -388,7 +398,7 @@ async function load(){
     const det=[];
     if(pdv) det.push(`<b>${pdv.n}</b> no balcão`);
     if(site) det.push(`<b>${site.n}</b> pelo site`);
-    p.push(`Já são <b>${d.orders_today}</b> venda(s) hoje${det.length?' ('+det.join(' e ')+')':''}, <b class="hl">${BRL(d.revenue_today)}</b> vendidos com margem de <b>${d.margin_pct}%</b>.`);
+    p.push(`Já são <b>${d.orders_today}</b> venda(s) hoje${det.length?' ('+det.join(' e ')+')':''}, <b class="hl">${BRL(d.revenue_today)}</b> vendidos${semCusto(d.custo_cobertura)?'':` com margem de <b>${d.margin_pct}%</b>`}.`);
   } else p.push('Ainda sem vendas hoje — o PDV está pronto.');
   if(d.receivable_count>0) p.push(`Tem <b class="hl">${BRL(d.receivable_total)}</b> em fiado pra receber.`);
   if(R.atrasados>0) p.push(`E <b>${R.atrasados}</b> lembrete(s) já passaram da data.`);

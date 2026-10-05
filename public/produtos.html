@@ -297,6 +297,11 @@
     </div>
     <select id="fCat"><option value="">Todas as categorias</option></select>
     <select id="fBrand"><option value="">Todas as marcas</option></select>
+    <select id="fEstoque" title="O que mostrar">
+      <option value="com">Com estoque</option>
+      <option value="esgotados">Esgotados</option>
+      <option value="">Todos</option>
+    </select>
   </div>
 
   <div class="thead">
@@ -445,9 +450,13 @@ document.getElementById('novo').insertAdjacentHTML('afterbegin',ICO('mais',16));
 async function resumo(){
   const s=await api('/api/catalog/summary');
   // Dois números diferentes, de propósito: o que é seu e o que é anúncio.
-  document.getElementById('sVal').textContent=BRL(s.totals.value_cost);
-  document.getElementById('sSub').textContent=
-    `${s.totals.units} peça(s) em mãos · ${BRL(s.totals.value_price)} a preço de venda`;
+  // Sem custo cadastrado, o valor a custo sai R$ 0 — mostra o de venda e avisa.
+  const semCustoNenhum=s.totals.value_cost<=0&&s.totals.units>0;
+  document.querySelector('.bx-real .label').textContent=semCustoNenhum?'Aqui na loja · a preço de venda':'Aqui na loja · a custo';
+  document.getElementById('sVal').textContent=BRL(semCustoNenhum?s.totals.value_price:s.totals.value_cost);
+  document.getElementById('sSub').textContent=semCustoNenhum
+    ?`${s.totals.units} peça(s) em mãos · o valor a custo aparece quando os custos forem preenchidos`
+    :`${s.totals.units} peça(s) em mãos · ${BRL(s.totals.value_price)} a preço de venda`;
   // Custo vazio faz esse número mentir — avisa quantas peças faltam.
   api('/api/custos?falta=1').then(c=>{
     const n=c.resumo.sem_custo;
@@ -457,7 +466,7 @@ async function resumo(){
       l.classList.add('alerta');
       document.getElementById('sSub').insertAdjacentHTML('beforeend',
         `<br><a href="/custos" style="color:var(--warn);font-weight:700">${n} peça(s) sem custo</a>`
-        +` — este valor está incompleto.`);
+        +` (em estoque ou vendidas nos últimos 120 dias).`);
     }else{l.textContent='Custos em massa';l.classList.remove('alerta');}
   }).catch(()=>{});
 
@@ -505,14 +514,23 @@ document.getElementById('fModo').onclick=e=>{
   document.querySelectorAll('#fModo .seg-b').forEach(x=>x.classList.remove('sel'));
   b.classList.add('sel');modoAtual=b.dataset.modo;lista();
 };
+// A loja guarda milhares de produtos (inclusive os que já esgotaram): a
+// lista começa no que tem estoque e desenha de 100 em 100.
+const POR_VEZ=100;let LINHAS=[],mostrando=0;
 async function lista(){
   const q=document.getElementById('q').value.trim();
   const cat=document.getElementById('fCat').value,br=document.getElementById('fBrand').value;
+  const est=document.getElementById('fEstoque').value;
   const box=document.getElementById('rows');
-  const rows=await api(`/api/catalog?q=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&brand=${encodeURIComponent(br)}&modo=${modoAtual}`);
-  if(!rows.length){box.innerHTML=vazio('caixa_vazia','Nenhum produto aqui',
-    q||cat||br||modoAtual?'Tente limpar os filtros.':'Importe da sua loja em Conectar, ou cadastre um novo.');return;}
-  box.innerHTML='';
+  LINHAS=await api(`/api/catalog?q=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&brand=${encodeURIComponent(br)}&modo=${modoAtual}&estoque=${est}`);
+  if(!LINHAS.length){box.innerHTML=vazio('caixa_vazia','Nenhum produto aqui',
+    q||cat||br||modoAtual||est?'Tente limpar os filtros.':'Importe da sua loja em Conectar, ou cadastre um novo.');return;}
+  box.innerHTML='';mostrando=0;desenharMais();
+}
+function desenharMais(){
+  const box=document.getElementById('rows');
+  box.querySelector('.mais')?.remove();
+  const rows=LINHAS.slice(mostrando,mostrando+POR_VEZ);mostrando+=rows.length;
   for(const p of rows){
     // "Acabando" vem do servidor: produto que vende e tem pouca peça.
     // Sob encomenda não se aplica — repor é com o fornecedor.
@@ -531,7 +549,12 @@ async function lista(){
       <div><span class="tag ${p.synced_nuvemshop?'on':'off'}">${p.synced_nuvemshop?'no ar':'pendente'}</span></div>`;
     el.onclick=()=>abrir(p.id);box.appendChild(el);
   }
+  if(mostrando<LINHAS.length){
+    const b=document.createElement('button');b.type='button';b.className='btn ghost mais';b.style.margin='8px auto';b.style.display='block';
+    b.textContent=`Mostrar mais (${LINHAS.length-mostrando} de ${LINHAS.length})`;b.onclick=desenharMais;box.appendChild(b);
+  }
 }
+document.getElementById('fEstoque').onchange=lista;
 
 /* diálogo */
 const dlg=document.getElementById('dlg');

@@ -103,6 +103,10 @@
       <button type="button" class="seg-b sel" data-f="1">Só sem custo</button>
       <button type="button" class="seg-b" data-f="">Tudo</button>
     </div>
+    <select id="fTudo" title="Quais peças">
+      <option value="">Na loja ou vendidas há pouco</option>
+      <option value="1">Incluir esgotados antigos</option>
+    </select>
   </div>
 
   <div class="acoes">
@@ -145,11 +149,13 @@ async function carregar(){
   const q=document.getElementById('q').value.trim();
   const br=document.getElementById('fBrand').value,ct=document.getElementById('fCat').value;
   const d=await api(`/api/custos?q=${encodeURIComponent(q)}&brand=${encodeURIComponent(br)}`
-    +`&category=${encodeURIComponent(ct)}&falta=${falta}`);
+    +`&category=${encodeURIComponent(ct)}&falta=${falta}&tudo=${document.getElementById('fTudo').value}`);
   LISTA=d.variantes;
+  // Conta só o que importa: peça na loja ou vendida nos últimos 120 dias.
+  // As que mais vendem vêm primeiro — é por elas que o lucro fica certo.
   document.getElementById('semCusto').textContent=d.resumo.sem_custo;
   document.getElementById('semSub').textContent=
-    `de ${d.resumo.total} variação(ões) no sistema · ${d.resumo.total-d.resumo.sem_custo} já com custo`;
+    `de ${d.resumo.total} peça(s) na loja ou vendidas nos últimos 120 dias · ${d.resumo.total-d.resumo.sem_custo} já com custo · as que mais vendem aparecem primeiro`;
   render();
 }
 
@@ -171,7 +177,7 @@ function render(){
       :ICO('estoque',18);
     el.innerHTML=`<span class="thumb">${img}</span>
       <div class="who"><div class="nm">${esc(v.product_name)}</div>
-        <div class="meta">${esc(v.brand||'sem marca')}${v.sku?' · '+esc(v.sku):''}</div></div>
+        <div class="meta">${esc(v.brand||'sem marca')}${v.sku?' · '+esc(v.sku):''}${v.vendidas_120d?` · vendeu ${v.vendidas_120d} em 120 dias`:''}${v.na_loja>0?` · ${v.na_loja} na loja`:''}</div></div>
       <div class="var">${esc(v.variant_name||'Único')}</div>
       <div class="preco">${BRL(v.price)}</div>
       <input class="custo" type="number" step="0.01" min="0" inputmode="decimal"
@@ -251,6 +257,7 @@ document.getElementById('fFalta').onclick=e=>{
 let t;document.getElementById('q').oninput=()=>{clearTimeout(t);t=setTimeout(carregar,250);};
 document.getElementById('fBrand').onchange=carregar;
 document.getElementById('fCat').onchange=carregar;
+document.getElementById('fTudo').onchange=carregar;
 
 // Preenche os filtros com as marcas e categorias reais.
 api('/api/catalog/summary').then(s=>{

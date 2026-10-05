@@ -363,16 +363,18 @@ async function load(){
   const cmp=(atual,ant)=>{
     if(ant==null||!ant)return 'sem mês anterior para comparar';
     const dif=atual-ant, pct=ant?Math.round((dif/Math.abs(ant))*100):0;
-    return `${dif>=0?'▲':'▼'} ${Math.abs(pct)}% vs mês passado`;
+    return `${dif>=0?'▲':'▼'} ${Math.abs(pct)}% vs mesmo período do mês passado`;
   };
   document.getElementById('kpis').innerHTML=[
     kpi({label:'Entrou',ico:'subiu',tone:'brand',val:BRL(d.receita),
       sub:d.anterior?cmp(d.receita,d.anterior.receita):'receitas do período',color:'var(--ok)'}),
     kpi({label:'Saiu',ico:'desceu',tone:'crit',val:BRL(d.despesa),
       sub:d.despesa_agendada>0?`+ ${BRL(d.despesa_agendada)} a pagar`:'despesas pagas',color:'var(--crit)'}),
-    kpi({label:'Lucro',ico:'grafico',tone:lucroPos?'brand':'crit',mod:lucroPos?'':'is-warn',val:BRL(d.lucro),
-      sub:d.anterior?cmp(d.lucro,d.anterior.lucro):'depois do custo da mercadoria',
-      color:lucroPos?'var(--brand-hi)':'var(--crit)'}),
+    semCusto(d.custo_cobertura)
+      ? kpi({label:'Lucro',ico:'grafico',val:'—',sub:'sem custo cadastrado — preencha em Estoque → Custos'})
+      : kpi({label:'Lucro',ico:'grafico',tone:lucroPos?'brand':'crit',mod:lucroPos?'':'is-warn',val:BRL(d.lucro),
+        sub:avisoCusto(d.custo_cobertura)||(d.anterior?cmp(d.lucro,d.anterior.lucro):'depois do custo da mercadoria'),
+        color:lucroPos?'var(--brand-hi)':'var(--crit)'}),
     kpi({label:'A receber',ico:'relogio',tone:d.a_receber>0?'warn':'',mod:d.a_receber>0?'is-warn':'',
       val:BRL(d.a_receber),sub:'fiado em aberto'+(d.pix_pendente&&d.pix_pendente.n
         ?` · fora daqui: ${BRL(d.pix_pendente.t)} em pix do site aguardando`:'')}),
@@ -607,9 +609,14 @@ async function carregarLucro(){
   document.getElementById('kpisL').innerHTML=[
     kpi({label:'Receita',ico:'subiu',tone:'brand',val:BRL(t.receita),sub:`${t.pecas} peça(s) vendida(s)`,color:'var(--ok)'}),
     kpi({label:'Custo das peças',ico:'caixa_vazia',tone:'crit',val:BRL(t.custo),sub:'o que você pagou por elas',color:'var(--crit)'}),
-    kpi({label:'Lucro bruto',ico:'grafico',tone:'brand',val:BRL(t.lucro),sub:'receita menos o custo',color:'var(--brand-hi)'}),
-    kpi({label:'Margem',ico:'etiqueta',tone:t.margem_pct<25?'warn':'',mod:t.margem_pct<25?'is-warn':'',
-      val:t.margem_pct+'%',sub:t.margem_pct<25?'apertada':'saudável'}),
+    ...(semCusto(t.custo_cobertura)?[
+      kpi({label:'Lucro bruto',ico:'grafico',val:'—',sub:'sem custo cadastrado'}),
+      kpi({label:'Margem',ico:'etiqueta',tone:'warn',mod:'is-warn',val:'—',sub:'preencha em Estoque → Custos'}),
+    ]:[
+      kpi({label:'Lucro bruto',ico:'grafico',tone:'brand',val:BRL(t.lucro),sub:avisoCusto(t.custo_cobertura)||'receita menos o custo',color:'var(--brand-hi)'}),
+      kpi({label:'Margem',ico:'etiqueta',tone:t.margem_pct<25?'warn':'',mod:t.margem_pct<25?'is-warn':'',
+        val:t.margem_pct+'%',sub:avisoCusto(t.custo_cobertura)||(t.margem_pct<25?'apertada':'saudável')}),
+    ]),
   ].join('');
 
   // Curva ABC
@@ -618,8 +625,9 @@ async function carregarLucro(){
       <div class="l">${a.classe}</div><div class="v">${BRL(a.lucro)}</div>
       <div class="s">${a.produtos} produto(s)</div></div>`).join('');
   const nA=(d.abc.find(a=>a.classe==='A')||{produtos:0}).produtos;
+  // Sem custo, a curva sai pela receita — continua mostrando o que vende.
   document.getElementById('abcMeta').textContent=nA
-    ? `${nA} produto(s) fazem 80% do lucro` : '';
+    ? `${nA} produto(s) fazem 80% ${semCusto(t.custo_cobertura)?'da receita (sem custo, lucro = receita)':'do lucro'}` : '';
 
   // Ranking de produtos
   const box=document.getElementById('rows');
@@ -637,7 +645,7 @@ async function carregarLucro(){
         <div class="n">${p.pecas}</div>
         <div class="n">${BRL(p.receita)}</div>
         <div class="n lucro${p.lucro<0?' neg':''}">${BRL(p.lucro)}</div>
-        <div class="pct ${marg<0?'neg':(marg<25?'baixa':'ok')}">${marg}%</div>
+        <div class="pct ${marg<0?'neg':(marg<25?'baixa':'ok')}">${p.custo>0?marg+'%':'—'}</div>
       </div>`;
     }).join('');
   }

@@ -170,7 +170,8 @@
           <li><div><b>Escolha o cliente</b> (opcional). Digite o nome: se já existe, aparece na lista;
             se não, clique em <b>Criar</b> e ele nasce ali mesmo.</div></li>
           <li><div><b>Diga como foi o pagamento.</b> <b>Pago</b> (e a forma: Pix, espécie, crédito ou
-            débito) ou <b>Fiado</b>, quando o cliente vai pagar depois.</div></li>
+            débito — é obrigatória, porque é por ela que o caixa do dia fecha) ou <b>Fiado</b>, quando o
+            cliente vai pagar depois.</div></li>
           <li><div><b>Desconto</b>, se houver, e <b>Finalizar venda</b>.</div></li>
         </ol>
 
@@ -183,6 +184,20 @@
             <b>como</b> ele pagou (Pix, espécie ou cartão) — é isso que põe o dinheiro na conta certa da
             gaveta.</li>
         </ul>
+
+        <h3>Trocar, devolver ou cancelar</h3>
+        <p>No topo do PDV, <b>Vendas · trocar ou cancelar</b> lista as vendas (hoje, 7 ou 30 dias) e busca
+          pelo código (VN-…) ou pelo nome do cliente. Abra a venda e escolha:</p>
+        <ul>
+          <li><b>Trocar ou devolver</b>: o carrinho vira a troca. Marque no <kbd>+</kbd> o que <b>voltou</b> e
+            toque nos produtos que o cliente <b>leva no lugar</b>. O sistema mostra se o cliente paga a
+            diferença ou se você devolve — escolha a forma e confirme. Só devolução? Marque o que voltou e
+            confirme sem adicionar nada.</li>
+          <li><b>Cancelar venda</b>: as peças voltam para o estoque (aqui e no site), o valor sai do caixa
+            de hoje como estorno (na forma que você escolher) e a venda some de metas e relatórios.</li>
+        </ul>
+        <p>A peça que volta entra pelo preço que foi paga (com o desconto da venda). Pedido da Nuvemshop
+          (site ou PDV de lá) se cancela e se troca na própria Nuvemshop — o sistema acompanha sozinho.</p>
 
         <div class="aviso atencao"><span class="ico" id="a1"></span>
           <div>O sistema <b>não deixa vender mais do que tem</b> em estoque. Se aparecer "estoque no
@@ -749,9 +764,13 @@
           próxima rodada (ou nesse mesmo botão), antes da leitura.</p>
 
         <h3>Vendi errado / preciso cancelar</h3>
-        <p>Hoje a venda registrada não é apagada pela tela. Um jeito simples de corrigir: lance uma
-          <b>despesa</b> no Financeiro com o valor devolvido (categoria "Outras despesas") e acerte o
-          estoque em <span class="rota">Estoque</span>.</p>
+        <p>Em <span class="rota">PDV → Vendas · trocar ou cancelar</span>, abra a venda e use
+          <b>Cancelar venda</b> (tudo volta) ou <b>Trocar ou devolver</b> (só uma parte).</p>
+
+        <h3>O lucro aparece como "—"</h3>
+        <p>Falta o <b>custo</b> das peças vendidas. Sem custo, a margem sairia 100% — o sistema prefere
+          avisar. Preencha em <span class="rota">Estoque → Custos em massa</span>: as peças que mais vendem
+          aparecem primeiro. Ao salvar, as vendas antigas sem custo passam a usar o custo novo.</p>
 
         <h3>Quero começar do zero</h3>
         <p>Em <span class="rota">Conectar</span> existe o botão <b>Limpar dados do sistema</b>. Ele

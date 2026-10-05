@@ -520,7 +520,15 @@ async function listar(){
   if(!d.clientes.length){box.innerHTML=vazio('clientes','Ninguém aqui','Tente outro grupo ou outra busca.');return;}
   document.getElementById('rankMeta').textContent=
     `${d.total} pessoa(s)${segAtivo!=='todos'?' neste grupo':''} · em ordem de quanto já levaram`;
-  box.innerHTML=d.clientes.map((c,i)=>`<div class="cli" data-cli="${c.id}">
+  // 1.700 pessoas de uma vez travavam o celular: desenha de 80 em 80.
+  CLI=d.clientes;cliMostrando=0;box.innerHTML='';maisClientes();
+}
+let CLI=[],cliMostrando=0;
+function maisClientes(){
+  const box=document.getElementById('clientes');
+  box.querySelector('.mais')?.remove();
+  const fatia=CLI.slice(cliMostrando,cliMostrando+80);
+  box.insertAdjacentHTML('beforeend',fatia.map((c,j)=>{const i=cliMostrando+j;return `<div class="cli" data-cli="${c.id}">
       <span class="pos">${i+1}º</span>
       <span class="av">${esc(iniciais(c.nome))}</span>
       <div><div class="nm">${esc(c.nome)}
@@ -531,8 +539,14 @@ async function listar(){
         <div class="s">${c.compras} compra(s)${c.dias!=null?' · última há '+c.dias+' dias':''}${
           c.marca?' · gosta de '+esc(c.marca):''}${c.aberto>0?' · deve '+BRL(c.aberto):''}</div></div>
       <div class="vl">${BRL(c.gasto)}<small>ticket ${BRL(c.ticket)}</small></div>
-    </div>`).join('');
-  box.querySelectorAll('[data-cli]').forEach(el=>el.onclick=()=>ficha(el.dataset.cli));
+    </div>`;}).join(''));
+  cliMostrando+=fatia.length;
+  box.querySelectorAll('[data-cli]:not([data-ok])').forEach(el=>{el.dataset.ok=1;el.onclick=()=>ficha(el.dataset.cli);});
+  if(cliMostrando<CLI.length){
+    const b=document.createElement('button');b.type='button';b.className='btn ghost mais';
+    b.style.cssText='margin:8px auto;display:block';
+    b.textContent=`Mostrar mais (${CLI.length-cliMostrando} de ${CLI.length})`;b.onclick=maisClientes;box.appendChild(b);
+  }
 }
 document.getElementById('busca').oninput=()=>{clearTimeout(bt);bt=setTimeout(listar,220);};
 

@@ -115,6 +115,17 @@ const ACABANDO_PECAS = 2;
 const ACABANDO_VENDIDAS = 2;
 const ACABANDO_DIAS = 30;
 const acabando = (p) => !p.on_demand && p.vendidas >= ACABANDO_VENDIDAS && p.pecas <= ACABANDO_PECAS;
+// Quanto do que foi vendido no período tem custo cadastrado (0 a 1; null =
+// não há peças registradas). Sem custo, a margem sai 100% e o lucro igual
+// ao faturamento — a tela tem que avisar em vez de comemorar.
+function coberturaDeCusto(desdeISO, ateISO) {
+  const r = db.prepare(`SELECT COALESCE(SUM(CASE WHEN i.unit_cost > 0 THEN i.line_total ELSE 0 END),0) com,
+      COALESCE(SUM(i.line_total),0) tudo FROM sale_items i JOIN sales s ON s.id = i.sale_id
+    WHERE i.qty > 0 AND ${VENDA('s.')} AND s.created_at >= ?${ateISO ? ' AND s.created_at < ?' : ''}`)
+    .get(...(ateISO ? [desdeISO, ateISO] : [desdeISO]));
+  return r.tudo > 0 ? Math.round((r.com / r.tudo) * 100) / 100 : null;
+}
+
 // Peças vendidas do produto "p" desde a data do parâmetro.
 const SQL_VENDIDAS = `(SELECT COALESCE(SUM(i.qty),0) FROM sale_items i
     JOIN sales s ON s.id = i.sale_id JOIN variants vv ON vv.id = i.variant_id
@@ -176,12 +187,18 @@ app.get('/api/products', (req, res) => {
   const base = `SELECT v.*, p.brand, p.category, p.image_url, p.on_demand,
       ${REAL} AS real_stock
     FROM variants v LEFT JOIN products p ON p.id = v.product_id`;
+  // Dá para vender: tem peça (no estoque próprio), é sob encomenda (a
+  // grade do site está à venda) ou não controla estoque. Sem busca, o PDV
+  // mostra só isso — a loja guarda milhares de produtos que já esgotaram.
+  // Buscando, o esgotado aparece no fim (para você ver que acabou).
+  const vende = `(COALESCE(p.on_demand,0) = 1 OR v.stock_management = 0 OR v.stock > 0)`;
   let rows;
   if (q) {
     const like = `%${q}%`;
-    rows = db.prepare(`${base} WHERE v.product_name LIKE ? OR v.variant_name LIKE ? OR v.sku LIKE ? OR p.brand LIKE ? OR p.category LIKE ? ORDER BY v.product_name, v.variant_name LIMIT 120`).all(like, like, like, like, like);
+    rows = db.prepare(`${base} WHERE (v.product_name LIKE ? OR v.variant_name LIKE ? OR v.sku LIKE ? OR p.brand LIKE ? OR p.category LIKE ?)
+      ORDER BY ${vende} DESC, v.product_name, v.variant_name LIMIT 120`).all(like, like, like, like, like);
   } else {
-    rows = db.prepare(`${base} ORDER BY v.product_name, v.variant_name LIMIT 120`).all();
+    rows = db.prepare(`${base} WHERE ${vende} ORDER BY v.updated_at DESC, v.product_name LIMIT 120`).all();
   }
   res.json(rows);
 });
@@ -202,6 +219,12 @@ app.get('/api/catalog', (req, res) => {
   const modo = (req.query.modo || '').trim();
   if (modo === 'proprio') where.push('p.on_demand = 0');
   if (modo === 'encomenda') where.push('p.on_demand = 1');
+  // estoque=com: só o que tem peça (ou é encomenda, com grade no site);
+  // estoque=esgotados: o resto. A loja guarda milhares de esgotados.
+  const temPeca = `EXISTS (SELECT 1 FROM variants x WHERE x.product_id = p.id
+    AND (x.stock_management = 0 OR (p.on_demand = 1 AND (x.stock > 0 OR COALESCE(x.on_hand,0) > 0)) OR (p.on_demand = 0 AND x.stock > 0)))`;
+  if (req.query.estoque === 'com') where.push(temPeca);
+  if (req.query.estoque === 'esgotados') where.push(`NOT ${temPeca}`);
   const rows = db.prepare(`
     SELECT p.*,
       COUNT(v.id) AS variant_count,
@@ -705,21 +728,30 @@ app.get('/api/custos', (req, res) => {
   if (brand) { where.push('p.brand = ?'); args.push(brand); }
   if (cat) { where.push('(p.category = ? OR p.categories_all LIKE ?)'); args.push(cat, `%${cat}%`); }
   if (soFalta) where.push('COALESCE(v.cost,0) <= 0');
+  // Importa: a peça que está na loja ou que vendeu nos últimos 120 dias.
+  // O produto esgotado que não vende mais não precisa de custo — e são
+  // milhares. "tudo=1" mostra também esses.
+  const desde = desdeDias(120);
+  const vendeu = `(SELECT COALESCE(SUM(i.qty),0) FROM sale_items i JOIN sales s ON s.id = i.sale_id
+    WHERE i.variant_id = v.id AND s.created_at >= '${desde}' AND ${VENDA('s.')})`;
+  const importa = `(${REAL} > 0 OR ${vendeu} > 0)`;
+  if (req.query.tudo !== '1') where.push(importa);
 
   const rows = db.prepare(`
     SELECT v.id, v.product_id, v.product_name, v.variant_name, v.sku, v.price, v.cost,
            v.stock, COALESCE(v.on_hand,0) AS on_hand, p.brand, p.category, p.image_url,
-           COALESCE(p.on_demand,0) AS on_demand
+           COALESCE(p.on_demand,0) AS on_demand, ${REAL} AS na_loja, ${vendeu} AS vendidas_120d
     FROM variants v LEFT JOIN products p ON p.id = v.product_id
     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-    ORDER BY (COALESCE(v.cost,0) <= 0) DESC, v.product_name, v.variant_name
+    ORDER BY (COALESCE(v.cost,0) <= 0) DESC, vendidas_120d DESC, na_loja DESC, v.product_name, v.variant_name
     LIMIT 500
   `).all(...args);
 
+  // "Sem custo" que importa: o que está na loja ou vendeu há pouco.
   const resumo = db.prepare(`
     SELECT COUNT(*) total,
       SUM(CASE WHEN COALESCE(v.cost,0) <= 0 THEN 1 ELSE 0 END) sem_custo
-    FROM variants v`).get();
+    FROM variants v LEFT JOIN products p ON p.id = v.product_id WHERE ${importa}`).get();
   res.json({ resumo, variantes: rows });
 });
 
@@ -1410,6 +1442,7 @@ app.get('/api/dashboard', (req, res) => {
     mode: isLive() ? 'live' : 'demo',
     reminders: remResumo, reminders_list: remLista, por_origem_hoje: origemHoje,
     revenue_today: money(today.revenue), orders_today: today.orders, ticket, margin_pct: marginPct,
+    custo_cobertura: coberturaDeCusto(iso),
     low_stock: acabandoLista.length, stock_value_cost: money(stockVal),
     receivable_total: money(recv.total), receivable_count: recv.n,
     recent_sales: recent, low_stock_list: lowList, pending_list: pendingList,
@@ -2256,10 +2289,19 @@ function gerarMensagens() {
   const ts = now();
   let n = 0;
 
+  // Mensagem que perdeu a hora não serve mais: carrinho de mais de uma
+  // semana não volta, e "seu pedido foi pago" de dias atrás soa estranho.
+  // Venda de balcão (PDV da Nuvemshop) não recebe aviso de pedido: o
+  // cliente estava na loja.
+  db.prepare(`UPDATE messages SET status = 'descartado' WHERE status = 'pendente' AND (
+      (tipo = 'carrinho' AND agendado_para < ?) OR (tipo = 'pedido' AND agendado_para < ?)
+      OR (tipo = 'pedido' AND sale_id IN (SELECT id FROM sales WHERE origem = 'balcao')))`)
+    .run(desdeDias(7), desdeDias(3));
+
   // --- carrinhos abandonados ---
   const carrinhos = db.prepare(`SELECT * FROM carts
     WHERE recuperado = 0 AND COALESCE(phone,'') <> '' AND ns_created_at >= ?`)
-    .all(new Date(Date.now() - 30 * 864e5).toISOString());
+    .all(desdeDias(7));
   for (const m of porEvento('carrinho')) {
     for (const c of carrinhos) {
       const quando = new Date(new Date(c.ns_created_at).getTime() + m.atraso_horas * 36e5);
@@ -2274,8 +2316,8 @@ function gerarMensagens() {
   // Cada transição gera no máximo uma mensagem, para sempre.
   const pedidos = db.prepare(`SELECT s.*, c.phone AS cli_phone, c.name AS cli_nome FROM sales s
     LEFT JOIN customers c ON c.id = s.customer_id
-    WHERE s.channel = 'site' AND s.created_at >= ?`)
-    .all(new Date(Date.now() - 45 * 864e5).toISOString());
+    WHERE s.channel = 'site' AND COALESCE(s.origem,'site') <> 'balcao' AND s.created_at >= ?`)
+    .all(desdeDias(15));   // o envio pode acontecer dias depois da compra
   for (const p of pedidos) {
     const fone = String(p.cli_phone || '').trim();
     if (!fone) continue;
@@ -2432,12 +2474,12 @@ app.get('/api/canvas', (req, res) => {
   // Só o que o sistema mede de verdade — o resto é pensamento do dono.
   const d90 = new Date(Date.now() - 90 * 864e5).toISOString();
   const ym = mesLocal();
-  const vendas = db.prepare(`SELECT channel, COUNT(*) n, COALESCE(SUM(total),0) v FROM sales
-    WHERE payment_status <> 'cancelado' AND created_at >= ? GROUP BY channel`).all(d90);
+  const vendas = db.prepare(`SELECT ${FRENTE()} channel, COUNT(*) n, COALESCE(SUM(total),0) v FROM sales
+    WHERE ${SQL_VENDA} AND created_at >= ? GROUP BY 1 ORDER BY v DESC`).all(d90);
   const totalV = vendas.reduce((s, x) => s + x.v, 0);
   const pessoas = db.prepare(`SELECT COUNT(*) n FROM customers c WHERE ${SQL_PESSOA}`).get().n;
   const recompra = db.prepare(`SELECT COUNT(*) n FROM (
-    SELECT customer_id FROM sales WHERE customer_id IS NOT NULL AND payment_status <> 'cancelado'
+    SELECT customer_id FROM sales WHERE customer_id IS NOT NULL AND ${SQL_VENDA}
     GROUP BY customer_id HAVING COUNT(*) > 1)`).get().n;
   const despesa = db.prepare(`SELECT COALESCE(SUM(amount),0) v FROM financial_entries
     WHERE type = 'despesa' AND created_at >= ?`).get(inicioDoMes(ym)).v;
@@ -2769,7 +2811,8 @@ app.get('/api/relatorios', (req, res) => {
 
   res.json({
     dias, desde,
-    totais: { ...totais, margem_pct: totais.receita > 0 ? Math.round((totais.lucro / totais.receita) * 100) : 0 },
+    totais: { ...totais, margem_pct: totais.receita > 0 ? Math.round((totais.lucro / totais.receita) * 100) : 0,
+      custo_cobertura: coberturaDeCusto(desde) },
     produtos: abc.slice(0, 60),
     por_marca: agrupado('p.brand', 'marca'),
     por_categoria: agrupado('p.category', 'categoria'),
@@ -2843,8 +2886,13 @@ app.get('/api/financial', (req, res) => {
   // Mês passado, para comparar.
   let anterior = null;
   if (period === 'month') {
-    const ini = new Date(d.getFullYear(), d.getMonth() - 1, 1).toISOString();
-    const fim = new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
+    // Até o mesmo dia e hora do mês passado: comparar 5 dias de outubro com
+    // setembro inteiro dizia "caiu 76%" todo começo de mês.
+    const hoje = new Date();
+    const ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1).toISOString();
+    const diasNoMesPassado = new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate();
+    const fim = new Date(hoje.getFullYear(), hoje.getMonth() - 1, Math.min(hoje.getDate(), diasNoMesPassado),
+      hoje.getHours(), hoje.getMinutes()).toISOString();
     const r = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries
       WHERE type='receita' AND created_at >= ? AND created_at < ?`).get(ini, fim).n;
     const de = db.prepare(`SELECT COALESCE(SUM(amount),0) n FROM financial_entries
@@ -2859,6 +2907,7 @@ app.get('/api/financial', (req, res) => {
 
   res.json({
     period, receita: money(receita), despesa: money(despesa), saldo: money(receita - despesa),
+    custo_cobertura: coberturaDeCusto(since || '0000'),
     despesa_agendada: money(agendada), a_pagar: aPagar, a_pagar_vencidas: vencidas.length,
     lucro: money(margemVendas - despesaSemMercadoria),
     margem_vendas: money(margemVendas), despesas_operacao: money(despesaSemMercadoria),
@@ -3522,6 +3571,7 @@ app.get('/api/operacao', (req, res) => {
       pedidos: t.pedidos, faturamento: money(t.fat), ticket: t.pedidos ? money(t.fat / t.pedidos) : 0,
       a_receber: money(t.fiado),
       margem_pct: t.fat > 0 ? Math.round((t.marg / t.fat) * 100) : 0,
+      custo_cobertura: coberturaDeCusto(...args),
       pdv: { n: pdv.n, total: money(pdv.t) }, site: { n: site.n, total: money(site.t) },
     };
   };

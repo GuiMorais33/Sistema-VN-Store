@@ -305,6 +305,8 @@ textarea:-webkit-autofill, select:-webkit-autofill{
 
 /* ============ KPI ============ */
 .kpis{display:grid;gap:var(--s3);grid-template-columns:repeat(auto-fit,minmax(216px,1fr))}
+/* No celular, dois por linha: um por linha empurrava o resto da tela para longe. */
+@media (max-width:560px){.kpis{grid-template-columns:1fr 1fr;gap:var(--s2)}}
 .kpi{
   position:relative;padding:var(--s4);border-radius:var(--r-lg);overflow:hidden;
   background:linear-gradient(180deg,var(--surface-2),var(--surface));
@@ -400,6 +402,19 @@ dialog::backdrop{background:rgba(0,0,0,.72);backdrop-filter:blur(3px)}
   .nav-clock,.nav-exit span{display:none}
   .app{padding:var(--s4) var(--s3) var(--s8)}
   .pagehead h1{font-size:24px}
+  /* Cinco principais na barra; o resto (e o Sair) no painel do "Mais". */
+  .nav-item.so-pc{display:none}
+  .sidebar .nav-mais{display:flex}
+  .nav-foot .nav-exit{display:none}
 }
+/* "Mais" e o painel dele só existem no celular. */
+.nav-mais{display:none;background:none;border:none;cursor:pointer;font-family:var(--font-body);color:var(--ink-3)}
+.nav-painel{position:fixed;left:var(--s3);right:var(--s3);z-index:90;display:grid;grid-template-columns:1fr 1fr;gap:6px;
+  padding:var(--s3);border-radius:var(--r-lg);background:var(--surface-2);border:1px solid var(--line-str);box-shadow:var(--sh-3)}
+.nav-painel[hidden]{display:none}
+.nav-painel a{display:flex;align-items:center;gap:10px;padding:12px;border-radius:var(--r);color:var(--ink-2);
+  text-decoration:none;font-weight:600;font-size:14px;background:var(--bg-elev)}
+.nav-painel a.active{color:var(--brand-hi);border:1px solid rgba(47,210,79,.35)}
+@media (min-width:861px){.nav-painel{display:none!important}}
 
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
