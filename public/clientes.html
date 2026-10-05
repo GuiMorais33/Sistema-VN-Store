@@ -452,6 +452,8 @@ const CANAL={direct:'Direct',whatsapp:'WhatsApp',loja:'Loja',site:'Site',indicac
 const quando=(iso)=>{if(!iso)return '';const d=new Date(iso),h=Math.round((Date.now()-d)/36e5);
   if(h<1)return 'agora há pouco'; if(h<24)return h+'h atrás';
   const dd=Math.round(h/24); return dd===1?'ontem':(dd<60?dd+' dias atrás':d.toLocaleDateString('pt-BR'));};
+// "última compra hoje / ontem / há 12 dias" — "há 0 dias" soava como erro.
+const haDias=(n)=>n<=0?'hoje':n===1?'ontem':'há '+n+' dias';
 const diasDe=(iso)=>iso?Math.floor((Date.now()-new Date(iso))/864e5):0;
 const soDigitos=(t)=>String(t||'').replace(/\D/g,'');
 const zap=(fone,texto)=>{const d=soDigitos(fone);if(!d)return null;
@@ -490,12 +492,12 @@ async function painel(){
   const N=d.numeros;
   document.getElementById('kpis').innerHTML=`
     <div class="card kpi"><span class="label">Clientes</span><div class="big">${N.clientes}</div>
-      <div class="sub">${N.compradores} já compraram</div></div>
+      <div class="sub">${N.compradores} já ${pl(N.compradores,'comprou','compraram')}</div></div>
     <div class="card kpi hi"><span class="label">Voltam a comprar</span>
       <div class="big">${N.recompra_pct!=null?N.recompra_pct+'%':'—'}</div>
-      <div class="sub">${N.recorrentes} compraram mais de uma vez</div></div>
+      <div class="sub">${N.recorrentes} ${pl(N.recorrentes,'comprou','compraram')} mais de uma vez</div></div>
     <div class="card kpi"><span class="label">Ticket médio</span><div class="big">${BRL(N.ticket)}</div>
-      <div class="sub">a loja recompra a cada ${d.ciclo_loja} dias</div></div>
+      <div class="sub">por compra · quem volta, volta em ~${d.ciclo_loja} dias</div></div>
     <div class="card kpi warn"><span class="label">Em risco</span><div class="big">${N.em_risco}</div>
       <div class="sub">esfriando ou sumidos</div></div>`;
   chips();
@@ -519,7 +521,7 @@ async function listar(){
   const box=document.getElementById('clientes');
   if(!d.clientes.length){box.innerHTML=vazio('clientes','Ninguém aqui','Tente outro grupo ou outra busca.');return;}
   document.getElementById('rankMeta').textContent=
-    `${d.total} pessoa(s)${segAtivo!=='todos'?' neste grupo':''} · em ordem de quanto já levaram`;
+    `${d.total} ${pl(d.total,'pessoa')}${segAtivo!=='todos'?' neste grupo':''} · em ordem de quanto já levaram`;
   // 1.700 pessoas de uma vez travavam o celular: desenha de 80 em 80.
   CLI=d.clientes;cliMostrando=0;box.innerHTML='';maisClientes();
 }
@@ -536,7 +538,7 @@ function maisClientes(){
         <span class="sgt ${c.seg}">${SEG[c.seg]||c.seg}</span>
         ${c.next_contact&&c.next_contact<=HOJE?'<span class="mot agendado">falar hoje</span>':''}
         ${c.no_contact?'<span class="mot">não contatar</span>':''}</div>
-        <div class="s">${c.compras} compra(s)${c.dias!=null?' · última há '+c.dias+' dias':''}${
+        <div class="s">${c.compras} ${pl(c.compras,'compra')}${c.dias!=null?' · última '+haDias(c.dias):''}${
           c.marca?' · gosta de '+esc(c.marca):''}${c.aberto>0?' · deve '+BRL(c.aberto):''}</div></div>
       <div class="vl">${BRL(c.gasto)}<small>ticket ${BRL(c.ticket)}</small></div>
     </div>`;}).join(''));
@@ -889,7 +891,7 @@ async function ficha(id){
     </div>
     <div class="n4">
       <div class="nb"><div class="l">Compra a cada</div><div class="v">${n.ciclo} dias</div></div>
-      <div class="nb"><div class="l">Última</div><div class="v">${n.dias!=null?n.dias+' dias':'—'}</div></div>
+      <div class="nb"><div class="l">Última</div><div class="v">${n.dias!=null?haDias(n.dias):'—'}</div></div>
       <div class="nb"><div class="l">Deve voltar</div><div class="v">${n.previsao?new Date(n.previsao+'T00:00:00').toLocaleDateString('pt-BR'):'—'}</div></div>
       <div class="nb"><div class="l">Conversas</div><div class="v">${n.atendimentos}</div></div>
     </div>

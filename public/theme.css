@@ -395,7 +395,7 @@ dialog::backdrop{background:rgba(0,0,0,.72);backdrop-filter:blur(3px)}
   }
   .nav-brand,.nav-sec{display:none}
   .nav-list{flex-direction:row;gap:2px}
-  .nav-item{flex-direction:column;gap:3px;font-size:9.5px;padding:7px 10px;min-width:58px;text-align:center;font-weight:700}
+  .nav-item{flex-direction:column;gap:3px;font-size:9.5px;padding:7px 8px;min-width:56px;text-align:center;font-weight:700}
   .nav-item.active::before{left:8px;right:8px;top:auto;bottom:-2px;width:auto;height:2.5px;border-radius:3px 3px 0 0}
   .nav-foot{flex-direction:row;margin:0 0 0 auto;border-top:none;padding-top:0;align-items:center}
   .nav-meta{padding:0}
@@ -405,13 +405,18 @@ dialog::backdrop{background:rgba(0,0,0,.72);backdrop-filter:blur(3px)}
   /* Cinco principais na barra; o resto (e o Sair) no painel do "Mais". */
   .nav-item.so-pc{display:none}
   .sidebar .nav-mais{display:flex}
-  .nav-foot .nav-exit{display:none}
+  .nav-foot{display:none}
+  /* Título de seção numa linha só; a explicação desce para baixo dele. */
+  .sec{flex-wrap:wrap;row-gap:4px}
+  .sec h2{white-space:nowrap}
+  .sec .meta{flex-basis:100%}
 }
 /* "Mais" e o painel dele só existem no celular. */
 .nav-mais{display:none;background:none;border:none;cursor:pointer;font-family:var(--font-body);color:var(--ink-3)}
 .nav-painel{position:fixed;left:var(--s3);right:var(--s3);z-index:90;display:grid;grid-template-columns:1fr 1fr;gap:6px;
   padding:var(--s3);border-radius:var(--r-lg);background:var(--surface-2);border:1px solid var(--line-str);box-shadow:var(--sh-3)}
 .nav-painel[hidden]{display:none}
+.nav-painel-topo{grid-column:1/-1;display:flex;justify-content:flex-end;padding:0 2px 2px}
 .nav-painel a{display:flex;align-items:center;gap:10px;padding:12px;border-radius:var(--r);color:var(--ink-2);
   text-decoration:none;font-weight:600;font-size:14px;background:var(--bg-elev)}
 .nav-painel a.active{color:var(--brand-hi);border:1px solid rgba(47,210,79,.35)}

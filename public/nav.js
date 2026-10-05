@@ -14,6 +14,10 @@ window.semCusto = (cob) => cob != null && cob < 0.05;
 window.avisoCusto = (cob) => (cob == null || cob >= 0.95 ? ''
   : window.semCusto(cob) ? 'custos não preenchidos' : `${Math.round((1 - cob) * 100)}% das vendas sem custo`);
 
+// "1 venda", "3 vendas": a palavra certa para o número, em vez de "venda(s)".
+// Plural irregular vem no terceiro argumento: pl(n, 'item', 'itens').
+window.pl = (n, um, varios = um + 's') => (Number(n) === 1 ? um : varios);
+
 (function () {
   const grupos = [
     { titulo: 'Operação', itens: [
@@ -61,7 +65,10 @@ window.avisoCusto = (cob) => (cob == null || cob >= 0.95 ? ''
   const painel = document.createElement('nav');
   painel.className = 'nav-painel';
   painel.hidden = true;
-  painel.innerHTML = extras.map((it) => `<a class="${it.match(path) ? 'active' : ''}" href="${it.href}">${ICO(it.ico, 18)}<span>${it.label}</span></a>`).join('')
+  // A barra do celular já está cheia com 5 + "Mais": o selo "Ao vivo" e
+  // o Sair moram aqui, senão ficam escondidos depois da borda da tela.
+  painel.innerHTML = `<div class="nav-painel-topo"><span id="navStatus2" class="pill"><span class="dot"></span>…</span></div>`
+    + extras.map((it) => `<a class="${it.match(path) ? 'active' : ''}" href="${it.href}">${ICO(it.ico, 18)}<span>${it.label}</span></a>`).join('')
     + `<a href="#" id="navSair2">${ICO('sair', 18)}<span>Sair</span></a>`;
   document.body.appendChild(painel);
   side.querySelector('#navMais').addEventListener('click', () => {
@@ -105,8 +112,9 @@ window.avisoCusto = (cob) => (cob == null || cob >= 0.95 ? ''
 
   // Estado da conexão
   fetch('/api/health').then((r) => r.json()).then((h) => {
-    const p = side.querySelector('#navStatus');
-    if (h.mode === 'live') { p.className = 'pill live'; p.innerHTML = '<span class="dot"></span>Ao vivo'; }
-    else { p.className = 'pill demo'; p.innerHTML = '<span class="dot"></span>Demonstração'; }
+    for (const p of [side.querySelector('#navStatus'), painel.querySelector('#navStatus2')]) {
+      if (h.mode === 'live') { p.className = 'pill live'; p.innerHTML = '<span class="dot"></span>Ao vivo'; }
+      else { p.className = 'pill demo'; p.innerHTML = '<span class="dot"></span>Demonstração'; }
+    }
   }).catch(() => {});
 })();

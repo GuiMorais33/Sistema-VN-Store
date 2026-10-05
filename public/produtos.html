@@ -455,8 +455,8 @@ async function resumo(){
   document.querySelector('.bx-real .label').textContent=semCustoNenhum?'Aqui na loja · a preço de venda':'Aqui na loja · a custo';
   document.getElementById('sVal').textContent=BRL(semCustoNenhum?s.totals.value_price:s.totals.value_cost);
   document.getElementById('sSub').textContent=semCustoNenhum
-    ?`${s.totals.units} peça(s) em mãos · o valor a custo aparece quando os custos forem preenchidos`
-    :`${s.totals.units} peça(s) em mãos · ${BRL(s.totals.value_price)} a preço de venda`;
+    ?`${s.totals.units} ${pl(s.totals.units,'peça')} em mãos · o valor a custo aparece quando os custos forem preenchidos`
+    :`${s.totals.units} ${pl(s.totals.units,'peça')} em mãos · ${BRL(s.totals.value_price)} a preço de venda`;
   // Custo vazio faz esse número mentir — avisa quantas peças faltam.
   api('/api/custos?falta=1').then(c=>{
     const n=c.resumo.sem_custo;
@@ -465,7 +465,7 @@ async function resumo(){
       l.textContent=`Custos em massa · ${n} sem custo`;
       l.classList.add('alerta');
       document.getElementById('sSub').insertAdjacentHTML('beforeend',
-        `<br><a href="/custos" style="color:var(--warn);font-weight:700">${n} peça(s) sem custo</a>`
+        `<br><a href="/custos" style="color:var(--warn);font-weight:700">${n} ${pl(n,'peça')} sem custo</a>`
         +` (em estoque ou vendidas nos últimos 120 dias).`);
     }else{l.textContent='Custos em massa';l.classList.remove('alerta');}
   }).catch(()=>{});
@@ -473,7 +473,7 @@ async function resumo(){
   const e=s.encomenda||{units:0,products:0,value_price:0,a_pegar:0};
   document.getElementById('eVal').textContent=BRL(e.value_price);
   document.getElementById('eSub').innerHTML=e.units
-    ? `${e.units} peça(s) à venda sem estar aqui · ${e.products} produto(s)`
+    ? `${e.units} ${pl(e.units,'peça')} à venda sem estar aqui · ${e.products} ${pl(e.products,'produto')}`
       +`<br>Sem dinheiro parado — o custo só existe quando vende.`
       +(e.a_pegar?`<br><b style="color:var(--warn)">${e.a_pegar} a pegar no fornecedor</b>`:'')
     : 'Nenhum produto sob encomenda no momento.';
@@ -487,7 +487,7 @@ async function resumo(){
     <div class="bar2"><i class="g" style="width:${pct}%"></i><i class="a" style="width:${100-pct}%"></i></div>
     <div class="l"><span class="k">Veio por encomenda</span><span class="v a">${BRL(v.valor_encomenda)}</span></div>
     <div class="l"><span class="k" style="color:var(--ink-3);font-size:11px">
-      ${v.pecas_real} peça(s) do estoque · ${v.pecas_encomenda} encomendada(s)</span></div>`
+      ${v.pecas_real} ${pl(v.pecas_real,'peça')} do estoque · ${v.pecas_encomenda} ${pl(v.pecas_encomenda,'encomendada')}</span></div>`
     : '<div class="sub">Nenhuma venda nos últimos 30 dias.</div>';
   const chip=(x,tipo)=>`<button type="button" class="chip" data-${tipo}="${x.label}">${x.label} <b>${x.units}</b></button>`;
   document.getElementById('sCats').innerHTML=s.by_category.map(c=>chip(c,'cat')).join('')||'<span class="hint">—</span>';
@@ -721,7 +721,7 @@ function addItem(v){
 
 function render(){
   const box=document.getElementById('lins');
-  document.getElementById('qtdItens').textContent=carrinho.size?carrinho.size+' peça(s) diferente(s)':'';
+  document.getElementById('qtdItens').textContent=carrinho.size?carrinho.size+' '+pl(carrinho.size,'peça diferente','peças diferentes'):'';
   if(!carrinho.size){
     box.innerHTML=vazio('caixa_vazia','Nenhuma peça ainda','Busque acima o que chegou do fornecedor.');
     totais();return;
@@ -783,7 +783,7 @@ document.getElementById('lancar').onclick=async()=>{
       :r.stock_na_fila?' · estoque sobe para a loja na próxima rodada'
       :(r.notes&&r.notes.length?' · estoque não sincronizou':'');
     toast(`${r.code} · ${BRL(r.total)}`,
-      `${r.pecas} peça(s) em ${r.itens} item(ns)${r.fornecedor?' · '+r.fornecedor:''}`
+      `${r.pecas} ${pl(r.pecas,'peça')} em ${r.itens} ${pl(r.itens,'item','itens')}${r.fornecedor?' · '+r.fornecedor:''}`
       +` · ${r.paid?'pago':'a pagar'}${sinc}`);
     carrinho.clear();
     ['frete','obs','venc'].forEach(i=>document.getElementById(i).value='');
@@ -802,7 +802,7 @@ async function historico(){
   box.innerHTML=d.compras.map(c=>`<div class="h">
       <div><div>${esc(c.code)}${esc(c.supplier_name?' · '+c.supplier_name:'')}
         <span class="tag ${c.paid?'pg':'ap'}">${c.paid?'pago':'a pagar'}</span></div>
-        <div class="c">${D(c.created_at)} · ${c.items_count} peça(s)${c.note?' · '+esc(c.note):''}</div></div>
+        <div class="c">${D(c.created_at)} · ${c.items_count} ${pl(c.items_count,'peça')}${c.note?' · '+esc(c.note):''}</div></div>
       <div class="v">${BRL(c.total)}</div>
     </div>`).join('');
 }
@@ -838,7 +838,7 @@ async function conferir(){
     const img=p.image_url?`<img src="${esc(p.image_url)}" alt="" loading="lazy">`:ICO('estoque',20);
     return `<div class="conf-p" data-p="${p.id}"><span class="thumb">${img}</span>
       <div><div class="nm">${esc(p.name)}</div>
-        <div class="meta">${esc(p.brand||'sem marca')} · na loja: <b>${p.na_loja}</b> peça(s)<span class="conf-salvo"></span></div></div>
+        <div class="meta">${esc(p.brand||'sem marca')} · na loja: <b>${p.na_loja}</b> ${pl(p.na_loja,'peça')}<span class="conf-salvo"></span></div></div>
       <div class="grade" style="grid-column:2">${p.variants.map(v=>`<button type="button" class="tam${v.on_hand>0?' tem':''}${v.stock<=0?' fora':''}"
         data-v="${v.id}" data-n="${v.on_hand}" title="${v.stock>0?'à venda no site':'fora do site agora'}">${esc(NOMEAR(p)||v.variant_name)}${v.on_hand>0?`<span class="n">${v.on_hand}</span>`:''}</button>`).join('')}</div>
     </div>`;}).join('');
@@ -876,16 +876,16 @@ async function prepararMarcar(){
   const rows=await api(`/api/catalog?category=${encodeURIComponent(cat)}&modo=proprio`);
   btn.dataset.ids=JSON.stringify(rows.map(p=>p.id));
   btn.disabled=!rows.length;
-  info.textContent=rows.length?`${rows.length} produto(s) de ${cat} ainda como estoque próprio.`:`Todos de ${cat} já estão como sob encomenda.`;
+  info.textContent=rows.length?`${rows.length} ${pl(rows.length,'produto')} de ${cat} ainda como estoque próprio.`:`Todos de ${cat} já estão como sob encomenda.`;
 }
 document.getElementById('cCat').onchange=prepararMarcar;
 document.getElementById('cMarcar').onclick=async()=>{
   const btn=document.getElementById('cMarcar'),ids=JSON.parse(btn.dataset.ids||'[]'),cat=document.getElementById('cCat').value;
   if(!ids.length)return;
-  if(!confirm(`Marcar ${ids.length} produto(s) de ${cat} como sob encomenda?\n\nA grade do site não muda. As peças na loja começam em zero: depois é só tocar nos números que estão aqui.`))return;
+  if(!confirm(`Marcar ${ids.length} ${pl(ids.length,'produto')} de ${cat} como sob encomenda?\n\nA grade do site não muda. As peças na loja começam em zero: depois é só tocar nos números que estão aqui.`))return;
   btn.disabled=true;
   try{const r=await api('/api/encomenda/marcar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_ids:ids})});
-    document.getElementById('cMarcarInfo').textContent=`${r.marcados} produto(s) marcados. Agora toque nas peças que estão na loja.`;
+    document.getElementById('cMarcarInfo').textContent=`${r.marcados} ${pl(r.marcados,'produto marcado','produtos marcados')}. Agora toque nas peças que estão na loja.`;
     await conferir();resumo();}
   catch(err){alert(err.message);btn.disabled=false;}
 };

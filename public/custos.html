@@ -110,7 +110,7 @@
   </div>
 
   <div class="acoes">
-    <span class="cnt"><b id="mudN">0</b> alteração(ões) não salva(s)</span>
+    <span class="cnt"><b id="mudN">0</b> <span id="mudTxt">alterações não salvas</span></span>
     <button class="btn sm ghost" id="desfazer" type="button">Descartar</button>
     <button class="btn primary" id="salvar" type="button">Salvar custos</button>
   </div>
@@ -155,7 +155,7 @@ async function carregar(){
   // As que mais vendem vêm primeiro — é por elas que o lucro fica certo.
   document.getElementById('semCusto').textContent=d.resumo.sem_custo;
   document.getElementById('semSub').textContent=
-    `de ${d.resumo.total} peça(s) na loja ou vendidas nos últimos 120 dias · ${d.resumo.total-d.resumo.sem_custo} já com custo · as que mais vendem aparecem primeiro`;
+    `de ${d.resumo.total} ${pl(d.resumo.total,'peça na loja ou vendida','peças na loja ou vendidas')} nos últimos 120 dias · ${d.resumo.total-d.resumo.sem_custo} já com custo · as que mais vendem aparecem primeiro`;
   render();
 }
 
@@ -205,7 +205,8 @@ function render(){
   }
   contar();
 }
-function contar(){document.getElementById('mudN').textContent=mudou.size;}
+function contar(){document.getElementById('mudN').textContent=mudou.size;
+  document.getElementById('mudTxt').textContent=pl(mudou.size,'alteração não salva','alterações não salvas');}
 
 // Atalhos: só tocam no que está vazio.
 document.getElementById('aplicaPct').onclick=()=>{
@@ -229,7 +230,7 @@ document.getElementById('aplicaFixo').onclick=()=>{
 };
 document.getElementById('desfazer').onclick=()=>{
   if(!mudou.size)return;
-  if(!confirm(`Descartar ${mudou.size} alteração(ões) não salva(s)?`))return;
+  if(!confirm(`Descartar ${mudou.size} ${pl(mudou.size,'alteração','alterações')} não ${pl(mudou.size,'salva')}?`))return;
   mudou.clear();render();
 };
 document.getElementById('salvar').onclick=async()=>{
@@ -241,7 +242,7 @@ document.getElementById('salvar').onclick=async()=>{
       body:JSON.stringify({itens})});
     mudou.clear();
     await carregar();
-    alert(`${r.salvos} custo(s) salvo(s). Ainda faltam ${r.resumo.sem_custo}.`);
+    alert(`${r.salvos} ${pl(r.salvos,'custo')} ${pl(r.salvos,'salvo')}. Ainda faltam ${r.resumo.sem_custo}.`);
   }catch(e){alert(e.message);}
   finally{b.disabled=false;b.textContent=t;}
 };

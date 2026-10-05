@@ -191,7 +191,7 @@ document.getElementById('syncBtn').addEventListener('click', async (e)=>{
       +'<div class="stat"><div class="l">Marcas</div><div class="v">'+r.brands+'</div></div>'
       +'<div class="stat"><div class="l">Categorias</div><div class="v">'+r.categories+'</div></div>'
       +'</div>'
-      +'<div class="note">Analisei '+r.scanned+' produto(s) da loja e deixei de fora '+r.skipped_no_stock+' sem unidades em estoque.</div>';
+      +'<div class="note">Analisei '+r.scanned+' '+pl(r.scanned,'produto')+' da loja e deixei de fora '+r.skipped_no_stock+' sem unidades em estoque.</div>';
   }catch(err){ msg.innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
   finally{ e.target.disabled=false; e.target.textContent='Ler produtos da loja'; }
 });
@@ -209,7 +209,7 @@ document.getElementById('cliBtn').addEventListener('click', async (e)=>{
       +'<div class="stat"><div class="l">Vendas lidas</div><div class="v">'+r.pedidos.novos+'</div></div>'
       +'<div class="stat"><div class="l">No ranking</div><div class="v">'+r.clientes_com_historico+'</div></div>'
       +'</div>'
-      +'<div class="note">Analisei '+r.pedidos.analisados+' pedido(s) desde '+(r.pedidos.desde||'—')+'. '
+      +'<div class="note">Analisei '+r.pedidos.analisados+' '+pl(r.pedidos.analisados,'pedido')+' desde '+(r.pedidos.desde||'—')+'. '
       +'Abra <b>Clientes</b> para ver o ranking com o histórico real.</div>';
   }catch(err){ msg.innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
   finally{ b.disabled=false; b.textContent='Ler clientes e histórico'; }
@@ -255,7 +255,7 @@ async function backupInfo(){
   try{
     const b=await api('/api/backup/status');
     const quando=b.ultimo?new Date(b.ultimo.quando).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):null;
-    el.innerHTML=(quando?`Última cópia automática: <b>${quando}</b> · ${b.copias} guardada(s) no servidor`
+    el.innerHTML=(quando?`Última cópia automática: <b>${quando}</b> · ${b.copias} ${pl(b.copias,'guardada')} no servidor`
       :'A primeira cópia automática sai alguns minutos depois que o sistema liga.')
       +(b.envio_para_fora&&b.ultimo&&b.ultimo.enviado?' · <b>enviada para fora do servidor</b>':'')
       +(b.erro?`<br><span style="color:#ff8377">A última tentativa falhou: ${b.erro}</span>`:'');

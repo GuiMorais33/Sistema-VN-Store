@@ -294,7 +294,7 @@ function qty(id,d){const it=S.cart.get(id);if(!it)return;it.qty+=d;
 function renderCart(){
   const box=document.getElementById('lines');
   const n=[...S.cart.values()].reduce((s,i)=>s+i.qty,0);
-  document.getElementById('count').textContent=n?n+' item(ns)':'';
+  document.getElementById('count').textContent=n?n+' '+pl(n,'item','itens'):'';
   if(!S.cart.size){box.innerHTML=S.troca?'<div class="aviso-site">Toque nos produtos que o cliente vai levar (ou só marque o que voltou, se for devolução).</div>'
     :vazio('pdv','Carrinho vazio','Toque num produto para começar a venda.');}
   else{box.innerHTML='';
@@ -480,7 +480,7 @@ async function mostrarLista(){
     const rows=await api(`/api/vendas?dias=${q?120:vDias}&q=${encodeURIComponent(q)}`);
     box.innerHTML=rows.length?rows.map(v=>`<button type="button" class="vrow${v.payment_status==='cancelado'?' canc':''}" data-id="${v.id}">
       <span class="c">${esc(v.code)}</span>
-      <span class="n">${esc(v.customer_name||'Sem cliente')}<small>${quando(v.created_at)} · ${origemTxt(v)}${v.trocas?` · ${v.trocas} troca(s)`:''}</small></span>
+      <span class="n">${esc(v.customer_name||'Sem cliente')}<small>${quando(v.created_at)} · ${origemTxt(v)}${v.trocas?` · ${v.trocas} ${pl(v.trocas,'troca')}`:''}</small></span>
       <span class="t">${BRL(v.total)}<small>${esc(statusTxt(v))}</small></span></button>`).join('')
       :vazio('recibo','Nenhuma venda aqui',q?'Confira o código ou o nome.':'Escolha outro período ou busque pelo código.');
   }catch(e){box.innerHTML=vazio('alerta','Não deu para carregar',e.message);}
@@ -506,7 +506,7 @@ async function abrirVenda(id){
       ${v.discount?` · desconto ${BRL(v.discount)}`:''}</div>
     <div class="vdet" style="gap:5px">${(v.itens||[]).map(linha).join('')||'<div class="aviso-site">Pedido sem as peças registradas.</div>'}</div>
     <div class="meta">Total: <b style="font-family:var(--font-mono);font-size:15px">${BRL(v.total)}</b>
-      ${v.trocas.length?` · ${v.trocas.length} troca(s)`:''}</div>
+      ${v.trocas.length?` · ${v.trocas.length} ${pl(v.trocas.length,'troca')}`:''}</div>
     ${v.pode_mexer?`<div class="vacoes">
         <button type="button" class="btn primary" id="vTrocar">Trocar ou devolver</button>
         <button type="button" class="btn danger" id="vCancelar">Cancelar venda</button></div>

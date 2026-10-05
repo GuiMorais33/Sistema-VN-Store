@@ -81,6 +81,8 @@ app.use(express.static(PUBLIC));
 const isLive = () => nuvem.isConfigured();
 const now = () => new Date().toISOString();
 const money = (n) => Math.round((Number(n) || 0) * 100) / 100;
+// "1 peça", "3 peças" nos textos que o dono lê (lembretes, avisos).
+const pl = (n, um, varios = um + 's') => (Number(n) === 1 ? um : varios);
 
 // O que conta como VENDA FEITA, em todo lugar que mostra "vendas":
 //  - no balcão, toda venda não cancelada — fiado incluso, a peça saiu;
@@ -1153,7 +1155,7 @@ app.post('/api/sales', async (req, res) => {
       if (l.encomendar > 0) {
         insRem.run(
           `Pegar no fornecedor: ${l.v.product_name} ${l.v.variant_name}`,
-          `${l.encomendar} peça(s) · venda ${code}${custName ? ' · ' + custName : ''}`,
+          `${l.encomendar} ${pl(l.encomendar, 'peça')} · venda ${code}${custName ? ' · ' + custName : ''}`,
           diaLocal(), custId, ts,
         );
       }
@@ -1311,7 +1313,7 @@ app.post('/api/sales/:id/troca', async (req, res) => {
     const q = parseInt(d.qty, 10) || 0;
     if (!l || q <= 0) continue;
     const resta = l.qty - (jaVoltou.get(l.id) || 0);
-    if (q > resta) return res.status(400).json({ error: `Só ${resta} peça(s) de "${l.name}" ainda podem voltar.` });
+    if (q > resta) return res.status(400).json({ error: `Só ${resta} ${pl(resta, 'peça')} de "${l.name}" ainda ${pl(resta, 'pode', 'podem')} voltar.` });
     volta.push({ l, q, preco: money(l.unit_price * fator) });
   }
   const leva = [];
@@ -1357,7 +1359,7 @@ app.post('/api/sales/:id/troca', async (req, res) => {
         encomendas.push(`${x.v.product_name} ${x.v.variant_name}`);
         db.prepare(`INSERT INTO reminders (title, notes, due_date, kind, customer_id, created_at) VALUES (?,?,?, 'encomenda', ?, ?)`)
           .run(`Pegar no fornecedor: ${x.v.product_name} ${x.v.variant_name}`,
-            `${x.encomendar} peça(s) · troca da venda ${s.code}${s.customer_name ? ' · ' + s.customer_name : ''}`, diaLocal(), s.customer_id, ts);
+            `${x.encomendar} ${pl(x.encomendar, 'peça')} · troca da venda ${s.code}${s.customer_name ? ' · ' + s.customer_name : ''}`, diaLocal(), s.customer_id, ts);
       }
     }
     const pecas = leva.reduce((t, x) => t + x.q, 0) - volta.reduce((t, x) => t + x.q, 0);
@@ -2493,7 +2495,7 @@ app.get('/api/canvas', (req, res) => {
       ? vendas.map((x) => `${x.channel === 'site' ? 'Site' : 'Balcão'}: ${brl(x.v)} (${Math.round((x.v / totalV) * 100)}%)`).join(' · ')
       : null,
     custos: despesa > 0 ? `${brl(despesa)} de despesa lançada neste mês` : null,
-    segmentos: pessoas > 0 ? `${pessoas} pessoa(s) na base · ${recompra} já compraram mais de uma vez` : null,
+    segmentos: pessoas > 0 ? `${pessoas} ${pl(pessoas, 'pessoa')} na base · ${recompra} já compraram mais de uma vez` : null,
     canais: canais.length ? canais.map((c) => `${c.canal}: ${c.n}`).join(' · ') : null,
   };
 
@@ -3371,7 +3373,7 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
       paraRepor.run(i.variant_id);   // o número vendido volta para o site (reporGrade)
       if (pegar > 0) {
         insRem.run(`Pegar no fornecedor: ${i.product_name} ${i.variant_name}`,
-          `${pegar} peça(s) · pedido ${code}${nomeUtil(cliente) ? ' · ' + cliente : ''}`, diaLocal(), cliId, now());
+          `${pegar} ${pl(pegar, 'peça')} · pedido ${code}${nomeUtil(cliente) ? ' · ' + cliente : ''}`, diaLocal(), cliId, now());
       }
     }
     marcarBaixa.run(1, saleId);

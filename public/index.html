@@ -316,7 +316,7 @@ async function abrirFila(k){
     const rows=await api('/api/operacao/'+k);
     box.innerHTML=rows.length?rows.map(r=>`<div class="row-item">
       <div class="l"><span>${r.code} · ${r.customer_name||'Sem cliente'}</span>
-      <span class="s">${new Date(r.created_at).toLocaleDateString('pt-BR')} · ${r.channel==='site'?'site':'balcão'}${r.items_count?' · '+r.items_count+' item(ns)':''}</span></div>
+      <span class="s">${new Date(r.created_at).toLocaleDateString('pt-BR')} · ${r.channel==='site'?'site':'balcão'}${r.items_count?' · '+r.items_count+' '+pl(r.items_count,'item','itens'):''}</span></div>
       <span class="r">${BRL(r.total)}</span></div>`).join('')
       :vazio('ok','Fila vazia','Nada pendente aqui.');
   }catch(e){ box.innerHTML=vazio('alerta','Não deu pra carregar',e.message); }
@@ -361,7 +361,7 @@ function showTip(el,s){
   const r=el.getBoundingClientRect(),wr=wrap.getBoundingClientRect();
   tip.hidden=false;
   tip.innerHTML=`<div class="d">${new Date(s.date+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}</div>`
-    +`<div class="v">${BRL(s.total)}</div><div class="n">${s.count} venda(s)</div>`;
+    +`<div class="v">${BRL(s.total)}</div><div class="n">${s.count} ${pl(s.count,'venda')}</div>`;
   tip.style.left=(r.left-wr.left+r.width/2)+'px';
   tip.style.top=(r.top-wr.top+r.height*0.15)+'px';
 }
@@ -386,7 +386,7 @@ async function load(){
   const low=document.getElementById('low');
   low.innerHTML = d.low_stock_list && d.low_stock_list.length ? d.low_stock_list.map(v=>
     `<div class="row-item"><div class="l"><span>${v.product_name}</span><span class="s">${v.variant_name||''}</span></div>
-     <span class="r" style="color:var(--warn)">${v.stock} peça(s)</span></div>`).join('')
+     <span class="r" style="color:var(--warn)">${v.stock} ${pl(v.stock,'peça')}</span></div>`).join('')
     : vazio('ok','Estoque saudável','Nenhum campeão de venda está acabando.');
 
   const R=d.reminders||{};   // o Maestro ainda avisa dos lembretes
@@ -398,18 +398,18 @@ async function load(){
     const det=[];
     if(pdv) det.push(`<b>${pdv.n}</b> no balcão`);
     if(site) det.push(`<b>${site.n}</b> pelo site`);
-    p.push(`Já são <b>${d.orders_today}</b> venda(s) hoje${det.length?' ('+det.join(' e ')+')':''}, <b class="hl">${BRL(d.revenue_today)}</b> vendidos${semCusto(d.custo_cobertura)?'':` com margem de <b>${d.margin_pct}%</b>`}.`);
+    p.push(`${pl(d.orders_today,'Já saiu','Já saíram')} <b>${d.orders_today}</b> ${pl(d.orders_today,'venda')} hoje${det.length?' ('+det.join(' e ')+')':''}, <b class="hl">${BRL(d.revenue_today)}</b> vendidos${semCusto(d.custo_cobertura)?'':` com margem de <b>${d.margin_pct}%</b>`}.`);
   } else p.push('Ainda sem vendas hoje — o PDV está pronto.');
   if(d.receivable_count>0) p.push(`Tem <b class="hl">${BRL(d.receivable_total)}</b> em fiado pra receber.`);
-  if(R.atrasados>0) p.push(`E <b>${R.atrasados}</b> lembrete(s) já passaram da data.`);
-  else if(R.hoje>0) p.push(`Tem <b>${R.hoje}</b> lembrete(s) pra hoje.`);
-  if(d.low_stock>0) p.push(`Fica de olho: <b>${d.low_stock}</b> produto(s) vendendo e acabando.`);
+  if(R.atrasados>0) p.push(`E <b>${R.atrasados}</b> ${pl(R.atrasados,'lembrete já passou','lembretes já passaram')} da data.`);
+  else if(R.hoje>0) p.push(`Tem <b>${R.hoje}</b> ${pl(R.hoje,'lembrete')} pra hoje.`);
+  if(d.low_stock>0) p.push(`Fica de olho: <b>${d.low_stock}</b> ${pl(d.low_stock,'produto')} vendendo e acabando.`);
   if(d.loja_escrita&&d.loja_escrita.ok===false)
     p.push(`<br><b style="color:var(--crit)">Atenção:</b> a Nuvemshop está recusando as mudanças de estoque feitas aqui. <a href="/conectar" style="color:var(--warn)">Ver em Conectar</a>.`);
   document.getElementById('maestroMsg').innerHTML='Fala, chefe. '+p.join(' ');
 
   const tags=[];
-  if(R.atrasados>0) tags.push(`<a class="m-tag crit" href="#painelLem">${ICO('alerta',13)}${R.atrasados} lembrete(s) atrasado(s)</a>`);
+  if(R.atrasados>0) tags.push(`<a class="m-tag crit" href="#painelLem">${ICO('alerta',13)}${R.atrasados} ${pl(R.atrasados,'lembrete')} ${pl(R.atrasados,'atrasado')}</a>`);
   if(R.hoje>0) tags.push(`<a class="m-tag warn" href="#painelLem">${ICO('calendario',13)}${R.hoje} pra hoje</a>`);
   if(d.receivable_count>0) tags.push(`<a class="m-tag warn" href="/clientes">${ICO('recibo',13)}${BRL(d.receivable_total)} a receber</a>`);
   if(d.low_stock>0) tags.push(`<a class="m-tag warn" href="/produtos">${ICO('estoque',13)}${d.low_stock} acabando</a>`);

@@ -387,10 +387,10 @@ async function load(){
   const balcao={total:pdvAqui.total+pdvNs.total,n:pdvAqui.n+pdvNs.n};
   document.getElementById('origem').innerHTML=`
     <div class="card org"><span class="ico-box brand">${ICO('pdv',18)}</span>
-      <span class="txt"><span class="v">${BRL(balcao.total)}</span><span class="n">${balcao.n} venda(s) no balcão${
+      <span class="txt"><span class="v">${BRL(balcao.total)}</span><span class="n">${balcao.n} ${pl(balcao.n,'venda')} no balcão${
         pdvNs.n?` · ${pdvNs.n} pelo PDV da Nuvemshop`:''}</span></span></div>
     <div class="card org"><span class="ico-box brand">${ICO('site',18)}</span>
-      <span class="txt"><span class="v">${BRL(site.total)}</span><span class="n">${site.n} venda(s) pelo site</span></span>
+      <span class="txt"><span class="v">${BRL(site.total)}</span><span class="n">${site.n} ${pl(site.n,'venda')} pelo site</span></span>
       </div>`;
   document.getElementById('imp').innerHTML=d.ultima_importacao
     ? `<span style="color:var(--brand-hi)">●</span> site lido automaticamente · ${D(d.ultima_importacao)}`
@@ -420,7 +420,7 @@ function contasAPagar(d){
   const hoje=diaLocal();
   const box=document.getElementById('aPagar');
   document.getElementById('apMeta').textContent=d.a_pagar.length
-    ? BRL(d.despesa_agendada)+(d.a_pagar_vencidas?` · ${d.a_pagar_vencidas} vencida(s)`:'')
+    ? BRL(d.despesa_agendada)+(d.a_pagar_vencidas?` · ${d.a_pagar_vencidas} ${pl(d.a_pagar_vencidas,'vencida')}`:'')
     : '';
   if(!d.a_pagar.length){
     box.innerHTML=vazio('ok','Nada a pagar','Nenhuma conta agendada em aberto.');return;
@@ -448,9 +448,9 @@ async function caixa(){
   const f=d.fechamento;
   const dif=f?f.diferenca:null;
   document.getElementById('caixa').innerHTML=`
-    ${d.por_forma.length?d.por_forma.map(x=>`<div class="cxl"><span>${esc(x.forma)} · ${x.n} lançamento(s)</span>
+    ${d.por_forma.length?d.por_forma.map(x=>`<div class="cxl"><span>${esc(x.forma)} · ${x.n} ${pl(x.n,'lançamento')}</span>
       <span class="v">${BRL(x.total)}</span></div>`).join(''):'<div class="cxl"><span>Nenhuma venda no balcão</span><span class="v">R$ 0,00</span></div>'}
-    ${d.site.n?`<div class="cxl"><span style="color:var(--ink-3)">site · ${d.site.n} pedido(s)</span>
+    ${d.site.n?`<div class="cxl"><span style="color:var(--ink-3)">site · ${d.site.n} ${pl(d.site.n,'pedido')}</span>
       <span class="v" style="color:var(--ink-3)">${BRL(d.site.total)}</span></div>`:''}
     <div class="cxt"><span class="l">Esperado em espécie</span><span class="v">${BRL(d.esperado_especie)}</span></div>
     ${d.saidas>0?`<div class="cxl" style="font-size:11px"><span style="color:var(--ink-3)">Despesas lançadas hoje: ${BRL(d.saidas)}.
@@ -607,7 +607,7 @@ async function carregarLucro(){
   const t=d.totais;
 
   document.getElementById('kpisL').innerHTML=[
-    kpi({label:'Receita',ico:'subiu',tone:'brand',val:BRL(t.receita),sub:`${t.pecas} peça(s) vendida(s)`,color:'var(--ok)'}),
+    kpi({label:'Receita',ico:'subiu',tone:'brand',val:BRL(t.receita),sub:`${t.pecas} ${pl(t.pecas,'peça')} ${pl(t.pecas,'vendida')}`,color:'var(--ok)'}),
     kpi({label:'Custo das peças',ico:'caixa_vazia',tone:'crit',val:BRL(t.custo),sub:'o que você pagou por elas',color:'var(--crit)'}),
     ...(semCusto(t.custo_cobertura)?[
       kpi({label:'Lucro bruto',ico:'grafico',val:'—',sub:'sem custo cadastrado'}),
@@ -623,11 +623,11 @@ async function carregarLucro(){
   const abcBox=document.getElementById('abc');
   abcBox.innerHTML=d.abc.map(a=>`<div class="ab ${a.classe}">
       <div class="l">${a.classe}</div><div class="v">${BRL(a.lucro)}</div>
-      <div class="s">${a.produtos} produto(s)</div></div>`).join('');
+      <div class="s">${a.produtos} ${pl(a.produtos,'produto')}</div></div>`).join('');
   const nA=(d.abc.find(a=>a.classe==='A')||{produtos:0}).produtos;
   // Sem custo, a curva sai pela receita — continua mostrando o que vende.
   document.getElementById('abcMeta').textContent=nA
-    ? `${nA} produto(s) fazem 80% ${semCusto(t.custo_cobertura)?'da receita (sem custo, lucro = receita)':'do lucro'}` : '';
+    ? `${nA} ${pl(nA,'produto faz','produtos fazem')} 80% ${semCusto(t.custo_cobertura)?'da receita (sem custo, lucro = receita)':'do lucro'}` : '';
 
   // Ranking de produtos
   const box=document.getElementById('rows');
@@ -661,7 +661,7 @@ async function carregarLucro(){
     const img=p.imagem?`<img src="${esc(p.imagem)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:ICO('estoque',16)}))">`:ICO('estoque',16);
     return `<div class="pr"><span class="thumb">${img}</span>
       <div><div class="nm">${esc(p.produto)}${p.on_demand?' · sob encomenda':''}</div>
-        <div class="s">${p.pecas} peça(s) · última venda ${D(p.ultima_venda)}</div></div>
+        <div class="s">${p.pecas} ${pl(p.pecas,'peça')} · última venda ${D(p.ultima_venda)}</div></div>
       <div class="v">${BRL(p.parado_custo)}</div></div>`;
   }).join(''):vazio('ok','Nada parado','Todo produto com estoque vendeu neste período.');
 }

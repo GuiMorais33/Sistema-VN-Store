@@ -294,7 +294,7 @@ async function carregar(){
   const L=d.loja;
   document.getElementById('lojaVal').textContent=BRL(L.vendido);
   document.getElementById('lojaSub').innerHTML=L.meta>0
-    ? `de ${BRL(L.meta)} de meta${L.meta_propria?'':' (soma das metas de cada um)'} · ${L.vendas} venda(s)`
+    ? `de ${BRL(L.meta)} de meta${L.meta_propria?'':' (soma das metas de cada um)'} · ${L.vendas} ${pl(L.vendas,'venda')}`
     : 'Nenhuma meta definida ainda — clique em <b>Meta da loja</b> ou defina por pessoa.';
   const bar=document.getElementById('lojaBar');
   bar.style.width=Math.min(100,L.pct||0)+'%';
@@ -311,8 +311,8 @@ async function carregar(){
     R.textContent=BRL(L.por_dia);
     R.style.color=L.falta<=0?'var(--brand-hi)':'var(--warn)';
     RS.textContent=L.falta<=0
-      ? `Meta já batida com ${d.dias.restam} dia(s) sobrando.`
-      : `por dia nos ${d.dias.restam} dia(s) que faltam · ${d.dias.decorrido_pct}% do mês passou`;
+      ? `Meta já batida com ${d.dias.restam} ${pl(d.dias.restam,'dia')} sobrando.`
+      : `por dia ${d.dias.restam===1?'no último dia':`nos ${d.dias.restam} dias que faltam`} · ${d.dias.decorrido_pct}% do mês passou`;
   }else if(L.meta>0){
     R.textContent=L.falta<=0?'Bateu':'Não bateu';
     R.style.color=L.falta<=0?'var(--brand-hi)':'var(--crit)';
@@ -322,7 +322,7 @@ async function carregar(){
   // Ranking
   const box=document.getElementById('ranking');
   document.getElementById('rankMeta').textContent=d.sem_vendedor.vendas
-    ? `${d.sem_vendedor.vendas} venda(s) sem vendedor marcado · ${BRL(d.sem_vendedor.valor)}` : '';
+    ? `${d.sem_vendedor.vendas} ${pl(d.sem_vendedor.vendas,'venda')} sem vendedor marcado · ${BRL(d.sem_vendedor.valor)}` : '';
   if(!d.pessoas.length){
     box.innerHTML='<div style="grid-column:1/-1">'+vazio('clientes','Nenhum vendedor ainda',
       'Adicione as pessoas da equipe e marque quem vende no balcão.')+'</div>';
@@ -377,9 +377,9 @@ function cardSonho(p){
       +linha(`${NUM(c.propostas)} ÷ ${c.proposta}%`,NUM(c.atendimentos)+' atendimentos',selo(c.fontes.proposta))
       +linha(`${pd} por dia`,NUM(c.dias)+' dias úteis','',true);
     aviso=c.no_prazo
-      ? `<div class="ritmo-av">Nesse ritmo o sonho sai em <b>${c.meses} mês(es)</b> — dentro dos
+      ? `<div class="ritmo-av">Nesse ritmo o sonho sai em <b>${c.meses} ${pl(c.meses,'mês','meses')}</b> — dentro dos
          ${s.prazo_meses} que ele quer. Meta do mês equivalente: <b>${BRL(c.meta_mes)}</b>.</div>`
-      : `<div class="ritmo-av late">Nesse ritmo o sonho sai em <b>${c.meses} mês(es)</b>.
+      : `<div class="ritmo-av late">Nesse ritmo o sonho sai em <b>${c.meses} ${pl(c.meses,'mês','meses')}</b>.
          Para sair em ${s.prazo_meses}, o ritmo tem que ser <b>${NUM(c.por_dia_no_prazo)} por dia</b>.
          Não existe prazo — existe ritmo.</div>`;
   }else{
