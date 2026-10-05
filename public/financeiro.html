@@ -378,12 +378,15 @@ async function load(){
         ?` · fora daqui: ${BRL(d.pix_pendente.t)} em pix do site aguardando`:'')}),
   ].join('');
 
-  // duas frentes
-  const pdv=d.por_origem.find(o=>o.origem==='PDV')||{total:0,n:0};
+  // duas frentes: balcão (PDV daqui + PDV da Nuvemshop, até a troca) e site
+  const pdvAqui=d.por_origem.find(o=>o.origem==='PDV')||{total:0,n:0};
+  const pdvNs=d.por_origem.find(o=>o.origem==='PDV Nuvemshop')||{total:0,n:0};
   const site=d.por_origem.find(o=>o.origem==='Site')||{total:0,n:0};
+  const balcao={total:pdvAqui.total+pdvNs.total,n:pdvAqui.n+pdvNs.n};
   document.getElementById('origem').innerHTML=`
     <div class="card org"><span class="ico-box brand">${ICO('pdv',18)}</span>
-      <span class="txt"><span class="v">${BRL(pdv.total)}</span><span class="n">${pdv.n} venda(s) no balcão</span></span></div>
+      <span class="txt"><span class="v">${BRL(balcao.total)}</span><span class="n">${balcao.n} venda(s) no balcão${
+        pdvNs.n?` · ${pdvNs.n} pelo PDV da Nuvemshop`:''}</span></span></div>
     <div class="card org"><span class="ico-box brand">${ICO('site',18)}</span>
       <span class="txt"><span class="v">${BRL(site.total)}</span><span class="n">${site.n} venda(s) pelo site</span></span>
       </div>`;

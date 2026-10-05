@@ -97,6 +97,10 @@ const FIADO = (a = '') => `${a}payment_status = 'pendente' AND ${a}channel <> 's
 // no que está por receber. (Se pagar depois, a leitura da loja traz.)
 const PIX_VALE_DIAS = 7;
 const desdeDias = (d) => new Date(Date.now() - d * 864e5).toISOString();
+// De que frente veio a venda: 'site' ou 'pdv' (= balcão, a loja física).
+// O PDV da Nuvemshop também vira pedido lá: "veio da Nuvemshop" não quer
+// dizer "veio do site" — quem diz é sales.origem.
+const FRENTE = (a = '') => `CASE WHEN ${a}channel = 'site' AND COALESCE(${a}origem,'site') <> 'balcao' THEN 'site' ELSE 'pdv' END`;
 const PIX_PENDENTE = () => `payment_status = 'pendente' AND channel = 'site' AND created_at >= '${desdeDias(PIX_VALE_DIAS)}'`;
 // A leitura automática relê os pedidos do site destes últimos dias. Pedido
 // mais velho não tem mais o status atualizado: fica fora das filas de
@@ -148,6 +152,10 @@ async function subirEstoque(linhas) {
 if (seedCategories()) console.log('› Plano de contas padrão criado.');
 { const m = migrateOldCategories(); if (m) console.log(`› ${m} categoria(s) antiga(s) traduzida(s) para o plano de contas.`); }
 if (!isLive() && seedDemoIfEmpty()) console.log('› Modo demonstração: catálogo e clientes de exemplo criados.');
+setTimeout(() => {   // depois que tudo do arquivo carregou
+  const n = reclassificarOrigens();
+  if (n) console.log(`› ${n} pedido(s) da Nuvemshop com a origem (balcão/site) refeita.`);
+}, 0);
 
 // ---------------------- Saúde ----------------------
 app.get('/api/health', (req, res) => {
@@ -1213,7 +1221,7 @@ app.get('/api/dashboard', (req, res) => {
     WHERE r.done = 0 AND (r.due_date IS NULL OR r.due_date <= date(?, '+2 day'))
     ORDER BY COALESCE(r.due_date,'9999-12-31') LIMIT 6`).all(hojeStr);
   // Vendas por origem hoje (PDV x Site)
-  const origemHoje = db.prepare(`SELECT CASE WHEN channel='site' THEN 'site' ELSE 'pdv' END o,
+  const origemHoje = db.prepare(`SELECT ${FRENTE()} o,
     COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
     WHERE ${SQL_VENDA} AND created_at >= ? GROUP BY o`).all(iso);
   res.json({
@@ -2637,8 +2645,10 @@ app.get('/api/financial', (req, res) => {
   const porCategoria = (tipo) => db.prepare(`SELECT COALESCE(NULLIF(category,''),'Sem categoria') label,
       COUNT(*) n, COALESCE(SUM(amount),0) total FROM financial_entries
       WHERE type = ? AND paid = 1 ${cond} GROUP BY label ORDER BY total DESC`).all(tipo, ...a);
-  // Receita por origem (PDV x Site) — as duas frentes.
-  const porOrigem = db.prepare(`SELECT CASE WHEN channel='site' THEN 'Site' ELSE 'PDV' END origem,
+  // Receita por origem — as duas frentes: balcão (o PDV daqui e, até a
+  // troca, o PDV da Nuvemshop) e site.
+  const porOrigem = db.prepare(`SELECT CASE WHEN channel <> 'site' THEN 'PDV'
+        WHEN origem = 'balcao' THEN 'PDV Nuvemshop' ELSE 'Site' END origem,
       COUNT(*) n, COALESCE(SUM(total),0) total FROM sales
       WHERE payment_status='pago' ${cond} GROUP BY origem ORDER BY total DESC`).all(...a);
   // Lucro de verdade: o que sobrou depois do custo da mercadoria vendida.
@@ -2951,6 +2961,50 @@ function limparClientesGenericos() {
 
 // Sincroniza os pedidos do site: cria os novos e ATUALIZA os que mudaram
 // de status (pagou, embalou, enviou). Roda sozinho de tempos em tempos.
+// ---- Balcão ou site? ----
+// O PDV da Nuvemshop (venda no balcão) também vira pedido lá. Sem separar,
+// toda venda da loja física aparecia como venda do site. A Nuvemshop diz a
+// origem do pedido em "storefront" ("pos" = ponto de venda). Os campos de
+// origem ficam guardados (sales.ns_origem): se a regra precisar de ajuste,
+// reclassificarOrigens() refaz tudo na próxima vez que o sistema ligar,
+// sem reler a loja.
+const camposDeOrigem = (o) => ({
+  storefront: o.storefront ?? null, channel: o.channel ?? null, source: o.source ?? null,
+  gateway: o.gateway ?? null, gateway_name: o.gateway_name ?? null,
+  metodo: (o.payment_details && o.payment_details.method) || null,
+  shipping: o.shipping ?? null,
+  shipping_option: o.shipping_option && typeof o.shipping_option === 'object'
+    ? (o.shipping_option.name || null) : (o.shipping_option ?? null),
+  pickup: o.shipping_pickup_type ?? null,
+});
+const origemDoPedido = (c) => (/^(pos|point[\s_-]?of[\s_-]?sale|pdv)$/i.test(String(c.storefront || '')) ? 'balcao' : 'site');
+const RECEITA = {
+  site: { categoria: 'Venda Site', descricao: 'Venda no site' },
+  balcao: { categoria: 'Venda Balcão Nuvemshop', descricao: 'Venda no balcão (PDV Nuvemshop)' },
+};
+
+// Refaz a origem de todo pedido da Nuvemshop a partir dos campos guardados
+// e põe a receita de cada um na categoria certa.
+function reclassificarOrigens() {
+  const upd = db.prepare('UPDATE sales SET origem = ? WHERE id = ?');
+  let mudou = 0;
+  db.transaction(() => {
+    for (const r of db.prepare("SELECT id, origem, ns_origem FROM sales WHERE channel = 'site' AND ns_origem IS NOT NULL").all()) {
+      let c; try { c = JSON.parse(r.ns_origem); } catch (_) { continue; }
+      const o = origemDoPedido(c);
+      if (o !== r.origem) { upd.run(o, r.id); mudou += 1; }
+    }
+    for (const [de, para] of [['site', 'balcao'], ['balcao', 'site']]) {
+      db.prepare(`UPDATE financial_entries SET category = ?, category_id = ?, description = ? || ' ' || ref
+        WHERE type = 'receita' AND category = ? AND ref IN
+          (SELECT code FROM sales WHERE channel = 'site' AND COALESCE(origem,'site') = ?)`)
+        .run(RECEITA[para].categoria, categoryId(RECEITA[para].categoria, 'receita'), RECEITA[para].descricao,
+          RECEITA[de].categoria, para);
+    }
+  })();
+  return mudou;
+}
+
 // Produtos da loja já procurados nesta execução (um produto apagado da
 // loja nunca vai aparecer — não adianta reler o catálogo a cada rodada).
 const produtosProcurados = new Set();
@@ -2993,8 +3047,12 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
     WHERE id=?`);
   const marcarFin = db.prepare('UPDATE sales SET fin_posted = 1 WHERE id = ?');
   const insFin = db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, ref, created_at)
-    VALUES ('receita','Venda Site',?,?,?,?,?)`);
-  const catSite = categoryId('Venda Site', 'receita');
+    VALUES ('receita',?,?,?,?,?,?)`);
+  const lancarReceita = (origem, code, total, quando) => {
+    const r = RECEITA[origem] || RECEITA.site;
+    insFin.run(r.categoria, categoryId(r.categoria, 'receita'), `${r.descricao} ${code}`, total, code, quando);
+  };
+  const gravarOrigem = db.prepare('UPDATE sales SET origem = ?, ns_origem = ? WHERE id = ?');
 
   // As peças de cada pedido. Sem elas o sistema não sabe O QUE vende no
   // site: curva ABC, margem por produto, "acabando" e o CRM ficam cegos.
@@ -3092,6 +3150,8 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
       const nItens = Array.isArray(o.products) ? o.products.reduce((s, p) => s + (parseInt(p.quantity, 10) || 0), 0) : 0;
       const code = 'SITE-' + (o.number || oid);
       const nosso = cancelado ? 'cancelado' : (pago ? 'pago' : 'pendente');
+      const infoOrigem = camposDeOrigem(o);
+      const origem = origemDoPedido(infoOrigem);
 
       // Cliente do pedido. O identificador da loja é o que vale: só ele
       // diz que dois pedidos são da MESMA pessoa. Compra de visitante
@@ -3118,18 +3178,20 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
         const id = insSale.run(code, oid, cliId, nsCli, cliente, forma, nosso, pago ? quando : null, total, total, total, quando,
           nsPay, nsShip, nsStat, retirada ? 'retirada' : 'envio', nItens, 0).lastInsertRowid;
         novos += 1;
+        gravarOrigem.run(origem, JSON.stringify(infoOrigem), id);
         gravarItens(id, o);
         if (quando >= desdeBaixa) {
           mexidos.push(id);
           if (pago && !cancelado) baixarEncomenda(id, code, cliId, cliente);
         }
-        if (pago && !cancelado) { insFin.run(catSite, `Venda no site ${code}`, total, code, quando); marcarFin.run(id); lancados += 1; }
+        if (pago && !cancelado) { lancarReceita(origem, code, total, quando); marcarFin.run(id); lancados += 1; }
       } else {
         updSale.run(nosso, pago ? quando : null, total, total, total,
           nsPay, nsShip, nsStat, retirada ? 'retirada' : 'envio', nItens, forma, ex.id);
         // Corrige o vínculo (não usa COALESCE: se estava errado, conserta).
         db.prepare('UPDATE sales SET customer_id = ?, ns_customer_id = ? WHERE id = ?').run(cliId, nsCli, ex.id);
         atualizados += 1;
+        gravarOrigem.run(origem, JSON.stringify(infoOrigem), ex.id);
         gravarItens(ex.id, o);
         if (quando >= desdeBaixa) {
           if (ex.payment_status !== nosso) mexidos.push(ex.id);
@@ -3138,13 +3200,14 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
         }
         // Pagou depois? Agora entra no caixa (uma única vez).
         if (pago && !cancelado && !ex.fin_posted) {
-          insFin.run(catSite, `Venda no site ${code}`, total, code, now());
+          lancarReceita(origem, code, total, now());
           marcarFin.run(ex.id); lancados += 1;
         }
       }
     }
   })();
   setSetting('last_orders_import', now());
+  reclassificarOrigens();   // receita lançada antes de saber a origem vai para a categoria certa
 
   // O site vendeu ou devolveu: relê da loja o número dessas variações, para
   // o estoque daqui não ficar atrás até a próxima leitura do catálogo.
@@ -3182,10 +3245,11 @@ async function tickAutomatico(motivo = 'automático') {
     if (r && r.grade && r.grade.falhas) console.error(`Sob encomenda: ${r.grade.falhas} número(s) não voltaram ao site; tenta de novo.`);
     // Uma vez só: relê dois anos de pedidos para trazer as peças dos
     // antigos (antes o sistema guardava só o total) e os produtos que já
-    // esgotaram. (v2: a primeira leitura não buscava os esgotados.)
-    if (!getSetting('itens_site_historico_v2')) {
+    // esgotaram. (v2: a primeira leitura não buscava os esgotados;
+    // v3: guarda de onde veio cada pedido — balcão ou site.)
+    if (!getSetting('itens_site_historico_v3')) {
       const h = await sincronizarPedidos(730);
-      setSetting('itens_site_historico_v2', now());
+      setSetting('itens_site_historico_v3', now());
       console.log(`› Histórico do site: ${h.analisados} pedido(s) relidos com as peças.`);
     }
     const c = await sincronizarCarrinhos();
@@ -3246,7 +3310,7 @@ app.get('/api/operacao', (req, res) => {
         COALESCE(SUM(items_count),0) pecas,
         COALESCE(SUM(CASE WHEN payment_status = 'pendente' THEN total ELSE 0 END),0) fiado FROM sales
         WHERE ${SQL_VENDA} AND ${cond}`).get(...args);
-    const porCanal = db.prepare(`SELECT CASE WHEN channel='site' THEN 'site' ELSE 'pdv' END c,
+    const porCanal = db.prepare(`SELECT ${FRENTE()} c,
         COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
         WHERE ${SQL_VENDA} AND ${cond} GROUP BY c`).all(...args);
     const pdv = porCanal.find((x) => x.c === 'pdv') || { n: 0, t: 0 };
@@ -3264,7 +3328,8 @@ app.get('/api/operacao', (req, res) => {
   const fila = (sql, ...a) => db.prepare(sql).get(...a);
   const naoEnviado = `(COALESCE(ns_shipping_status,'') NOT IN ('shipped','fulfilled','delivered'))`;
   const ativo = `COALESCE(ns_status,'open') <> 'cancelled' AND payment_status <> 'cancelado'`;
-  const recente = NA_JANELA();
+  // Só pedido do site, recente: venda de balcão já saiu com o cliente.
+  const recente = `${NA_JANELA()} AND COALESCE(origem,'site') <> 'balcao'`;
 
   const porCobrar = fila(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
     WHERE ${FIADO()} AND ${ativo}`);
@@ -3305,7 +3370,7 @@ app.get('/api/operacao', (req, res) => {
 // Lista de uma fila específica (ao clicar no card)
 app.get('/api/operacao/:fila', (req, res) => {
   const ativo = `COALESCE(ns_status,'open') <> 'cancelled' AND payment_status <> 'cancelado'`;
-  const site = `channel='site' AND payment_status='pago' AND ${ativo} AND ${NA_JANELA()}`;
+  const site = `channel='site' AND payment_status='pago' AND ${ativo} AND ${NA_JANELA()} AND COALESCE(origem,'site') <> 'balcao'`;
   const mapa = {
     por_cobrar: `${FIADO()} AND ${ativo}`,
     por_embalar: `${site} AND COALESCE(ns_shipping_type,'envio')='envio' AND COALESCE(ns_shipping_status,'') IN ('','unpacked','unfulfilled')`,
@@ -3397,6 +3462,7 @@ app.get('/api/agente', (req, res) => {
       fiado: 'Fiado é venda do balcão não paga. Pix/boleto pendente do site não é fiado: o cliente ainda não levou nada.',
       estoque: 'Produto sob encomenda (on_demand) tem dois números: stock é a grade do site, on_hand é o que existe aqui.',
       datas: 'Datas gravadas em ISO (UTC). "Hoje" e "mês" são sempre no fuso da loja.',
+      origem: 'channel "site" = veio da Nuvemshop; origem "balcao" = foi o PDV da Nuvemshop (loja física), "site" = loja online. channel "pdv" = PDV deste sistema.',
     },
   });
 });
@@ -3409,7 +3475,7 @@ app.get('/api/agente/vendas', (req, res) => {
   const desde = inicioDoDia(diaLocal(new Date(Date.now() - (dias - 1) * 864e5)));
   const vendas = db.prepare(`SELECT id, code, channel, created_at, customer_id, customer_name, seller_name,
       payment_method, payment_status, paid_at, subtotal, discount, total, cost_total, margin, items_count,
-      ns_payment_status, ns_shipping_status, (${SQL_VENDA}) AS conta_como_venda
+      ns_payment_status, ns_shipping_status, origem, ns_origem, (${SQL_VENDA}) AS conta_como_venda
     FROM sales WHERE created_at >= ? ORDER BY id DESC LIMIT 500`).all(desde);
   const itens = db.prepare('SELECT variant_id, name, qty, unit_price, unit_cost, line_total, encomenda FROM sale_items WHERE sale_id = ?');
   for (const v of vendas) { v.conta_como_venda = Boolean(v.conta_como_venda); v.itens = itens.all(v.id); }

@@ -455,6 +455,11 @@ ensureColumn('sales', 'estoque_baixado', 'estoque_baixado INTEGER NOT NULL DEFAU
 //                estava no site quando virou encomenda; muda no cadastro)
 //   repor_site = 1 quando o site vendeu e o número ainda não voltou
 ensureColumn('variants', 'grade_alvo', 'grade_alvo INTEGER');
+// De onde veio o pedido da Nuvemshop: 'site' (loja online) ou 'balcao'
+// (PDV da Nuvemshop, na loja física). ns_origem guarda os campos de origem
+// do pedido como vieram, para conferir a regra e reclassificar sem reler.
+ensureColumn('sales', 'origem', 'origem TEXT');
+ensureColumn('sales', 'ns_origem', 'ns_origem TEXT');
 ensureColumn('variants', 'repor_site', 'repor_site INTEGER NOT NULL DEFAULT 0');
 db.exec(`UPDATE variants SET grade_alvo = MAX(0, stock) WHERE grade_alvo IS NULL
   AND product_id IN (SELECT id FROM products WHERE on_demand = 1)`);
