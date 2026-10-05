@@ -16,6 +16,7 @@ const loja = {
     variants: [{ id: 1001, values: [{ pt: 'M' }], price: '89.90', sku: '', stock: 5, stock_management: true }],
   },
   falharEstoque: 0,           // quantos PUT de variação seguidos devolvem erro
+  statusFalha: 503,           // 503 = fora do ar · 403 = app sem permissão de escrita
   aplicaEstoqueNoProduto: true, // o PUT do produto mexe no estoque das variações?
 };
 const variante = () => loja.produto.variants[0];
@@ -45,7 +46,7 @@ function mock(req, res) {
       if (sub === 'variants' && String(variante().id) === vid) {
         if (req.method === 'GET') return json(200, variante());
         if (req.method === 'PUT') {
-          if (loja.falharEstoque > 0) { loja.falharEstoque -= 1; return json(503, { description: 'fora do ar' }); }
+          if (loja.falharEstoque > 0) { loja.falharEstoque -= 1; return json(loja.statusFalha, { description: 'recusado' }); }
           variante().stock = body.stock;
           return json(200, variante());
         }
@@ -136,4 +137,17 @@ test('estoque digitado à mão vale na loja como está', async () => {
   assert.equal(variante().stock, 7);
   assert.equal(aqui().stock, 7);
   assert.equal(aqui().ns_fixar, 0);
+});
+
+test('app sem permissão de escrita: o sistema percebe e avisa', async () => {
+  loja.statusFalha = 403; loja.falharEstoque = 1;
+  await venderNoBalcao();
+  const con = await api('GET', '/api/connection');
+  assert.equal(con.escrita.ok, false);
+  assert.match(con.escrita.erro, /permissão/);
+  assert.equal((await api('GET', '/api/dashboard')).loja_escrita.ok, false);
+  // Quando volta a funcionar (permissão corrigida), o aviso some.
+  loja.statusFalha = 503;
+  await venderNoBalcao();
+  assert.equal((await api('GET', '/api/connection')).escrita.ok, true);
 });

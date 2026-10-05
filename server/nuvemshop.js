@@ -7,7 +7,7 @@
 //  Docs: https://tiendanube.github.io/api-documentation/
 // ============================================================
 
-import { getSetting } from './db.js';
+import { getSetting, setSetting } from './db.js';
 
 // Credenciais lidas dinamicamente: primeiro do banco (tela Conectar),
 // depois do .env como fallback. Assim conectar não exige reiniciar.
@@ -29,7 +29,20 @@ export function isConfigured() {
 
 export function connectionInfo() {
   const c = cfg();
-  return { connected: isConfigured(), store_id: c.storeId || null, has_app: Boolean(c.clientId && c.clientSecret) };
+  let escrita = null;
+  try { escrita = JSON.parse(getSetting('nuvemshop_escrita') || 'null'); } catch (_) { /* valor antigo */ }
+  return {
+    connected: isConfigured(), store_id: c.storeId || null, has_app: Boolean(c.clientId && c.clientSecret),
+    // O que o app pode fazer na loja (vem na autorização) e se gravar estoque
+    // já funcionou de verdade — sem "produtos: escrita", o estoque não sobe.
+    scope: getSetting('nuvemshop_scope') || null,
+    escrita,
+  };
+}
+
+// Anota se a loja aceitou (ou recusou por permissão) uma gravação.
+export function anotarEscrita(ok, erro) {
+  setSetting('nuvemshop_escrita', JSON.stringify({ ok, quando: new Date().toISOString(), erro: erro || null }));
 }
 
 // Troca o "code" (recebido no callback) pelo access_token da loja.
@@ -169,13 +182,22 @@ export async function getVariant(productId, variantId) {
 // a loja tem agora (getVariant) — nunca do número guardado aqui, que não
 // sabe das vendas do site. Quem calcula é o server/estoque.js.
 export async function setVariantStock(productId, variantId, stock) {
-  const { data } = await request(
-    'PUT',
-    `/products/${productId}/variants/${variantId}`,
-    { stock: Math.max(0, Math.round(stock)) }
-  );
-  return data;
+  try {
+    const { data } = await request(
+      'PUT',
+      `/products/${productId}/variants/${variantId}`,
+      { stock: Math.max(0, Math.round(stock)) }
+    );
+    if (!escritaOk()) anotarEscrita(true);
+    return data;
+  } catch (err) {
+    if (err.status === 401 || err.status === 403) {
+      anotarEscrita(false, 'A Nuvemshop recusou: o app não tem permissão para mudar produtos (estoque).');
+    }
+    throw err;
+  }
 }
+const escritaOk = () => { try { return JSON.parse(getSetting('nuvemshop_escrita') || 'null')?.ok === true; } catch (_) { return false; } };
 
 // -------- Produtos (criar / atualizar na Nuvemshop) --------
 export async function getProduct(nuvemshopProductId) {

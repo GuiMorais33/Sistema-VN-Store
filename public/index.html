@@ -404,6 +404,8 @@ async function load(){
   if(R.atrasados>0) p.push(`E <b>${R.atrasados}</b> lembrete(s) já passaram da data.`);
   else if(R.hoje>0) p.push(`Tem <b>${R.hoje}</b> lembrete(s) pra hoje.`);
   if(d.low_stock>0) p.push(`Fica de olho: <b>${d.low_stock}</b> produto(s) vendendo e acabando.`);
+  if(d.loja_escrita&&d.loja_escrita.ok===false)
+    p.push(`<br><b style="color:var(--crit)">Atenção:</b> a Nuvemshop está recusando as mudanças de estoque feitas aqui. <a href="/conectar" style="color:var(--warn)">Ver em Conectar</a>.`);
   document.getElementById('maestroMsg').innerHTML='Fala, chefe. '+p.join(' ');
 
   const tags=[];

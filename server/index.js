@@ -1443,6 +1443,8 @@ app.get('/api/dashboard', (req, res) => {
     reminders: remResumo, reminders_list: remLista, por_origem_hoje: origemHoje,
     revenue_today: money(today.revenue), orders_today: today.orders, ticket, margin_pct: marginPct,
     custo_cobertura: coberturaDeCusto(iso),
+    // Gravar na loja já falhou por permissão? O Início avisa.
+    loja_escrita: isLive() ? nuvem.connectionInfo().escrita : null,
     low_stock: acabandoLista.length, stock_value_cost: money(stockVal),
     receivable_total: money(recv.total), receivable_count: recv.n,
     recent_sales: recent, low_stock_list: lowList, pending_list: pendingList,
@@ -3749,6 +3751,26 @@ app.delete('/api/agente/chave', (req, res) => {
 // ==================== CONEXÃO NUVEMSHOP ====================
 app.get('/api/connection', (req, res) => res.json(nuvem.connectionInfo()));
 
+// O sistema consegue mudar o estoque na loja? Regrava numa variação o MESMO
+// número que ela já tem (nada muda na loja) e vê se a Nuvemshop aceita.
+app.post('/api/connection/testar-escrita', async (req, res) => {
+  if (req.agente) return res.status(403).json({ error: 'Só o dono testa.' });
+  if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
+  const v = db.prepare(`SELECT nuvemshop_product_id pid, nuvemshop_variant_id vid FROM variants
+    WHERE nuvemshop_variant_id IS NOT NULL AND stock_management = 1 ORDER BY updated_at DESC LIMIT 1`).get();
+  if (!v) return res.status(400).json({ error: 'Leia os produtos da loja primeiro.' });
+  try {
+    const atual = await nuvem.getVariant(v.pid, v.vid);
+    await nuvem.setVariantStock(v.pid, v.vid, parseInt(atual.stock, 10) || 0);
+    nuvem.anotarEscrita(true);
+    res.json({ ok: true });
+  } catch (err) {
+    const semPermissao = err.status === 401 || err.status === 403;
+    if (!semPermissao) nuvem.anotarEscrita(false, err.message);
+    res.json({ ok: false, sem_permissao: semPermissao, erro: err.message });
+  }
+});
+
 // Salva App ID + Secret (informados na tela Conectar). NÃO conecta ainda.
 app.post('/api/connect/app', (req, res) => {
   const b = req.body || {};
@@ -3770,6 +3792,8 @@ app.get('/oauth/callback', async (req, res) => {
     if (!data || !data.access_token || !data.user_id) throw new Error('A Nuvemshop não retornou o token esperado.');
     setSetting('nuvemshop_access_token', data.access_token);
     setSetting('nuvemshop_store_id', String(data.user_id));
+    setSetting('nuvemshop_scope', data.scope || '');   // o que o app pode fazer na loja
+    setSetting('nuvemshop_escrita', null);              // testa de novo com a autorização nova
     res.redirect('/conectar?ok=1');
   } catch (err) {
     res.redirect('/conectar?erro=' + encodeURIComponent(err.message));

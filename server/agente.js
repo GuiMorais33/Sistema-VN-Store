@@ -19,6 +19,7 @@ import db, { getSetting, setSetting } from './db.js';
 export const LEITURAS = [
   ['/api/agente', 'Este índice, a situação da chave e as vendas com itens (/api/agente/vendas?dias=7)'],
   ['/api/health', 'Modo (ao vivo/demonstração) e tamanho do catálogo'],
+  ['/api/connection', 'Conexão com a Nuvemshop: permissão do app e se gravar estoque funciona'],
   ['/api/dashboard', 'Números de hoje: vendas, margem, fiado, estoque baixo'],
   ['/api/vendas', 'Vendas para achar e conferir (/api/vendas?q=&dias=); /api/vendas/:id traz itens e trocas'],
   ['/api/operacao', 'O que precisa de ação agora (pedidos do site, fiado, encomendas)'],

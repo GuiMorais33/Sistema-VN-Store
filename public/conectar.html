@@ -44,7 +44,7 @@
 <div class="app">
   <div class="pagehead">
     <div><h1>Conectar Loja</h1><div class="ph-sub">Integração com a Nuvemshop</div></div>
-    <div class="ph-actions"><span class="pill ok"><span class="dot"></span>Somente leitura</span></div>
+    <div class="ph-actions"></div>
   </div>
 
   <div id="banner"></div>
@@ -66,6 +66,16 @@
     <div class="msg" id="syncMsg"></div>
     <div class="msg" id="cliMsg"></div>
     <div class="note">A leitura só <b>traz</b> os dados da sua loja pra cá. Nada é criado ou alterado na Nuvemshop.</div>
+  </div>
+
+  <div class="card" id="escritaCard" style="display:none">
+    <h3>Atualizar o estoque na loja</h3>
+    <p class="note" style="margin-top:0">Quando você vende no PDV daqui, lança uma entrada ou o número de um tênis de
+      encomenda volta para o site, o sistema <b>muda o estoque na Nuvemshop</b>. Para isso o app precisa da permissão
+      <b>produtos: leitura e escrita</b>.</p>
+    <div class="msg" id="escritaMsg"></div>
+    <button class="btn" id="escritaBtn" type="button">Testar agora</button>
+    <div class="note">O teste regrava numa peça o mesmo número de estoque que ela já tem — nada muda na loja.</div>
   </div>
 
   <div class="card" id="backupCard">
@@ -98,7 +108,8 @@
         <button class="btn ghost" id="copyCb" type="button">Copiar</button>
       </div>
       <ol start="3">
-        <li>Marque as permissões de <b>produtos, pedidos e clientes</b> (leitura).</li>
+        <li>Marque as permissões: <b>produtos — leitura e escrita</b> (o sistema atualiza o estoque) e
+          <b>pedidos, clientes e carrinhos — leitura</b>.</li>
         <li>Copie o <b>App ID</b> e o <b>Client Secret</b> que o portal mostra.</li>
       </ol>
     </div>
@@ -143,6 +154,8 @@ async function load(){
     document.getElementById('cleanCard').style.display='block';
     document.getElementById('setup').style.display='none';
     document.getElementById('storeInfo').textContent = 'Loja Nuvemshop #' + (c.store_id||'—');
+    document.getElementById('escritaCard').style.display='block';
+    mostrarEscrita(c);
   } else {
     document.getElementById('connectedCard').style.display='none';
     document.getElementById('cleanCard').style.display='none';
@@ -214,6 +227,24 @@ document.getElementById('resetBtn').addEventListener('click', async (e)=>{
 document.getElementById('disconnectBtn').addEventListener('click', async ()=>{
   if(!confirm('Desconectar a loja? (não altera nada na Nuvemshop)')) return;
   await api('/api/disconnect',{method:'POST'}); location.href='/conectar';
+});
+
+// Gravar na loja: o que se sabe (último resultado) e o teste na hora.
+function mostrarEscrita(c){
+  const el=document.getElementById('escritaMsg'), e=c.escrita;
+  const quando=(iso)=>new Date(iso).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
+  const perm=c.scope?`<br><span class="note">Permissões do app: ${c.scope.replace(/,/g,', ')}</span>`:'';
+  el.innerHTML=!e?`<span class="note">Ainda não testado.</span>${perm}`
+    :e.ok?`<span style="color:var(--brand-hi)">✔ Funcionando</span> <span class="note">(${quando(e.quando)})</span>${perm}`
+    :`<span style="color:#ff8377">✖ ${e.erro||'A loja recusou a gravação.'}</span><br>
+       <span class="note">No Portal de Parceiros, abra o app → Permissões → marque <b>produtos: escrita</b>, salve,
+       e autorize de novo (passo 3 desta tela, ou reinstale o app na loja).</span>${perm}`;
+}
+document.getElementById('escritaBtn').addEventListener('click', async (e)=>{
+  e.target.disabled=true;e.target.textContent='Testando…';
+  try{ await api('/api/connection/testar-escrita',{method:'POST'}); mostrarEscrita(await api('/api/connection')); }
+  catch(err){ document.getElementById('escritaMsg').innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
+  finally{ e.target.disabled=false;e.target.textContent='Testar agora'; }
 });
 
 const oi=document.getElementById('okIco'); if(oi) oi.innerHTML=ICO('ok',20);

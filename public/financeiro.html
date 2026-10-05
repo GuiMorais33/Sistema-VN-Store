@@ -448,7 +448,7 @@ async function caixa(){
   const f=d.fechamento;
   const dif=f?f.diferenca:null;
   document.getElementById('caixa').innerHTML=`
-    ${d.por_forma.length?d.por_forma.map(x=>`<div class="cxl"><span>${esc(x.forma)} · ${x.n} venda(s)</span>
+    ${d.por_forma.length?d.por_forma.map(x=>`<div class="cxl"><span>${esc(x.forma)} · ${x.n} lançamento(s)</span>
       <span class="v">${BRL(x.total)}</span></div>`).join(''):'<div class="cxl"><span>Nenhuma venda no balcão</span><span class="v">R$ 0,00</span></div>'}
     ${d.site.n?`<div class="cxl"><span style="color:var(--ink-3)">site · ${d.site.n} pedido(s)</span>
       <span class="v" style="color:var(--ink-3)">${BRL(d.site.total)}</span></div>`:''}

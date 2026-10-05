@@ -38,9 +38,14 @@ test('o agente não altera nada nem vê o que é só do dono', async () => {
   const venda = await comoAgente('POST', '/api/sales', { items: [{ variant_id: await umaVariante(), qty: 1 }] });
   assert.equal(venda.status, 403);
   assert.equal(s.banco().prepare('SELECT COUNT(*) n FROM sales').get().n, 0);
-  for (const caminho of ['/api/backup/baixar', '/api/connection', '/conectar']) {
+  for (const caminho of ['/api/backup/baixar', '/conectar']) {
     assert.equal((await comoAgente('GET', caminho)).status, 403, caminho);
   }
+  // A conexão ele vê (permissão do app, se gravar funciona) — nunca o token.
+  const con = await comoAgente('GET', '/api/connection');
+  assert.equal(con.status, 200);
+  assert.doesNotMatch(con.bytes.toString(), /token|secret/i);
+  assert.equal((await comoAgente('POST', '/api/connection/testar-escrita')).status, 403);
   assert.equal((await comoAgente('POST', '/api/agente/chave')).status, 403);
   assert.equal((await comoAgente('DELETE', '/api/agente/chave')).status, 403);
 });
