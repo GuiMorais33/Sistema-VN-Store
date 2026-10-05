@@ -736,24 +736,46 @@ app.get('/api/custos', (req, res) => {
   const desde = desdeDias(120);
   const vendeu = `(SELECT COALESCE(SUM(i.qty),0) FROM sale_items i JOIN sales s ON s.id = i.sale_id
     WHERE i.variant_id = v.id AND s.created_at >= '${desde}' AND ${VENDA('s.')})`;
+  const vendeuValor = `(SELECT COALESCE(SUM(i.line_total),0) FROM sale_items i JOIN sales s ON s.id = i.sale_id
+    WHERE i.variant_id = v.id AND s.created_at >= '${desde}' AND ${VENDA('s.')})`;
   const importa = `(${REAL} > 0 OR ${vendeu} > 0)`;
   if (req.query.tudo !== '1') where.push(importa);
 
+  // Agrupado por produto: o custo quase sempre é o mesmo em todos os
+  // tamanhos, e a tela preenche o produto inteiro de uma vez. A ordem é a
+  // do produto (o que mais vendeu primeiro) — não a de cada tamanho, senão
+  // os tamanhos de um mesmo produto ficariam espalhados pela lista.
   const rows = db.prepare(`
-    SELECT v.id, v.product_id, v.product_name, v.variant_name, v.sku, v.price, v.cost,
-           v.stock, COALESCE(v.on_hand,0) AS on_hand, p.brand, p.category, p.image_url,
-           COALESCE(p.on_demand,0) AS on_demand, ${REAL} AS na_loja, ${vendeu} AS vendidas_120d
-    FROM variants v LEFT JOIN products p ON p.id = v.product_id
-    ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-    ORDER BY (COALESCE(v.cost,0) <= 0) DESC, vendidas_120d DESC, na_loja DESC, v.product_name, v.variant_name
-    LIMIT 500
+    SELECT * FROM (
+      SELECT v.id, v.product_id, v.product_name, v.variant_name, v.sku, v.price, v.cost,
+             v.stock, COALESCE(v.on_hand,0) AS on_hand, p.brand, p.category, p.image_url,
+             COALESCE(p.on_demand,0) AS on_demand, ${REAL} AS na_loja, ${vendeu} AS vendidas_120d,
+             ${vendeuValor} AS vendido_120d
+      FROM variants v LEFT JOIN products p ON p.id = v.product_id
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+    )
+    ORDER BY MAX(COALESCE(cost,0) <= 0) OVER (PARTITION BY product_id) DESC,
+             SUM(vendido_120d) OVER (PARTITION BY product_id) DESC,
+             SUM(MAX(na_loja,0)) OVER (PARTITION BY product_id) DESC, product_name, product_id, id
+    LIMIT 2000
   `).all(...args);
 
   // "Sem custo" que importa: o que está na loja ou vendeu há pouco.
   const resumo = db.prepare(`
-    SELECT COUNT(*) total,
-      SUM(CASE WHEN COALESCE(v.cost,0) <= 0 THEN 1 ELSE 0 END) sem_custo
+    SELECT COUNT(*) total, COUNT(DISTINCT v.product_id) produtos,
+      SUM(CASE WHEN COALESCE(v.cost,0) <= 0 THEN 1 ELSE 0 END) sem_custo,
+      COUNT(DISTINCT CASE WHEN COALESCE(v.cost,0) <= 0 THEN v.product_id END) produtos_sem_custo
     FROM variants v LEFT JOIN products p ON p.id = v.product_id WHERE ${importa}`).get();
+  // Por onde começar: quantos produtos sem custo (do que mais vende para o
+  // que menos vende) somam 80% do que foi vendido sem custo em 120 dias.
+  const semCustoVendido = db.prepare(`
+    SELECT v.product_id, SUM(${vendeuValor}) valor FROM variants v
+    WHERE COALESCE(v.cost,0) <= 0 GROUP BY v.product_id HAVING valor > 0 ORDER BY valor DESC`).all();
+  const totalSem = semCustoVendido.reduce((t, x) => t + x.valor, 0);
+  let acum = 0, primeiros = 0;
+  for (const x of semCustoVendido) { if (acum >= totalSem * 0.8) break; acum += x.valor; primeiros++; }
+  resumo.primeiros_80 = primeiros;
+  resumo.vendido_sem_custo = money(totalSem);
   res.json({ resumo, variantes: rows });
 });
 
@@ -3727,13 +3749,15 @@ app.get('/api/agente', (req, res) => {
 app.get('/api/agente/status', (req, res) => res.json(agente.situacao()));
 
 // Vendas do período com os itens (site não tem itens: só o total).
+// Pela data, não pelo id: pedidos antigos do site importados depois têm id
+// maior, e o corte por id deixava de fora vendas recentes de verdade.
 app.get('/api/agente/vendas', (req, res) => {
   const dias = Math.min(366, Math.max(1, parseInt(req.query.dias, 10) || 7));
   const desde = inicioDoDia(diaLocal(new Date(Date.now() - (dias - 1) * 864e5)));
   const vendas = db.prepare(`SELECT id, code, channel, created_at, customer_id, customer_name, seller_name,
       payment_method, payment_status, paid_at, subtotal, discount, total, cost_total, margin, items_count,
       ns_payment_status, ns_shipping_status, origem, ns_origem, (${SQL_VENDA}) AS conta_como_venda
-    FROM sales WHERE created_at >= ? ORDER BY id DESC LIMIT 500`).all(desde);
+    FROM sales WHERE created_at >= ? ORDER BY created_at DESC LIMIT 3000`).all(desde);
   const itens = db.prepare('SELECT variant_id, name, qty, unit_price, unit_cost, line_total, encomenda FROM sale_items WHERE sale_id = ?');
   for (const v of vendas) { v.conta_como_venda = Boolean(v.conta_como_venda); v.itens = itens.all(v.id); }
   res.json({ desde, dias, vendas });

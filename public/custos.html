@@ -54,6 +54,19 @@
     font-family:var(--font-mono);font-variant-numeric:tabular-nums}
   .crow .marg{font-family:var(--font-mono);font-weight:700;font-size:12.5px;text-align:right}
   .marg.ok{color:var(--ok)} .marg.baixa{color:var(--warn)} .marg.neg{color:var(--crit)} .marg.vazia{color:var(--ink-3)}
+  /* Produto com vários tamanhos: um custo para todos; "abrir" mostra cada
+     tamanho para quando um deles custa diferente (ex.: GG mais caro). */
+  .grp{display:flex;flex-direction:column;gap:3px}
+  .abrir{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border:1px solid var(--line);border-radius:999px;
+    background:var(--bg-elev);color:var(--ink-2);font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;justify-self:start}
+  .abrir:hover{color:var(--ink);border-color:var(--line-str)}
+  .abrir .seta{transition:transform .15s}
+  .grp.aberto .abrir .seta{transform:rotate(180deg)}
+  .tams{display:none;flex-direction:column;gap:3px;margin-left:var(--s6)}
+  .grp.aberto .tams{display:flex}
+  .tams .crow{padding:5px var(--s4);background:var(--bg-elev)}
+  .tams .crow .thumb,.tams .crow .who{visibility:hidden;height:0}
+  .rank{font-family:var(--font-mono);font-size:10px;color:var(--ink-3);margin-right:4px}
   @media (max-width:860px){
     .thead{display:none}
     .crow{grid-template-columns:44px 1fr 92px;gap:5px var(--s3);align-items:center;padding:10px}
@@ -61,6 +74,10 @@
     .crow .who{grid-column:2/span 2}
     .crow .var{grid-column:2} .crow .preco{grid-column:3;text-align:right}
     .crow input.custo{grid-column:2} .crow .marg{grid-column:3}
+    .tams{margin-left:var(--s3)}
+    .tams .crow .thumb{display:none}
+    .tams .crow .who{display:none}
+    .tams .crow .var{grid-column:1/span 2}
   }
 </style>
 </head>
@@ -73,7 +90,7 @@
 
   <div class="top">
     <div class="card box">
-      <span class="label">Peças sem custo</span>
+      <span class="label">Produtos sem custo</span>
       <div class="big" id="semCusto">—</div>
       <div class="sub" id="semSub">Carregando…</div>
     </div>
@@ -110,13 +127,13 @@
   </div>
 
   <div class="acoes">
-    <span class="cnt"><b id="mudN">0</b> <span id="mudTxt">alterações não salvas</span></span>
+    <span class="cnt"><b id="mudN">0</b> <span id="mudTxt">produtos com custo novo, não salvos</span></span>
     <button class="btn sm ghost" id="desfazer" type="button">Descartar</button>
     <button class="btn primary" id="salvar" type="button">Salvar custos</button>
   </div>
 
   <div class="thead">
-    <div></div><div>Produto</div><div>Variação</div><div>Preço</div><div>Custo</div><div>Margem</div>
+    <div></div><div>Produto</div><div>Tamanhos</div><div>Preço</div><div>Custo</div><div>Margem</div>
   </div>
   <div class="rowsw" id="rows"><div class="sk" style="height:58px"></div></div>
 </div>
@@ -131,6 +148,8 @@ const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><d
 document.querySelector('.search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
 
 let LISTA=[];            // o que está na tela
+let RESUMO={};
+const produtoDe=new Map(); // variant_id -> product_id (para contar produtos, não tamanhos)
 const mudou=new Map();   // variant_id -> novo custo (só na memória até salvar)
 let falta='1';
 
@@ -150,12 +169,16 @@ async function carregar(){
   const br=document.getElementById('fBrand').value,ct=document.getElementById('fCat').value;
   const d=await api(`/api/custos?q=${encodeURIComponent(q)}&brand=${encodeURIComponent(br)}`
     +`&category=${encodeURIComponent(ct)}&falta=${falta}&tudo=${document.getElementById('fTudo').value}`);
-  LISTA=d.variantes;
+  LISTA=d.variantes;RESUMO=d.resumo;
+  for(const v of LISTA)produtoDe.set(v.id,v.product_id);
   // Conta só o que importa: peça na loja ou vendida nos últimos 120 dias.
   // As que mais vendem vêm primeiro — é por elas que o lucro fica certo.
-  document.getElementById('semCusto').textContent=d.resumo.sem_custo;
-  document.getElementById('semSub').textContent=
-    `de ${d.resumo.total} ${pl(d.resumo.total,'peça na loja ou vendida','peças na loja ou vendidas')} nos últimos 120 dias · ${d.resumo.total-d.resumo.sem_custo} já com custo · as que mais vendem aparecem primeiro`;
+  const R=d.resumo;
+  document.getElementById('semCusto').textContent=R.produtos_sem_custo||0;
+  document.getElementById('semSub').innerHTML=
+    `de ${R.produtos} ${pl(R.produtos,'produto na loja ou vendido','produtos na loja ou vendidos')} nos últimos 120 dias`
+    +` (${R.sem_custo} de ${R.total} ${pl(R.total,'tamanho')} sem custo).`
+    +(R.primeiros_80?`<br><b style="color:var(--ink)">Comece pelos ${R.primeiros_80} primeiros da lista</b>: eles são 80% do que a loja vendeu sem custo (${BRL(R.vendido_sem_custo*0.8)} de ${BRL(R.vendido_sem_custo)}).`:'');
   render();
 }
 
@@ -166,47 +189,131 @@ function render(){
       falta==='1'?'Todos os produtos desse filtro já têm custo preenchido.':'Tente limpar a busca.');
     return;
   }
-  box.innerHTML='';
+  // A lista já vem na ordem do produto; aqui só junta os tamanhos dele.
+  const grupos=[];const porId=new Map();
   for(const v of LISTA){
-    const c=custoAtual(v),m=margem(v.price,c);
-    const el=document.createElement('div');
-    el.className='crow'+(c>0?'':' falta')+(mudou.has(v.id)?' mudou':'');
-    el.dataset.id=v.id;
-    const img=v.image_url
-      ?`<img src="${esc(v.image_url)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:ICO('estoque',18)}))">`
-      :ICO('estoque',18);
-    el.innerHTML=`<span class="thumb">${img}</span>
-      <div class="who"><div class="nm">${esc(v.product_name)}</div>
-        <div class="meta">${esc(v.brand||'sem marca')}${v.sku?' · '+esc(v.sku):''}${v.vendidas_120d?` · vendeu ${v.vendidas_120d} em 120 dias`:''}${v.na_loja>0?` · ${v.na_loja} na loja`:''}</div></div>
-      <div class="var">${esc(v.variant_name||'Único')}</div>
-      <div class="preco">${BRL(v.price)}</div>
-      <input class="custo" type="number" step="0.01" min="0" inputmode="decimal"
-        value="${c>0?c:''}" placeholder="0,00" aria-label="custo">
-      <div class="marg ${m.cls}">${m.txt}</div>`;
-    const inp=el.querySelector('.custo');
-    inp.oninput=()=>{
-      const n=parseFloat(inp.value);
-      if(inp.value===''){mudou.delete(v.id);}else if(n>=0){mudou.set(v.id,Math.round(n*100)/100);}
-      const mm=margem(v.price,custoAtual(v));
-      const md=el.querySelector('.marg');md.textContent=mm.txt;md.className='marg '+mm.cls;
-      el.classList.toggle('mudou',mudou.has(v.id));
-      el.classList.toggle('falta',!(custoAtual(v)>0));
-      contar();
-    };
-    // Enter pula para o próximo campo — dá para digitar a lista inteira sem mouse.
-    inp.onkeydown=(e)=>{
-      if(e.key!=='Enter')return;
-      e.preventDefault();
-      const todos=[...document.querySelectorAll('.crow input.custo')];
-      const i=todos.indexOf(inp);
-      if(todos[i+1]){todos[i+1].focus();todos[i+1].select();}
-    };
-    box.appendChild(el);
+    let g=porId.get(v.product_id);
+    if(!g){g={id:v.product_id,vs:[]};porId.set(v.product_id,g);grupos.push(g);}
+    g.vs.push(v);
   }
+  box.innerHTML='';
+  grupos.forEach((g,i)=>box.appendChild(g.vs.length>1?linhaProduto(g,i+1):linhaTamanho(g.vs[0],i+1)));
   contar();
 }
-function contar(){document.getElementById('mudN').textContent=mudou.size;
-  document.getElementById('mudTxt').textContent=pl(mudou.size,'alteração não salva','alterações não salvas');}
+
+const fotoDe=(v)=>v.image_url
+  ?`<img src="${esc(v.image_url)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:ICO('estoque',18)}))">`
+  :ICO('estoque',18);
+function metaDe(vs){
+  const v=vs[0];
+  const vend=vs.reduce((t,x)=>t+(x.vendidas_120d||0),0),loja=vs.reduce((t,x)=>t+Math.max(0,x.na_loja||0),0);
+  return `${esc(v.brand||'sem marca')}${vs.length===1&&v.sku?' · '+esc(v.sku):''}`
+    +`${vend?` · vendeu ${vend} em 120 dias`:''}${loja>0?` · ${loja} na loja`:''}`;
+}
+function pintarMargem(el,preco,custo){
+  const m=margem(preco,custo);const md=el.querySelector(':scope > .marg');md.textContent=m.txt;md.className='marg '+m.cls;
+}
+// Guarda o custo digitado (ou desfaz, se apagou) — só na memória até Salvar.
+function anotar(v,valor){
+  const n=parseFloat(String(valor).replace(',','.'));
+  if(valor===''||!(n>=0)){mudou.delete(v.id);return;}
+  const c=Math.round(n*100)/100;
+  if(c===(Number(v.cost)||0))mudou.delete(v.id);else mudou.set(v.id,c);
+}
+function campoCusto(valor,ph){
+  return `<input class="custo" type="number" step="0.01" min="0" inputmode="decimal"
+    value="${valor>0?valor:''}" placeholder="${ph||'0,00'}" aria-label="custo">`;
+}
+
+// Produto de um tamanho só (ou um tamanho dentro do produto aberto).
+function linhaTamanho(v,rank,aoMudar){
+  const c=custoAtual(v);
+  const el=document.createElement('div');
+  el.className='crow'+(c>0?'':' falta')+(mudou.has(v.id)?' mudou':'');
+  el.dataset.id=v.id;
+  el.innerHTML=`<span class="thumb">${fotoDe(v)}</span>
+    <div class="who"><div class="nm">${rank?`<span class="rank">${rank}º</span>`:''}${esc(v.product_name)}</div>
+      <div class="meta">${metaDe([v])}</div></div>
+    <div class="var">${esc(v.variant_name||'Único')}</div>
+    <div class="preco">${BRL(v.price)}</div>
+    ${campoCusto(c)}
+    <div class="marg"></div>`;
+  pintarMargem(el,v.price,c);
+  const inp=el.querySelector('input.custo');
+  inp.oninput=()=>{
+    anotar(v,inp.value);
+    pintarMargem(el,v.price,custoAtual(v));
+    el.classList.toggle('mudou',mudou.has(v.id));
+    el.classList.toggle('falta',!(custoAtual(v)>0));
+    contar();
+    if(aoMudar)aoMudar();
+  };
+  inp.onkeydown=pularComEnter;
+  return el;
+}
+
+// Produto com vários tamanhos: um campo preenche todos de uma vez.
+function linhaProduto(g,rank){
+  const vs=g.vs,v=vs[0];
+  const wrap=document.createElement('div');wrap.className='grp';
+  const precos=vs.map(x=>Number(x.price)||0),pMin=Math.min(...precos),pMax=Math.max(...precos);
+  const el=document.createElement('div');el.className='crow';
+  el.innerHTML=`<span class="thumb">${fotoDe(v)}</span>
+    <div class="who"><div class="nm"><span class="rank">${rank}º</span>${esc(v.product_name)}</div>
+      <div class="meta">${metaDe(vs)}</div></div>
+    <button type="button" class="var abrir" title="Ver o custo de cada tamanho">${vs.length} tamanhos <span class="seta">▾</span></button>
+    <div class="preco">${pMin===pMax?BRL(pMin):BRL(pMin)+'<br>'+BRL(pMax)}</div>
+    ${campoCusto(0)}
+    <div class="marg"></div>`;
+  const tams=document.createElement('div');tams.className='tams';
+  const inp=el.querySelector('input.custo');
+  // O campo do produto mostra o custo quando todos os tamanhos têm o mesmo;
+  // se algum é diferente, fica vazio com "vários" e a margem mostra a faixa.
+  function resumo(){
+    const cs=vs.map(custoAtual),todos=cs.every(c=>c===cs[0]);
+    if(document.activeElement!==inp){inp.value=todos&&cs[0]>0?cs[0]:'';inp.placeholder=todos?'0,00':'vários';}
+    const ms=vs.map(x=>margem(x.price,custoAtual(x)));
+    const md=el.querySelector(':scope > .marg');
+    if(ms.every(m=>m.txt===ms[0].txt)){md.textContent=ms[0].txt;md.className='marg '+ms[0].cls;}
+    else{const ns=ms.map(m=>parseInt(m.txt,10)).filter(n=>!isNaN(n));
+      md.textContent=ns.length?Math.min(...ns)+'–'+Math.max(...ns)+'%':'—';
+      md.className='marg '+(ns.length===vs.length?(Math.min(...ns)<0?'neg':Math.min(...ns)<25?'baixa':'ok'):'vazia');}
+    el.classList.toggle('falta',cs.some(c=>!(c>0)));
+    el.classList.toggle('mudou',vs.some(x=>mudou.has(x.id)));
+  }
+  inp.oninput=()=>{
+    for(const x of vs)anotar(x,inp.value);
+    // Os tamanhos abertos acompanham o número digitado no produto.
+    tams.querySelectorAll('.crow').forEach((r,i)=>{
+      const x=vs[i],c=custoAtual(x);r.querySelector('input.custo').value=c>0?c:'';
+      pintarMargem(r,x.price,c);r.classList.toggle('mudou',mudou.has(x.id));r.classList.toggle('falta',!(c>0));
+    });
+    resumo();contar();
+  };
+  inp.onkeydown=pularComEnter;
+  el.querySelector('.abrir').onclick=()=>{
+    if(!tams.childElementCount)for(const x of vs)tams.appendChild(linhaTamanho(x,0,resumo));
+    wrap.classList.toggle('aberto');
+  };
+  wrap.append(el,tams);
+  resumo();
+  return wrap;
+}
+
+// Enter pula para o próximo campo visível — dá para digitar a lista
+// inteira sem mouse, um produto por vez.
+function pularComEnter(e){
+  if(e.key!=='Enter')return;
+  e.preventDefault();
+  const todos=[...document.querySelectorAll('#rows input.custo')].filter(x=>x.offsetParent);
+  const i=todos.indexOf(e.target);
+  if(todos[i+1]){todos[i+1].focus();todos[i+1].select();}
+}
+// Conta produtos: preencher um produto de 6 tamanhos é uma alteração só.
+function contar(){
+  const n=new Set([...mudou.keys()].map(id=>produtoDe.get(id)??id)).size;
+  document.getElementById('mudN').textContent=n;
+  document.getElementById('mudTxt').textContent=pl(n,'produto com custo novo, não salvo','produtos com custo novo, não salvos');}
 
 // Atalhos: só tocam no que está vazio.
 document.getElementById('aplicaPct').onclick=()=>{
@@ -230,7 +337,7 @@ document.getElementById('aplicaFixo').onclick=()=>{
 };
 document.getElementById('desfazer').onclick=()=>{
   if(!mudou.size)return;
-  if(!confirm(`Descartar ${mudou.size} ${pl(mudou.size,'alteração','alterações')} não ${pl(mudou.size,'salva')}?`))return;
+  if(!confirm('Descartar os custos digitados e ainda não salvos?'))return;
   mudou.clear();render();
 };
 document.getElementById('salvar').onclick=async()=>{
@@ -242,7 +349,8 @@ document.getElementById('salvar').onclick=async()=>{
       body:JSON.stringify({itens})});
     mudou.clear();
     await carregar();
-    alert(`${r.salvos} ${pl(r.salvos,'custo')} ${pl(r.salvos,'salvo')}. Ainda faltam ${r.resumo.sem_custo}.`);
+    const f=RESUMO.produtos_sem_custo||0;
+    alert(`Custo salvo em ${r.salvos} ${pl(r.salvos,'tamanho')}.`+(f?` Ainda ${pl(f,'falta','faltam')} ${f} ${pl(f,'produto')}.`:' Todos os produtos da lista têm custo agora.'));
   }catch(e){alert(e.message);}
   finally{b.disabled=false;b.textContent=t;}
 };
