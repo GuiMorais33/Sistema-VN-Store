@@ -128,6 +128,38 @@ export function lerDaLoja(ids) {
   });
 }
 
+// Sob encomenda: o número que o site vendeu volta para o site, até o alvo
+// (variants.grade_alvo). Lê a loja na hora e só sobe — se alguém já pôs
+// mais pelo painel, fica como está. Falhou? Tenta na próxima rodada.
+// Só mexe no número que VENDEU: o que você tirou do site fica fora.
+const marcadosParaRepor = db.prepare(`SELECT v.id FROM variants v JOIN products p ON p.id = v.product_id
+  WHERE v.repor_site = 1 AND p.on_demand = 1 ORDER BY v.id LIMIT 60`);
+const reposto = db.prepare(`UPDATE variants SET repor_site = 0, stock = @valor, updated_at = @ts WHERE id = @id`);
+const largar = db.prepare('UPDATE variants SET repor_site = 0 WHERE id = ?');
+export function reporGrade() {
+  const ids = marcadosParaRepor.all().map((r) => r.id);
+  if (!ids.length || !nuvem.isConfigured()) return Promise.resolve({ repostos: 0, falhas: 0 });
+  return naFila(async () => {
+    let repostos = 0, falhas = 0;
+    for (const id of ids) {
+      const v = ler.get(id);
+      const alvo = v && v.grade_alvo != null ? v.grade_alvo : 0;
+      if (!v || !v.on_demand || !v.stock_management || !v.nuvemshop_variant_id || alvo <= 0) { if (v) largar.run(id); continue; }
+      try {
+        const naLoja = await nuvem.getVariant(v.nuvemshop_product_id, v.nuvemshop_variant_id);
+        const agora = naLoja && naLoja.stock != null ? (parseInt(naLoja.stock, 10) || 0) : null;
+        if (agora == null) { largar.run(id); continue; }   // a loja não controla esse estoque
+        if (agora < alvo) await nuvem.setVariantStock(v.nuvemshop_product_id, v.nuvemshop_variant_id, alvo);
+        reposto.run({ id, valor: Math.max(agora, alvo), ts: new Date().toISOString() });
+        repostos += agora < alvo ? 1 : 0;
+      } catch (err) {
+        if (err.status === 404) largar.run(id); else falhas += 1;   // 404: o número não existe mais na loja
+      }
+    }
+    return { repostos, falhas };
+  });
+}
+
 // Tudo que ficou para trás (loja fora do ar na hora da venda, etc.).
 export async function enviarPendentes() {
   if (!nuvem.isConfigured()) return { enviados: 0, falhas: 0 };

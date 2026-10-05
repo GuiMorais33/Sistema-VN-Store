@@ -1,6 +1,7 @@
 // Na loja × sob encomenda: o valor do estoque conta só o que está na loja;
 // a grade do site é para não perder venda. Venda do site tira o par da loja
-// quando ele estava aqui, e vira "pegar no fornecedor" quando não estava.
+// quando ele estava aqui, vira "pegar no fornecedor" quando não estava, e
+// o número vendido volta para o site sozinho.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -18,6 +19,7 @@ const loja = {
       variants: [variacao(2001, 'Único', 1)] },
   ],
   pedidos: [],
+  falharEstoque: 0,   // quantos PUT de variação seguidos a loja recusa
 };
 const daLoja = (vid) => loja.produtos.flatMap((p) => p.variants).find((v) => v.id === vid);
 const pedido = (id, quando, itens, extra = {}) => ({
@@ -30,16 +32,33 @@ const pedido = (id, quando, itens, extra = {}) => ({
 let nuvem, s;
 before(async () => {
   nuvem = http.createServer((req, res) => {
+    let corpo = '';
+    req.on('data', (c) => { corpo += c; });
+    req.on('end', () => {
     const url = new URL(req.url, 'http://x');
-    const [l, recurso, , sub, vid] = url.pathname.split('/').filter(Boolean);
-    const json = (d) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(d)); };
+    const [l, recurso, pid, sub, vid] = url.pathname.split('/').filter(Boolean);
+    const json = (d, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(d)); };
     const primeira = url.searchParams.get('page') === '1';
+    const body = corpo ? JSON.parse(corpo) : {};
     if (l !== LOJA) { res.writeHead(404); return res.end('{}'); }
-    if (recurso === 'products' && sub === 'variants') return json(daLoja(Number(vid)));
+    if (recurso === 'products' && sub === 'variants') {
+      const v = daLoja(Number(vid));
+      if (req.method === 'PUT') {
+        if (loja.falharEstoque > 0) { loja.falharEstoque -= 1; return json({ description: 'fora do ar' }, 503); }
+        v.stock = body.stock;
+      }
+      return json(v);
+    }
+    if (recurso === 'products' && pid) {
+      const p = loja.produtos.find((x) => String(x.id) === pid);
+      if (req.method === 'PUT' && body.name) p.name = body.name;
+      return json(p);
+    }
     if (recurso === 'products') return json(primeira ? loja.produtos : []);
     if (recurso === 'categories') return json(primeira ? [TENIS, BONES] : []);
     if (recurso === 'orders') return json(primeira ? loja.pedidos : []);
     return json([]);
+    });
   });
   await new Promise((ok) => nuvem.listen(0, '127.0.0.1', ok));
   s = await subirServidor({
@@ -83,8 +102,11 @@ test('venda do site: o par da loja sai; o que não estava vira "pegar no fornece
   daLoja(1001).stock = 0; daLoja(1003).stock = 0;   // a loja baixou a grade
   await lerPedidos();
   assert.equal(aqui(1001).on_hand, 0);
-  assert.equal(aqui(1001).stock, 0);                 // relido da loja
   assert.deepEqual(lembretes(), ['Pegar no fornecedor: Tênis Gucci 40']);
+  // E os números vendidos voltam para o site, para não perder a próxima venda.
+  assert.equal(daLoja(1001).stock, 1);
+  assert.equal(daLoja(1003).stock, 1);
+  assert.equal(aqui(1001).stock, 1);
   const itens = s.banco().prepare("SELECT encomenda FROM sale_items i JOIN sales s ON s.id = i.sale_id WHERE s.code = 'SITE-1' ORDER BY i.id").all();
   assert.deepEqual(itens.map((i) => i.encomenda), [0, 1]);
   await lerPedidos();                                // ler de novo não baixa de novo
@@ -103,6 +125,32 @@ test('pedido antigo relido não mexe na loja de hoje', async () => {
   await lerPedidos();
   assert.equal(aqui(1001).on_hand, 1);
   assert.equal(lembretes().length, 1);
+});
+
+test('loja fora do ar: o número volta na rodada seguinte, mesmo editando o produto no meio', async () => {
+  loja.pedidos.push(pedido(4, new Date().toISOString(), [1002]));
+  daLoja(1002).stock = 0;
+  loja.falharEstoque = 1;
+  await lerPedidos();
+  assert.equal(daLoja(1002).stock, 0);
+  assert.equal(aqui(1002).repor_site, 1);
+  // Editar o nome agora (o 39 aparece zerado aqui) não pode cancelar a volta.
+  const p = aqui(1002).product_id;
+  const vs = s.banco().prepare('SELECT * FROM variants WHERE product_id = ? ORDER BY id').all(p);
+  const r = await s.pedir('PUT', `/api/catalog/${p}`, { corpo: { name: 'Tênis Gucci Novo', on_demand: 1,
+    variants: vs.map((v) => ({ id: v.id, variant_name: v.variant_name, price: v.price, cost: v.cost, stock: v.stock, on_hand: v.on_hand })) } });
+  assert.equal(r.status, 200);
+  assert.equal(aqui(1002).grade_alvo, 1);
+  await lerPedidos();
+  assert.equal(daLoja(1002).stock, 1);
+  assert.equal(aqui(1002).repor_site, 0);
+});
+
+test('número tirado do site pelo painel não volta sozinho', async () => {
+  daLoja(1003).stock = 0;                            // você tirou o 40 na Nuvemshop
+  await s.pedir('POST', '/api/sync', { corpo: {} });
+  await lerPedidos();
+  assert.equal(daLoja(1003).stock, 0);
 });
 
 test('estoque próprio vendido no site: o número daqui é relido da loja', async () => {

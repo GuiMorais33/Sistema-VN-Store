@@ -449,6 +449,15 @@ ensureColumn('sale_items', 'ns_product_id', 'ns_product_id TEXT');
 // Pedido do site já baixou o par da loja (produto sob encomenda)?
 // 0 = ainda não · 1 = baixou · 2 = pedido cancelado, par devolvido.
 ensureColumn('sales', 'estoque_baixado', 'estoque_baixado INTEGER NOT NULL DEFAULT 0');
+// Sob encomenda: a grade do site existe para não perder venda, então o
+// número que vendeu volta para o site sozinho.
+//   grade_alvo = quantos daquele número ficam à venda no site (o que
+//                estava no site quando virou encomenda; muda no cadastro)
+//   repor_site = 1 quando o site vendeu e o número ainda não voltou
+ensureColumn('variants', 'grade_alvo', 'grade_alvo INTEGER');
+ensureColumn('variants', 'repor_site', 'repor_site INTEGER NOT NULL DEFAULT 0');
+db.exec(`UPDATE variants SET grade_alvo = MAX(0, stock) WHERE grade_alvo IS NULL
+  AND product_id IN (SELECT id FROM products WHERE on_demand = 1)`);
 
 // ---- Estoque a caminho da loja ----
 // O site também vende, e essa baixa só chega aqui na sincronização. Por

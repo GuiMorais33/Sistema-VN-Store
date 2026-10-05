@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import db, { seedDemoIfEmpty, getSetting, setSetting, seedCategories, categoryId, migrateOldCategories } from './db.js';
 import * as nuvem from './nuvemshop.js';
-import { naFila, enviarEstoque, enviarPendentes, gravarEnviado, contagemAMao, lerDaLoja } from './estoque.js';
+import { naFila, enviarEstoque, enviarPendentes, gravarEnviado, contagemAMao, lerDaLoja, reporGrade } from './estoque.js';
 import * as backup from './backup.js';
 import * as agente from './agente.js';
 
@@ -278,6 +278,11 @@ app.get('/api/catalog/:id', (req, res) => {
 });
 
 // Quantos pares/peças existem de verdade nesta variação.
+// Sob encomenda: o "No site" do cadastro é o alvo da grade — o número que
+// volta para o site depois de vender (0 = esse número não fica à venda).
+const alvoDaGrade = db.prepare(`UPDATE variants SET grade_alvo = MAX(0, stock)
+  WHERE product_id = ? AND (SELECT on_demand FROM products WHERE id = ?) = 1`);
+
 // Produto normal: é o próprio estoque. Sob encomenda: só o que está aqui.
 const emMaos = (v, sobEncomenda) => {
   if (!sobEncomenda) return parseInt(v.stock, 10) || 0;
@@ -303,6 +308,7 @@ app.post('/api/catalog', async (req, res) => {
     }
     return pid;
   })();
+  alvoDaGrade.run(productId, productId);
 
   const sync = await pushProduct(productId);
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(productId);
@@ -316,8 +322,15 @@ app.put('/api/catalog/:id', async (req, res) => {
   if (!p) return res.status(404).json({ error: 'Produto não encontrado.' });
   const b = req.body || {};
   const ts = now();
+  // Alvo da grade (sob encomenda): muda quando o produto VIRA encomenda ou
+  // quando você mexe no "No site" de um número. Editar o resto não mexe —
+  // logo depois de uma venda o número daqui está em 0, e virar alvo 0
+  // impediria ele de voltar para o site.
+  const novoAlvo = [];
+  let viraEncomenda = false;
   db.transaction(() => {
     const sobEncomenda = b.on_demand !== undefined ? (b.on_demand ? 1 : 0) : p.on_demand;
+    viraEncomenda = Boolean(sobEncomenda && !p.on_demand);
     db.prepare(`UPDATE products SET name=?, brand=?, category=?, description=?, image_url=?, weight=?, on_demand=?, published=?, updated_at=? WHERE id=?`)
       .run(b.name ?? p.name, b.brand ?? p.brand, b.category ?? p.category, b.description ?? p.description,
         b.image_url ?? p.image_url, b.weight !== undefined ? (b.weight ? Number(b.weight) : null) : p.weight,
@@ -338,12 +351,13 @@ app.put('/api/catalog/:id', async (req, res) => {
           upd.run(v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost), estoque,
             emMaos(v, sobEncomenda), b.name ?? p.name, ts, v.id, p.id);
           const antes = estoqueAntes.get(Number(v.id));
-          if (antes !== undefined && antes !== estoque) contagemAMao(v.id);
+          if (antes !== undefined && antes !== estoque) { contagemAMao(v.id); novoAlvo.push(Number(v.id)); }
           mantidos.add(Number(v.id));
         } else {
           const novo = insV.run(p.id, b.name ?? p.name, v.variant_name || 'Único', v.sku || '', money(v.price), money(v.cost),
             parseInt(v.stock, 10) || 0, emMaos(v, sobEncomenda), ts);
           mantidos.add(Number(novo.lastInsertRowid));
+          novoAlvo.push(Number(novo.lastInsertRowid));
         }
       }
       // Remove as que você tirou do formulário — preservando as que já
@@ -357,6 +371,12 @@ app.put('/api/catalog/:id', async (req, res) => {
     }
   })();
   preencherCustosQueFaltavam();   // o custo pode ter sido preenchido agora
+  if (viraEncomenda) alvoDaGrade.run(p.id, p.id);
+  else {
+    const alvo = db.prepare(`UPDATE variants SET grade_alvo = MAX(0, stock)
+      WHERE id = ? AND (SELECT on_demand FROM products WHERE id = variants.product_id) = 1`);
+    for (const id of novoAlvo) alvo.run(id);
+  }
   const sync = await pushProduct(p.id);
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(p.id);
   product.variants = db.prepare('SELECT * FROM variants WHERE product_id = ?').all(p.id);
@@ -757,7 +777,8 @@ app.post('/api/encomenda/marcar', (req, res) => {
   if (!ids.length) return res.status(400).json({ error: 'Nenhum produto escolhido.' });
   const ts = now();
   const marcar = db.prepare('UPDATE products SET on_demand = 1, updated_at = ? WHERE id = ? AND on_demand = 0');
-  const zerar = db.prepare('UPDATE variants SET on_hand = 0, updated_at = ? WHERE product_id = ?');
+  // O que está no site agora vira o alvo da grade: é o que volta depois de vender.
+  const zerar = db.prepare('UPDATE variants SET on_hand = 0, grade_alvo = MAX(0, stock), updated_at = ? WHERE product_id = ?');
   let n = 0;
   db.transaction(() => {
     for (const id of ids) if (marcar.run(ts, id).changes) { zerar.run(ts, id); n += 1; }
@@ -3028,12 +3049,14 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
   const insRem = db.prepare(`INSERT INTO reminders (title, notes, due_date, kind, customer_id, created_at)
     VALUES (?,?,?, 'encomenda', ?, ?)`);
   const marcarBaixa = db.prepare('UPDATE sales SET estoque_baixado = ? WHERE id = ?');
+  const paraRepor = db.prepare('UPDATE variants SET repor_site = 1 WHERE id = ?');
   const baixarEncomenda = (saleId, code, cliId, cliente) => {
     for (const i of itensEnc.all(saleId)) {
       const daLoja = Math.min(i.on_hand, i.qty);
       const pegar = i.qty - daLoja;
       if (daLoja) { mexerNaLoja.run(-daLoja, now(), i.variant_id); movSite.run(i.variant_id, -daLoja, 'venda_site', code, now()); }
       marcarEnc.run(pegar, i.id);
+      paraRepor.run(i.variant_id);   // o número vendido volta para o site (reporGrade)
       if (pegar > 0) {
         insRem.run(`Pegar no fornecedor: ${i.product_name} ${i.variant_name}`,
           `${pegar} peça(s) · pedido ${code}${nomeUtil(cliente) ? ' · ' + cliente : ''}`, diaLocal(), cliId, now());
@@ -3130,7 +3153,10 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
       WHERE variant_id IS NOT NULL AND sale_id IN (${mexidos.map(() => '?').join(',')})`).all(...mexidos).map((r) => r.variant_id);
     if (ids.length) await lerDaLoja(ids.slice(0, 60));
   }
-  return { novos, atualizados, lancados, analisados: orders.length, desde };
+  // Sob encomenda: o número que vendeu volta para o site (e o que não
+  // voltou da outra vez, tenta de novo).
+  const grade = await reporGrade();
+  return { novos, atualizados, lancados, analisados: orders.length, desde, grade };
 }
 
 // Motor automático: verifica a loja de tempos em tempos, sozinho.
@@ -3152,6 +3178,8 @@ async function tickAutomatico(motivo = 'automático') {
     if (r && !r.skipped && (r.novos || r.lancados)) {
       console.log(`› Pedidos do site (${motivo}): ${r.novos} novo(s), ${r.lancados} lançado(s) no caixa.`);
     }
+    if (r && r.grade && r.grade.repostos) console.log(`› Sob encomenda: ${r.grade.repostos} número(s) de volta no site.`);
+    if (r && r.grade && r.grade.falhas) console.error(`Sob encomenda: ${r.grade.falhas} número(s) não voltaram ao site; tenta de novo.`);
     // Uma vez só: relê dois anos de pedidos para trazer as peças dos
     // antigos (antes o sistema guardava só o total) e os produtos que já
     // esgotaram. (v2: a primeira leitura não buscava os esgotados.)
