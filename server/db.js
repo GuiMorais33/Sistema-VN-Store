@@ -460,6 +460,32 @@ ensureColumn('variants', 'grade_alvo', 'grade_alvo INTEGER');
 // do pedido como vieram, para conferir a regra e reclassificar sem reler.
 ensureColumn('sales', 'origem', 'origem TEXT');
 ensureColumn('sales', 'ns_origem', 'ns_origem TEXT');
+
+// ---- Caixa, cancelamento e troca ----
+// O caixa do dia é o dinheiro que entrou e saiu, por forma de pagamento:
+// venda paga, fiado recebido, diferença de troca, estorno de cancelamento.
+// Por isso cada lançamento guarda a forma (antes ela só existia na venda,
+// e um estorno feito outro dia não tinha onde aparecer).
+ensureColumn('financial_entries', 'forma', 'forma TEXT');
+db.exec(`UPDATE financial_entries SET forma = (SELECT payment_method FROM sales WHERE sales.code = financial_entries.ref)
+  WHERE forma IS NULL AND type = 'receita' AND ref IS NOT NULL`);
+ensureColumn('sales', 'cancelado_em', 'cancelado_em TEXT');
+ensureColumn('sales', 'cancel_motivo', 'cancel_motivo TEXT');
+// Troca/devolução: a peça que volta entra na própria venda como linha
+// negativa, e a que o cliente leva como linha nova — assim estoque, lucro
+// e "o que vende" continuam certos. ref_item_id diz de qual linha voltou.
+ensureColumn('sale_items', 'troca_id', 'troca_id INTEGER');
+ensureColumn('sale_items', 'ref_item_id', 'ref_item_id INTEGER');
+db.exec(`CREATE TABLE IF NOT EXISTS trocas (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  sale_id    INTEGER NOT NULL REFERENCES sales(id),
+  devolvido  REAL NOT NULL DEFAULT 0,   -- valor das peças que voltaram
+  levado     REAL NOT NULL DEFAULT 0,   -- valor das peças novas
+  diferenca  REAL NOT NULL DEFAULT 0,   -- + cliente pagou · − loja devolveu
+  forma      TEXT,
+  nota       TEXT DEFAULT '',
+  created_at TEXT NOT NULL
+)`);
 ensureColumn('variants', 'repor_site', 'repor_site INTEGER NOT NULL DEFAULT 0');
 db.exec(`UPDATE variants SET grade_alvo = MAX(0, stock) WHERE grade_alvo IS NULL
   AND product_id IN (SELECT id FROM products WHERE on_demand = 1)`);

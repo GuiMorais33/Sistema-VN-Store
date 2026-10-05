@@ -20,6 +20,7 @@ export const LEITURAS = [
   ['/api/agente', 'Este índice, a situação da chave e as vendas com itens (/api/agente/vendas?dias=7)'],
   ['/api/health', 'Modo (ao vivo/demonstração) e tamanho do catálogo'],
   ['/api/dashboard', 'Números de hoje: vendas, margem, fiado, estoque baixo'],
+  ['/api/vendas', 'Vendas para achar e conferir (/api/vendas?q=&dias=); /api/vendas/:id traz itens e trocas'],
   ['/api/operacao', 'O que precisa de ação agora (pedidos do site, fiado, encomendas)'],
   ['/api/sales-series', 'Vendas por dia (gráfico)'],
   ['/api/products', 'Variações à venda (como o PDV vê)'],
