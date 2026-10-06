@@ -169,8 +169,8 @@
             cartão. A <b>foto</b> ajuda quando vários produtos têm nome parecido.</div></li>
           <li><div><b>Toque para adicionar.</b> Cada toque soma 1. No carrinho dá para ajustar a
             quantidade no <kbd>−</kbd> e <kbd>+</kbd>, ou remover o item.</div></li>
-          <li><div><b>Onde vendeu:</b> Balcão, WhatsApp ou Instagram. O aparelho lembra o último — no
-            celular do vendedor da internet já vem marcado. É assim que o Financeiro separa o que vem do
+          <li><div><b>Quem vendeu</b> (toque no nome — é a comissão) e <b>onde vendeu</b>: Balcão,
+            WhatsApp ou Instagram. Começa sempre em Balcão. É assim que o Financeiro separa o que vem do
             balcão, da internet e do site.</div></li>
           <li><div><b>Escolha o cliente</b> (opcional). Digite o nome: se já existe, aparece na lista;
             se não, clique em <b>Criar</b> e ele nasce ali mesmo.</div></li>
@@ -198,9 +198,9 @@
             toque nos produtos que o cliente <b>leva no lugar</b>. O sistema mostra se o cliente paga a
             diferença ou se você devolve — escolha a forma e confirme. Só devolução? Marque o que voltou e
             confirme sem adicionar nada.</li>
-          <li><b>Cancelar venda</b> (só o dono): as peças voltam para o estoque (aqui e no site), o valor
-            sai do caixa de hoje como estorno (na forma que você escolher) e a venda some de metas e
-            relatórios. O vendedor pode trocar e devolver; cancelar não — cancelar tira dinheiro do caixa.</li>
+          <li><b>Cancelar venda</b>: as peças voltam para o estoque (aqui e no site), o valor sai do caixa
+            de hoje como estorno (na forma que você escolher) e a venda some de metas, comissão e
+            relatórios.</li>
         </ul>
         <p>A peça que volta entra pelo preço que foi paga (com o desconto da venda). Pedido da Nuvemshop
           (site ou PDV de lá) se cancela e se troca na própria Nuvemshop — o sistema acompanha sozinho.</p>
@@ -652,28 +652,25 @@
           <li><b>Vende</b> — quem estiver marcado entra no PDV, no ranking e na comissão. Desligue para
             quem não vende.</li>
           <li><b>Comissão (%)</b> — quanto a pessoa ganha sobre o que vende (ex.: 3).</li>
-          <li><b>PIN para entrar</b> — 4 a 6 números que <b>você</b> cria e passa para a pessoa. Para
-            trocar, digite outro (o antigo para na hora); para tirar o acesso, marque <b>Tirar o acesso</b>.</li>
           <li><b>Está na equipe</b> — quando alguém sair, <b>desligue em vez de apagar</b>: o histórico
             de vendas e de comissão continua no lugar.</li>
         </ul>
 
-        <h3>Cada vendedor entra com o próprio PIN</h3>
-        <ol class="passos">
-          <li><div>Na tela de entrar, o vendedor toca em <b>Sou vendedor</b>, toca no nome dele e digita o PIN.</div></li>
-          <li><div>Ele vê só o <b>PDV</b>, <b>Minhas vendas</b> (o mês dele: vendido, comissão, meta) e o
-            <b>Como usar</b>. Financeiro, custo, estoque, clientes e configuração ficam só com você.</div></li>
-          <li><div>A venda que ele lança <b>fica com ele</b> — ninguém precisa marcar quem vendeu, e não
-            dá para lançar no nome de outro.</div></li>
-          <li><div>No balcão, quando troca a pessoa: <b>Trocar</b> (no celular, na barra de cima; no
-            computador, no rodapé do menu) e o próximo entra com o PIN dele.</div></li>
-        </ol>
-        <div class="aviso atencao"><span class="ico" id="a9"></span>
-          <div>No aparelho do balcão, <b>não deixe entrado com a senha do dono</b>: quando um vendedor
-          entra, a sua sessão sai daquele aparelho — é de propósito, para o financeiro não ficar aberto.
-          Cinco PINs errados seguidos travam aquela pessoa por 5 minutos.</div></div>
-        <p>Você (dono) também pode lançar venda: no PDV aparece <b>Quem vendeu</b> para escolher a
-          pessoa, ou <b>Loja (sem comissão)</b>.</p>
+        <h3>Quem vendeu: em toda venda</h3>
+        <p>Quem lança no PDV é o gerente, para todos os vendedores. Por isso, com a equipe cadastrada,
+          o PDV mostra um botão com o nome de cada vendedor (e <b>Loja</b>, para venda sem comissão) e
+          <b>não fecha a venda sem um deles marcado</b>.</p>
+        <ul>
+          <li>Depois de cada venda a escolha <b>volta para vazio</b> — de propósito: se o PDV lembrasse o
+            último, a venda seguinte de outro vendedor sairia no nome errado.</li>
+          <li>O <b>Onde vendeu</b> também volta para <b>Balcão</b>; venda do WhatsApp ou Instagram,
+            marque na hora.</li>
+          <li><b>Lançou no nome errado?</b> Em <b>Vendas · trocar ou cancelar</b>, abra a venda e troque
+            em <b>Quem vendeu</b>. A comissão vai junto; se o mês já tinha sido pago, a Equipe mostra a
+            diferença para acertar.</li>
+        </ul>
+        <p>Se um dia cada vendedor for usar o sistema sozinho, dá para criar um PIN para ele em
+          <b>Equipe → editar → Acesso próprio</b>. Hoje não precisa.</p>
 
         <h3>Comissão: segue o dinheiro</h3>
         <p>A comissão do mês é a % da pessoa sobre <b>o que entrou no caixa pelas vendas dela naquele

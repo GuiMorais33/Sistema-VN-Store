@@ -80,6 +80,15 @@
   .pay:hover{color:var(--ink)}
   .pay.sel{border-color:var(--brand);color:var(--brand-hi);background:rgba(47,210,79,.1)}
   .canais{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+  /* Quem vendeu: um botão por vendedor. Sem escolha não fecha a venda —
+     é daqui que sai a comissão. */
+  .vends{display:flex;flex-wrap:wrap;gap:5px}
+  .vends .pay{flex:1 1 28%;min-width:84px;text-transform:none;font-size:12.5px}
+  .vends .pay.loja{color:var(--ink-3)}
+  #wrapVend.falta label{color:var(--warn)}
+  #wrapVend.falta .vends{outline:1px dashed rgba(232,163,23,.6);outline-offset:3px;border-radius:9px}
+  .vvend{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .vvend select{width:auto;padding:5px 8px;font-size:12.5px}
   .eu{font-size:12px;color:var(--ink-3);margin-top:-4px}
   .eu b{color:var(--brand-hi)}
 
@@ -155,7 +164,7 @@
 <div class="app">
   <div class="pagehead">
     <div><h1>PDV</h1><div class="ph-sub">Lançamento de vendas · sem taxa</div></div>
-    <div class="ph-actions"><button class="btn ghost" id="abrirVendas" type="button">Vendas · trocar<span class="so-dono"> ou cancelar</span></button></div>
+    <div class="ph-actions"><button class="btn ghost" id="abrirVendas" type="button">Vendas · trocar ou cancelar</button></div>
   </div>
 
   <div class="layout">
@@ -179,6 +188,12 @@
       </div>
       <div id="lines" class="lines"></div>
 
+      <div class="field" id="wrapVend" hidden>
+        <label>Quem vendeu</label>
+        <div class="vends" id="vends"></div>
+        <input type="hidden" id="vend">
+      </div>
+
       <div class="field" id="canalWrap">
         <label>Onde vendeu</label>
         <div class="pays canais" id="canais">
@@ -186,11 +201,6 @@
           <button class="pay" data-canal="whatsapp" type="button">WhatsApp</button>
           <button class="pay" data-canal="instagram" type="button">Instagram</button>
         </div>
-      </div>
-
-      <div class="field" id="wrapVend" hidden>
-        <label for="vend">Quem vendeu</label>
-        <select id="vend"></select>
       </div>
 
       <div class="field" id="wrapAtend" hidden>
@@ -394,27 +404,32 @@ document.addEventListener('click',e=>{if(!e.target.closest('#cust')&&!e.target.c
   if(quem.papel==='vendedor'){
     const eu=document.getElementById('eu');
     eu.innerHTML=`Vendendo como <b>${esc(quem.nome)}</b> · a venda e a comissão são suas`;eu.hidden=false;
-    document.querySelectorAll('.so-dono').forEach(x=>x.hidden=true);
+    document.getElementById('abrirVendas').textContent='Vendas · trocar';
     return;
   }
   try{
     const t=await api('/api/team');
-    const vs=t.membros.filter(m=>m.active&&m.vende);
-    if(!vs.length)return;
-    const sel=document.getElementById('vend');
-    sel.innerHTML='<option value="">Loja (sem comissão)</option>'
-      +vs.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
-    // Lembra de quem estava no balcão neste aparelho.
-    const ult=localStorage.getItem('vn_vendedor');
-    if(ult&&vs.some(m=>String(m.id)===ult))sel.value=ult;
-    // Uma pessoa só vendendo: não há o que escolher. Deixar "não informar"
-    // fazia venda ficar sem dono e a meta sair incompleta.
-    else if(vs.length===1)sel.value=String(vs[0].id);
-    sel.onchange=()=>{localStorage.setItem('vn_vendedor',sel.value);atendimentos();};
+    TIME=t.membros.filter(m=>m.active&&m.vende);
+    if(!TIME.length)return;
+    // Uma pessoa só vendendo: não há o que escolher.
+    if(TIME.length===1){document.getElementById('vend').value=String(TIME[0].id);}
+    pintarVendedores();
     document.getElementById('wrapVend').hidden=false;
     atendimentos();
   }catch(_){}
 })();
+// Quem lança é o gerente, para vários vendedores: o sistema NÃO lembra o
+// último (a próxima venda pode ser de outra pessoa). Cada venda pede o nome.
+let TIME=[];
+function pintarVendedores(){
+  const atual=document.getElementById('vend').value;
+  document.getElementById('vends').innerHTML=TIME.map(m=>
+    `<button class="pay${String(m.id)===atual?' sel':''}" data-v="${m.id}" type="button">${esc(m.name.split(' ')[0])}</button>`).join('')
+    +`<button class="pay loja${atual==='loja'?' sel':''}" data-v="loja" type="button" title="Venda sem vendedor: não gera comissão">Loja</button>`;
+}
+document.getElementById('vends').onclick=e=>{const b=e.target.closest('.pay');if(!b)return;
+  document.getElementById('vend').value=b.dataset.v;pintarVendedores();
+  document.getElementById('wrapVend').classList.remove('falta');atendimentos();};
 
 // Fecha o funil: se essa venda veio de um atendimento que já estava
 // aberto, dá para amarrar os dois aqui e a conversão sai certa.
@@ -422,7 +437,7 @@ async function atendimentos(){
   const w=document.getElementById('wrapAtend'),sel=document.getElementById('atend');
   const v=document.getElementById('vend').value;
   w.hidden=true;sel.innerHTML='';
-  if(!v)return;
+  if(!v||v==='loja')return;
   try{
     // Vale o que é dele e também o que ficou sem dono — senão um
     // atendimento anotado às pressas não teria como ser fechado aqui.
@@ -436,13 +451,14 @@ async function atendimentos(){
   }catch(_){}
 }
 
-/* onde vendeu — o aparelho lembra o último: no celular do vendedor da
-   internet é quase sempre WhatsApp; no balcão, balcão. */
-S.canal=(()=>{try{return localStorage.getItem('vn_canal')||'balcao';}catch(_){return 'balcao';}})();
+/* onde vendeu — toda venda começa no balcão (o mais comum); venda do
+   WhatsApp/Instagram o gerente marca na hora. Lembrar o último faria a
+   venda seguinte do balcão sair como internet. */
+S.canal='balcao';
 function pintarCanal(){document.querySelectorAll('#canais .pay').forEach(b=>b.classList.toggle('sel',b.dataset.canal===S.canal));}
 pintarCanal();
 document.getElementById('canais').onclick=e=>{const b=e.target.closest('.pay');if(!b)return;
-  S.canal=b.dataset.canal;pintarCanal();try{localStorage.setItem('vn_canal',S.canal);}catch(_){}};
+  S.canal=b.dataset.canal;pintarCanal();};
 
 /* controles */
 document.getElementById('seg').onclick=e=>{const b=e.target.closest('.seg-b');if(!b)return;
@@ -461,12 +477,18 @@ async function finalizar(){
   if(!S.cart.size)return;
   // Venda paga sem forma: o caixa do dia não teria onde pôr o dinheiro.
   if(S.status==='pago'&&!S.pay)return toast('Escolha a forma','Pix, Espécie, Crédito ou Débito — é por ela que o caixa fecha.',true);
+  // Com equipe cadastrada, toda venda tem dono (ou "Loja"): é a comissão.
+  if(TIME.length&&!document.getElementById('vend').value){
+    const w=document.getElementById('wrapVend');w.classList.add('falta');
+    w.scrollIntoView({behavior:'smooth',block:'center'});
+    return toast('Quem vendeu?','Toque no nome de quem fez a venda — ou em Loja, se ninguém ganha comissão.',true);
+  }
   const btn=document.getElementById('finish');btn.disabled=true;btn.textContent='Lançando…';
   const items=[...S.cart.values()].map(i=>({variant_id:i.v.id,qty:i.qty}));
   try{
     const r=await api('/api/sales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       items,customer_id:S.cliente?S.cliente.id:null,payment_method:S.pay,payment_status:S.status,
-      seller_id:document.getElementById('vend').value||null,canal:S.canal,
+      seller_id:(v=>v&&v!=='loja'?v:null)(document.getElementById('vend').value),canal:S.canal,
       atendimento_id:document.getElementById('atend').value||null,
       discount:parseFloat(document.getElementById('disc').value)||0})});
     const vend=r.vendedor?' · '+r.vendedor:'';
@@ -478,6 +500,9 @@ async function finalizar(){
       ? `<br><b style="color:var(--warn)">Pegar no fornecedor hoje:</b> ${r.encomendas.join(', ')}` : '';
     toast(`${r.code} · ${BRL(r.total)}`,`${r.customer_name||'Sem cliente'}${vend} · ${sit}${sinc}${enc}`);
     S.cart.clear();S.pay='';limparCliente();
+    // A próxima venda começa do zero: balcão e sem vendedor escolhido.
+    if(TIME.length>1)document.getElementById('vend').value='';
+    pintarVendedores();S.canal='balcao';pintarCanal();
     document.querySelectorAll('#pays .pay').forEach(p=>p.classList.remove('sel'));
     document.getElementById('disc').value='';renderCart();
     atendimentos();
@@ -528,10 +553,13 @@ async function abrirVenda(id){
   const pago=v.payment_status==='pago';
   box.innerHTML=`<button type="button" class="btn ghost sm" id="vVoltar" style="width:fit-content">← Todas as vendas</button>
     <div class="meta"><b>${esc(v.customer_name||'Sem cliente')}</b> · ${quando(v.created_at)} · ${origemTxt(v)}
-      ${v.seller_name?` · vendeu: <b>${esc(v.seller_name)}</b>`:''}<br>
+      ${v.channel!=='site'&&TIME.length&&quem.papel==='dono'?'':(v.seller_name?` · vendeu: <b>${esc(v.seller_name)}</b>`:'')}<br>
       ${v.payment_status==='cancelado'?`<b style="color:var(--crit)">Cancelada</b> em ${quando(v.cancelado_em)}${v.cancel_motivo?' · '+esc(v.cancel_motivo):''}`
         :pago?`Pago · ${esc(v.payment_method||'')}`:`<b style="color:var(--warn)">${v.channel==='site'?'Aguardando pagamento':'Fiado — a receber'}</b>`}
       ${v.discount?` · desconto ${BRL(v.discount)}`:''}</div>
+    ${v.channel!=='site'&&TIME.length&&quem.papel==='dono'?`<label class="meta vvend">Quem vendeu
+      <select id="vVend"><option value="">Loja (sem comissão)</option>${TIME.map(m=>`<option value="${m.id}"${m.id===v.seller_id?' selected':''}>${esc(m.name)}</option>`).join('')}
+      ${v.seller_id&&!TIME.some(m=>m.id===v.seller_id)?`<option value="${v.seller_id}" selected>${esc(v.seller_name||'')}</option>`:''}</select></label>`:''}
     <div class="vdet" style="gap:5px">${(v.itens||[]).map(linha).join('')||'<div class="aviso-site">Pedido sem as peças registradas.</div>'}</div>
     <div class="meta">Total: <b style="font-family:var(--font-mono);font-size:15px">${BRL(v.total)}</b>
       ${v.trocas.length?` · ${v.trocas.length} ${pl(v.trocas.length,'troca')}`:''}</div>
@@ -548,6 +576,16 @@ async function abrirVenda(id){
       </div>`
     :v.channel==='site'?`<div class="aviso-site">Pedido da Nuvemshop: cancelamento e troca são feitos lá, e o sistema acompanha sozinho.</div>`:''}`;
   document.getElementById('vVoltar').onclick=mostrarLista;
+  // Lançou no nome errado? Corrige aqui — a comissão vai junto para a pessoa certa.
+  const vv=document.getElementById('vVend');
+  if(vv)vv.onchange=async()=>{
+    const nome=vv.value?vv.options[vv.selectedIndex].text:'a loja';
+    if(!confirm(`Passar ${v.code} para ${nome}?\n\nA comissão desta venda (e de trocas dela) vai junto. Se a comissão do mês já foi paga, a Equipe mostra a diferença para acertar.`)){
+      vv.value=v.seller_id||'';return;}
+    try{await api(`/api/sales/${v.id}/vendedor`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({seller_id:vv.value||null})});toast(v.code,'Agora é de '+nome+'.');v.seller_id=vv.value?Number(vv.value):null;}
+    catch(e){toast('Não deu para trocar',e.message,true);vv.value=v.seller_id||'';}
+  };
   if(!v.pode_mexer)return;
   document.getElementById('vTrocar').onclick=()=>iniciarTroca(v);
   // Cancelar devolve dinheiro do caixa: só o dono (o servidor também barra).

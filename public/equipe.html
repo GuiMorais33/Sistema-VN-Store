@@ -207,16 +207,20 @@
     <label class="sw"><input type="checkbox" id="pVende" checked>
       <span><b>Vende</b> (balcão ou internet) — entra no PDV, no ranking e na comissão.
         Desligue para quem não vende (estoquista, social media).</span></label>
-    <div class="g2" id="pVendeCampos">
-      <div class="field"><label>Comissão (%)</label>
-        <input id="pCom" type="number" step="0.1" min="0" max="100" inputmode="decimal" placeholder="ex.: 3">
-        <div class="hint">Sobre o que entrar pelas vendas dela no mês, já descontadas trocas e cancelamentos.</div></div>
-      <div class="field"><label>PIN para entrar</label>
+    <div class="field" id="pVendeCampos"><label>Comissão (%)</label>
+      <input id="pCom" type="number" step="0.1" min="0" max="100" inputmode="decimal" placeholder="ex.: 3">
+      <div class="hint">Sobre o que entrar pelas vendas dela no mês, já descontadas trocas e cancelamentos.</div></div>
+    <!-- Hoje quem lança é o gerente; o acesso próprio fica guardado para
+         quando o vendedor for usar o sistema sozinho. -->
+    <details id="pAcesso">
+      <summary style="cursor:pointer;font-size:12px;color:var(--ink-3);padding:4px 0">
+        Acesso próprio ao sistema (opcional — não precisa enquanto o gerente lança as vendas)</summary>
+      <div class="field" style="margin-top:var(--s3)"><label>PIN para entrar</label>
         <input id="pPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="new-password" placeholder="4 a 6 números">
-        <div class="hint" id="pPinInfo">Com o PIN, a pessoa entra no sistema, vende no PDV e vê só as vendas e a comissão dela.</div></div>
-    </div>
-    <label class="sw" id="pTiraPinW" hidden><input type="checkbox" id="pTiraPin">
-      <span><b>Tirar o acesso</b> — o PIN para de funcionar na hora.</span></label>
+        <div class="hint" id="pPinInfo">Com o PIN, a pessoa entra sozinha, vende no PDV e vê só as vendas e a comissão dela.</div></div>
+      <label class="sw" id="pTiraPinW" hidden><input type="checkbox" id="pTiraPin">
+        <span><b>Tirar o acesso</b> — o PIN para de funcionar na hora.</span></label>
+    </details>
     <label class="sw"><input type="checkbox" id="pAtivo" checked>
       <span><b>Está na equipe</b> — desligue quando alguém sair, em vez de apagar: o histórico de
         vendas continua.</span></label>
@@ -584,7 +588,7 @@ async function time(){
       <span class="av">${esc(iniciais(m.name))}</span>
       <div><div class="nm">${esc(m.name)}
         <span class="tagf${m.vende?' vende':''}">${m.vende?'vende':'não vende'}</span>
-        ${m.vende?(m.tem_pin?'<span class="tagf pin">entra com PIN</span>':'<span class="tagf">sem acesso</span>'):''}
+        ${m.vende&&m.tem_pin?'<span class="tagf pin">entra com PIN</span>':''}
         ${m.active?'':'<span class="tagf">saiu</span>'}</div>
         <div class="s">${esc(m.role)}${m.vende&&m.commission_pct>0?' · '+m.commission_pct+'% de comissão':''}${m.instagram?' · '+esc(m.instagram):''}${m.phone?' · '+esc(m.phone):''}${m.note?' · '+esc(m.note):''}</div></div>
       <div class="acts">
@@ -619,7 +623,8 @@ function abrir(m){
   document.getElementById('pPin').value='';
   document.getElementById('pPinInfo').innerHTML=m&&m.tem_pin
     ?'Já entra com PIN. Digite um novo só para <b>trocar</b> (o antigo para de funcionar).'
-    :'Com o PIN, a pessoa entra no sistema, vende no PDV e vê só as vendas e a comissão dela.';
+    :'Com o PIN, a pessoa entra sozinha, vende no PDV e vê só as vendas e a comissão dela.';
+  document.getElementById('pAcesso').open=Boolean(m&&m.tem_pin);
   document.getElementById('pTiraPinW').hidden=!(m&&m.tem_pin);
   document.getElementById('pTiraPin').checked=false;
   dlg.showModal();

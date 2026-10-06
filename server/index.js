@@ -1316,6 +1316,23 @@ app.post('/api/sales', async (req, res) => {
 });
 
 
+// Corrigir quem vendeu. Como a comissão é calculada a partir da venda,
+// trocar o dono leva junto tudo dela (a venda, o fiado recebido, as trocas).
+// Mês já pago fica com a diferença à mostra na Equipe para acertar.
+app.post('/api/sales/:id/vendedor', (req, res) => {
+  const s = db.prepare('SELECT * FROM sales WHERE id = ?').get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Venda não encontrada.' });
+  if (s.channel === 'site') return res.status(400).json({ error: 'Pedido do site não tem vendedor.' });
+  const mid = (req.body || {}).seller_id ? Number(req.body.seller_id) : null;
+  const m = mid ? db.prepare('SELECT id, name FROM team_members WHERE id = ?').get(mid) : null;
+  if (mid && !m) return res.status(400).json({ error: 'Pessoa não encontrada na equipe.' });
+  db.transaction(() => {
+    db.prepare('UPDATE sales SET seller_id = ?, seller_name = ? WHERE id = ?').run(m ? m.id : null, m ? m.name : null, s.id);
+    if (s.atendimento_id) db.prepare('UPDATE atendimentos SET member_id = ? WHERE id = ?').run(m ? m.id : null, s.atendimento_id);
+  })();
+  res.json({ ok: true, seller_id: m ? m.id : null, seller_name: m ? m.name : null });
+});
+
 // Baixa (marca como pago) — aí sim entra no caixa.
 app.post('/api/sales/:id/settle', (req, res) => {
   const s = db.prepare('SELECT * FROM sales WHERE id = ?').get(req.params.id);

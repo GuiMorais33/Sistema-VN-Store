@@ -91,3 +91,15 @@ test('o sonho fecha a conta só com as vendas, sem atendimento anotado', async (
   const depois = (await api('GET', '/api/sonhos')).pessoas.find((x) => x.id === ana.id);
   assert.equal(depois.sonho.ganho, 8.99);
 });
+
+test('venda lançada no nome errado: corrigir leva a comissão junto', async () => {
+  const bruno = (await api('POST', '/api/team', { name: 'Bruno', commission_pct: 10 })).membro;
+  const code = (await api('POST', '/api/sales', { items: [{ variant_id: V.bone.id, qty: 1 }], payment_method: 'Pix', seller_id: ana.id })).code;
+  const antes = (await comissao()).base;
+  await api('POST', `/api/sales/${codigoParaId(code)}/vendedor`, { seller_id: bruno.id });
+  assert.equal((await comissao()).base, Math.round((antes - 129.9) * 100) / 100);
+  const b = (await api('GET', '/api/comissoes')).pessoas.find((p) => p.id === bruno.id);
+  assert.equal(b.base, 129.9);
+  // Pedido do site não tem vendedor para trocar.
+  await assert.rejects(api('POST', '/api/sales/999999/vendedor', { seller_id: bruno.id }), (e) => e.status === 404);
+});
