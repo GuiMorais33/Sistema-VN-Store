@@ -79,6 +79,9 @@
     color:var(--ink-3);font-size:10.5px;font-weight:700;text-transform:uppercase;cursor:pointer;transition:var(--t-fast)}
   .pay:hover{color:var(--ink)}
   .pay.sel{border-color:var(--brand);color:var(--brand-hi);background:rgba(47,210,79,.1)}
+  .canais{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+  .eu{font-size:12px;color:var(--ink-3);margin-top:-4px}
+  .eu b{color:var(--brand-hi)}
 
   .totals{border-top:1px dashed var(--line);padding-top:var(--s3);display:flex;flex-direction:column;gap:5px;font-size:13px}
   .totals .r{display:flex;justify-content:space-between;color:var(--ink-3)}
@@ -144,7 +147,7 @@
   .troca-banner[hidden],#voltouWrap[hidden]{display:none}
   .troca-banner b{display:block;font-size:13px}
   .sub-h{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-3);margin:2px 0 4px}
-  body.modo-troca #wrapVend,body.modo-troca #wrapAtend,body.modo-troca .cust-wrap,
+  body.modo-troca #wrapVend,body.modo-troca #wrapAtend,body.modo-troca .cust-wrap,body.modo-troca #canalWrap,
   body.modo-troca #segWrap,body.modo-troca #discWrap{display:none!important}
 </style>
 </head>
@@ -152,7 +155,7 @@
 <div class="app">
   <div class="pagehead">
     <div><h1>PDV</h1><div class="ph-sub">Lançamento de vendas · sem taxa</div></div>
-    <div class="ph-actions"><button class="btn ghost" id="abrirVendas" type="button">Vendas · trocar ou cancelar</button></div>
+    <div class="ph-actions"><button class="btn ghost" id="abrirVendas" type="button">Vendas · trocar<span class="so-dono"> ou cancelar</span></button></div>
   </div>
 
   <div class="layout">
@@ -165,6 +168,7 @@
 
     <aside class="card cart">
       <div class="cart-head"><h2 id="cartTit">Venda</h2><span class="cart-count" id="count"></span></div>
+      <div class="eu" id="eu" hidden></div>
       <div class="troca-banner" id="trocaBanner" hidden>
         <div><b id="trocaTit"></b><span id="trocaSub"></span></div>
         <button type="button" class="btn ghost sm" id="trocaSair">Sair da troca</button>
@@ -174,6 +178,15 @@
         <div class="sub-h" style="margin-top:8px">O que leva no lugar</div>
       </div>
       <div id="lines" class="lines"></div>
+
+      <div class="field" id="canalWrap">
+        <label>Onde vendeu</label>
+        <div class="pays canais" id="canais">
+          <button class="pay sel" data-canal="balcao" type="button">Balcão</button>
+          <button class="pay" data-canal="whatsapp" type="button">WhatsApp</button>
+          <button class="pay" data-canal="instagram" type="button">Instagram</button>
+        </div>
+      </div>
 
       <div class="field" id="wrapVend" hidden>
         <label for="vend">Quem vendeu</label>
@@ -376,14 +389,20 @@ async function criarCliente(nome){
 }
 document.addEventListener('click',e=>{if(!e.target.closest('#cust')&&!e.target.closest('#custList'))cl.classList.remove('show');});
 
-/* quem vendeu — o campo só aparece se houver equipe cadastrada */
+/* quem vendeu — o vendedor logado é o dono da venda; o dono escolhe */
 (async()=>{
+  if(quem.papel==='vendedor'){
+    const eu=document.getElementById('eu');
+    eu.innerHTML=`Vendendo como <b>${esc(quem.nome)}</b> · a venda e a comissão são suas`;eu.hidden=false;
+    document.querySelectorAll('.so-dono').forEach(x=>x.hidden=true);
+    return;
+  }
   try{
     const t=await api('/api/team');
     const vs=t.membros.filter(m=>m.active&&m.vende);
     if(!vs.length)return;
     const sel=document.getElementById('vend');
-    sel.innerHTML='<option value="">— não informar —</option>'
+    sel.innerHTML='<option value="">Loja (sem comissão)</option>'
       +vs.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
     // Lembra de quem estava no balcão neste aparelho.
     const ult=localStorage.getItem('vn_vendedor');
@@ -417,12 +436,20 @@ async function atendimentos(){
   }catch(_){}
 }
 
+/* onde vendeu — o aparelho lembra o último: no celular do vendedor da
+   internet é quase sempre WhatsApp; no balcão, balcão. */
+S.canal=(()=>{try{return localStorage.getItem('vn_canal')||'balcao';}catch(_){return 'balcao';}})();
+function pintarCanal(){document.querySelectorAll('#canais .pay').forEach(b=>b.classList.toggle('sel',b.dataset.canal===S.canal));}
+pintarCanal();
+document.getElementById('canais').onclick=e=>{const b=e.target.closest('.pay');if(!b)return;
+  S.canal=b.dataset.canal;pintarCanal();try{localStorage.setItem('vn_canal',S.canal);}catch(_){}};
+
 /* controles */
 document.getElementById('seg').onclick=e=>{const b=e.target.closest('.seg-b');if(!b)return;
   document.querySelectorAll('.seg-b').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');S.status=b.dataset.st;
   document.getElementById('payWrap').style.opacity=S.status==='pendente'?'.5':'1';};
 document.getElementById('pays').onclick=e=>{const b=e.target.closest('.pay');if(!b)return;
-  document.querySelectorAll('.pay').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');S.pay=b.dataset.pay;};
+  document.querySelectorAll('#pays .pay').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');S.pay=b.dataset.pay;};
 document.getElementById('disc').oninput=totais;
 
 let tt;function toast(t,d,err){const el=document.getElementById('toast');
@@ -439,7 +466,7 @@ async function finalizar(){
   try{
     const r=await api('/api/sales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       items,customer_id:S.cliente?S.cliente.id:null,payment_method:S.pay,payment_status:S.status,
-      seller_id:document.getElementById('vend').value||null,
+      seller_id:document.getElementById('vend').value||null,canal:S.canal,
       atendimento_id:document.getElementById('atend').value||null,
       discount:parseFloat(document.getElementById('disc').value)||0})});
     const vend=r.vendedor?' · '+r.vendedor:'';
@@ -451,7 +478,7 @@ async function finalizar(){
       ? `<br><b style="color:var(--warn)">Pegar no fornecedor hoje:</b> ${r.encomendas.join(', ')}` : '';
     toast(`${r.code} · ${BRL(r.total)}`,`${r.customer_name||'Sem cliente'}${vend} · ${sit}${sinc}${enc}`);
     S.cart.clear();S.pay='';limparCliente();
-    document.querySelectorAll('.pay').forEach(p=>p.classList.remove('sel'));
+    document.querySelectorAll('#pays .pay').forEach(p=>p.classList.remove('sel'));
     document.getElementById('disc').value='';renderCart();
     atendimentos();
     await carregar(document.getElementById('search').value.trim());
@@ -462,7 +489,8 @@ async function finalizar(){
 const dlgV=document.getElementById('dlgVendas');
 let vDias=1;
 const quando=(iso)=>new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-const origemTxt=(v)=>v.channel!=='site'?'PDV':(v.origem==='balcao'?'PDV Nuvemshop':'Site');
+const CANAL_TXT={balcao:'Balcão',whatsapp:'WhatsApp',instagram:'Instagram'};
+const origemTxt=(v)=>v.channel!=='site'?(CANAL_TXT[v.canal]||'Balcão'):(v.origem==='balcao'?'PDV Nuvemshop':'Site');
 const statusTxt=(v)=>v.payment_status==='cancelado'?'cancelada'
   :v.payment_status==='pendente'?(v.channel==='site'?'aguardando pagamento':'fiado'):(v.payment_method||'pago');
 document.querySelector('#vListaWrap .search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
@@ -509,7 +537,7 @@ async function abrirVenda(id){
       ${v.trocas.length?` · ${v.trocas.length} ${pl(v.trocas.length,'troca')}`:''}</div>
     ${v.pode_mexer?`<div class="vacoes">
         <button type="button" class="btn primary" id="vTrocar">Trocar ou devolver</button>
-        <button type="button" class="btn danger" id="vCancelar">Cancelar venda</button></div>
+        ${quem.papel==='dono'?'<button type="button" class="btn danger" id="vCancelar">Cancelar venda</button>':''}</div>
       <div class="vcanc" id="vCancBox" hidden>
         <b>Cancelar ${esc(v.code)}?</b>
         <span class="meta">As peças voltam para o estoque (aqui e no site)${pago?` e ${BRL(v.total)} saem do caixa de hoje como estorno`:''}. A venda sai de metas e relatórios.</span>
@@ -522,6 +550,8 @@ async function abrirVenda(id){
   document.getElementById('vVoltar').onclick=mostrarLista;
   if(!v.pode_mexer)return;
   document.getElementById('vTrocar').onclick=()=>iniciarTroca(v);
+  // Cancelar devolve dinheiro do caixa: só o dono (o servidor também barra).
+  if(!document.getElementById('vCancelar'))return;
   document.getElementById('vCancelar').onclick=()=>{document.getElementById('vCancBox').hidden=false;};
   document.getElementById('vDesistir').onclick=()=>{document.getElementById('vCancBox').hidden=true;};
   document.getElementById('vConfirmar').onclick=async(e)=>{
@@ -547,7 +577,7 @@ function iniciarTroca(v){
   document.getElementById('cartTit').textContent='Troca';
   document.getElementById('payLab').textContent='Forma da diferença';
   document.getElementById('subLab').textContent='Leva';document.getElementById('dscLab').textContent='Voltou';
-  S.pay='';document.querySelectorAll('.pay').forEach(p=>p.classList.remove('sel'));
+  S.pay='';document.querySelectorAll('#pays .pay').forEach(p=>p.classList.remove('sel'));
   renderVoltou();renderCart();
   document.querySelector('.cart').scrollIntoView({behavior:'smooth',block:'start'});
 }

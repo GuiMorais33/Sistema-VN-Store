@@ -18,8 +18,25 @@ window.avisoCusto = (cob) => (cob == null || cob >= 0.95 ? ''
 // Plural irregular vem no terceiro argumento: pl(n, 'item', 'itens').
 window.pl = (n, um, varios = um + 's') => (Number(n) === 1 ? um : varios);
 
+// Quem está usando, para montar o menu. Quem decide o que pode é o
+// servidor; isto só esconde o que daria "só o dono pode" ao clicar.
+window.quem = (() => {
+  const c = document.cookie.split(';').map((x) => x.trim()).find((x) => x.startsWith('vn_quem='));
+  const v = c ? decodeURIComponent(c.slice(8)) : 'dono';
+  return v.startsWith('vendedor:') ? { papel: 'vendedor', nome: v.slice(9) } : { papel: 'dono' };
+})();
+
 (function () {
-  const grupos = [
+  const vendedor = window.quem.papel === 'vendedor';
+  // Organizado pelo ritmo da loja: o que se faz todo dia, o que se acompanha
+  // no mês, e o que se ajusta de vez em quando.
+  const grupos = vendedor ? [
+    { titulo: window.quem.nome, itens: [
+      { href: '/pdv',        ico: 'pdv',        label: 'PDV',        match: (p) => p.startsWith('/pdv') },
+      { href: '/minhas',     ico: 'subiu',      label: 'Minhas vendas', match: (p) => p.startsWith('/minhas') },
+      { href: '/ajuda',      ico: 'conversa',   label: 'Como usar',  match: (p) => p.startsWith('/ajuda') || p.startsWith('/como-usar') },
+    ] },
+  ] : [
     { titulo: 'Operação', itens: [
       { href: '/',           ico: 'inicio',     label: 'Início',     match: (p) => p === '/' || p.startsWith('/lembretes') },
       { href: '/pdv',        ico: 'pdv',        label: 'PDV',        match: (p) => p.startsWith('/pdv') },
@@ -27,9 +44,11 @@ window.pl = (n, um, varios = um + 's') => (Number(n) === 1 ? um : varios);
       { href: '/clientes',   ico: 'clientes',   label: 'Clientes',   match: (p) => p.startsWith('/clientes') || p.startsWith('/crm') || p.startsWith('/funil') },
     ] },
     { titulo: 'Gestão', itens: [
-      { href: '/negocio',    ico: 'grafico',    label: 'Negócio',    match: (p) => p.startsWith('/negocio') },
       { href: '/financeiro', ico: 'financeiro', label: 'Financeiro', match: (p) => p.startsWith('/financeiro') || p.startsWith('/relatorios') },
       { href: '/equipe',     ico: 'clientes',   label: 'Equipe',     match: (p) => p.startsWith('/equipe') },
+    ] },
+    { titulo: 'Ajustes', itens: [
+      { href: '/negocio',    ico: 'grafico',    label: 'Negócio',    match: (p) => p.startsWith('/negocio') },
       { href: '/agentes',    ico: 'agentes',    label: 'Agentes',    match: (p) => p.startsWith('/agentes') },
       { href: '/conectar',   ico: 'conectar',   label: 'Conectar',   match: (p) => p.startsWith('/conectar') },
       { href: '/ajuda',      ico: 'conversa',   label: 'Como usar',  match: (p) => p.startsWith('/ajuda') || p.startsWith('/como-usar') },
@@ -38,7 +57,7 @@ window.pl = (n, um, varios = um + 's') => (Number(n) === 1 ? um : varios);
 
   const path = location.pathname;
   // No celular a barra de cima cabe 5 + "Mais"; o resto vai para o painel.
-  const NO_CELULAR = ['/', '/pdv', '/produtos', '/clientes', '/financeiro'];
+  const NO_CELULAR = vendedor ? ['/pdv', '/minhas', '/ajuda'] : ['/', '/pdv', '/produtos', '/clientes', '/financeiro'];
   const item = (it) => `<a class="nav-item${it.match(path) ? ' active' : ''}${NO_CELULAR.includes(it.href) ? '' : ' so-pc'}" href="${it.href}">`
     + ICO(it.ico, 19) + `<span>${it.label}</span></a>`;
   const extras = grupos.flatMap((g) => g.itens).filter((it) => !NO_CELULAR.includes(it.href));
@@ -46,17 +65,21 @@ window.pl = (n, um, varios = um + 's') => (Number(n) === 1 ? um : varios);
   const side = document.createElement('aside');
   side.className = 'sidebar';
   side.innerHTML =
-    `<a class="nav-brand" href="/"><span class="badge"><img src="/logo.webp" alt=""></span>`
+    `<a class="nav-brand" href="${vendedor ? '/pdv' : '/'}"><span class="badge"><img src="/logo.webp" alt=""></span>`
     + `<span class="wordmark">VN<br>Store</span></a>`
     + grupos.map((g) => `<div class="nav-sec label">${g.titulo}</div>`
         + `<nav class="nav-list">${g.itens.map(item).join('')}</nav>`).join('')
-    + `<button type="button" class="nav-item nav-mais${extras.some((it) => it.match(path)) ? ' active' : ''}" id="navMais">`
-    +   ICO('mais', 19) + '<span>Mais</span></button>'
+    + (vendedor
+      // No balcão vários vendedores usam o mesmo aparelho: trocar tem que
+      // estar a um toque, também no celular.
+      ? `<a href="#" class="nav-item nav-trocar" id="navTrocar">${ICO('sair', 19)}<span>Trocar</span></a>`
+      : `<button type="button" class="nav-item nav-mais${extras.some((it) => it.match(path)) ? ' active' : ''}" id="navMais">`
+        + ICO('mais', 19) + '<span>Mais</span></button>')
     + `<div class="nav-foot">`
     +   `<span id="navStatus" class="pill"><span class="dot"></span>…</span>`
     +   `<div class="nav-meta">`
     +     `<span id="navClock" class="nav-clock">--:--</span>`
-    +     `<a href="#" id="navLogout" class="nav-exit">${ICO('sair', 15)}<span>Sair</span></a>`
+    +     `<a href="#" id="navLogout" class="nav-exit">${ICO('sair', 15)}<span>${vendedor ? 'Trocar vendedor' : 'Sair'}</span></a>`
     +   `</div>`
     + `</div>`;
   document.body.insertAdjacentElement('afterbegin', side);
@@ -71,7 +94,7 @@ window.pl = (n, um, varios = um + 's') => (Number(n) === 1 ? um : varios);
     + extras.map((it) => `<a class="${it.match(path) ? 'active' : ''}" href="${it.href}">${ICO(it.ico, 18)}<span>${it.label}</span></a>`).join('')
     + `<a href="#" id="navSair2">${ICO('sair', 18)}<span>Sair</span></a>`;
   document.body.appendChild(painel);
-  side.querySelector('#navMais').addEventListener('click', () => {
+  side.querySelector('#navMais')?.addEventListener('click', () => {
     painel.style.top = side.getBoundingClientRect().bottom + 'px';
     painel.hidden = !painel.hidden;
   });
@@ -90,12 +113,14 @@ window.pl = (n, um, varios = um + 's') => (Number(n) === 1 ? um : varios);
   const tick = () => { const d = new Date(); clk.textContent = pad(d.getHours()) + ':' + pad(d.getMinutes()); };
   tick(); setInterval(tick, 1000);
 
-  // Sair
-  side.querySelector('#navLogout').addEventListener('click', async (e) => {
+  // Sair (dono) ou trocar de vendedor (volta direto para os nomes)
+  const sair = async (e) => {
     e.preventDefault();
     try { await fetch('/api/logout', { method: 'POST' }); } catch (_) {}
-    location.href = '/login';
-  });
+    location.href = vendedor ? '/login?vendedor=1' : '/login';
+  };
+  side.querySelector('#navLogout').addEventListener('click', sair);
+  side.querySelector('#navTrocar')?.addEventListener('click', sair);
 
   // Luz na borda do cartão sob o mouse (o desenho está no theme.css).
   let aceso = null;

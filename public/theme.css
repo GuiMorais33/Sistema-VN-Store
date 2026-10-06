@@ -404,7 +404,7 @@ dialog::backdrop{background:rgba(0,0,0,.72);backdrop-filter:blur(3px)}
   .pagehead h1{font-size:24px}
   /* Cinco principais na barra; o resto (e o Sair) no painel do "Mais". */
   .nav-item.so-pc{display:none}
-  .sidebar .nav-mais{display:flex}
+  .sidebar .nav-mais,.sidebar .nav-trocar{display:flex}
   .nav-foot{display:none}
   /* Título de seção numa linha só; a explicação desce para baixo dele. */
   .sec{flex-wrap:wrap;row-gap:4px}
@@ -413,6 +413,8 @@ dialog::backdrop{background:rgba(0,0,0,.72);backdrop-filter:blur(3px)}
 }
 /* "Mais" e o painel dele só existem no celular. */
 .nav-mais{display:none;background:none;border:none;cursor:pointer;font-family:var(--font-body);color:var(--ink-3)}
+/* Vendedor: "Trocar" na barra do celular; no computador ele fica no rodapé. */
+.nav-trocar{display:none}
 .nav-painel{position:fixed;left:var(--s3);right:var(--s3);z-index:90;display:grid;grid-template-columns:1fr 1fr;gap:6px;
   padding:var(--s3);border-radius:var(--r-lg);background:var(--surface-2);border:1px solid var(--line-str);box-shadow:var(--sh-3)}
 .nav-painel[hidden]{display:none}

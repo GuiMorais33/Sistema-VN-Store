@@ -14,7 +14,7 @@
   .seg button:hover{color:var(--ink)}
   .seg button.sel{background:rgba(47,210,79,.13);color:var(--brand-hi)}
 
-  .origem{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3);margin-top:var(--s3)}
+  .origem{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--s3);margin-top:var(--s3)}
   @media (max-width:620px){.origem{grid-template-columns:1fr}}
   .org{display:flex;align-items:center;gap:var(--s3);padding:var(--s4)}
   .org .txt{display:flex;flex-direction:column;gap:3px;min-width:0}
@@ -384,14 +384,16 @@ async function load(){
   const pdvAqui=d.por_origem.find(o=>o.origem==='PDV')||{total:0,n:0};
   const pdvNs=d.por_origem.find(o=>o.origem==='PDV Nuvemshop')||{total:0,n:0};
   const site=d.por_origem.find(o=>o.origem==='Site')||{total:0,n:0};
+  const net=d.por_origem.find(o=>o.origem==='Internet')||{total:0,n:0};
   const balcao={total:pdvAqui.total+pdvNs.total,n:pdvAqui.n+pdvNs.n};
-  document.getElementById('origem').innerHTML=`
-    <div class="card org"><span class="ico-box brand">${ICO('pdv',18)}</span>
-      <span class="txt"><span class="v">${BRL(balcao.total)}</span><span class="n">${balcao.n} ${pl(balcao.n,'venda')} no balcão${
-        pdvNs.n?` · ${pdvNs.n} pelo PDV da Nuvemshop`:''}</span></span></div>
-    <div class="card org"><span class="ico-box brand">${ICO('site',18)}</span>
-      <span class="txt"><span class="v">${BRL(site.total)}</span><span class="n">${site.n} ${pl(site.n,'venda')} pelo site</span></span>
-      </div>`;
+  const card=(ico,v,txt)=>`<div class="card org"><span class="ico-box brand">${ICO(ico,18)}</span>
+      <span class="txt"><span class="v">${BRL(v)}</span><span class="n">${txt}</span></span></div>`;
+  // Internet = vendedor vendendo por WhatsApp/Instagram e lançando no PDV.
+  // Só aparece quando existe, para não ocupar espaço à toa.
+  document.getElementById('origem').innerHTML=
+    card('pdv',balcao.total,`${balcao.n} ${pl(balcao.n,'venda')} no balcão${pdvNs.n?` · ${pdvNs.n} pelo PDV da Nuvemshop`:''}`)
+    +(net.n?card('conversa',net.total,`${net.n} ${pl(net.n,'venda')} por WhatsApp e Instagram`):'')
+    +card('site',site.total,`${site.n} ${pl(site.n,'venda')} pelo site`);
   document.getElementById('imp').innerHTML=d.ultima_importacao
     ? `<span style="color:var(--brand-hi)">●</span> site lido automaticamente · ${D(d.ultima_importacao)}`
     : 'as vendas do site entram sozinhas';

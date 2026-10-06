@@ -519,6 +519,31 @@ ensureColumn('team_members', 'commission_pct', 'commission_pct REAL NOT NULL DEF
 // De qual atendimento essa venda nasceu (fecha o funil).
 ensureColumn('sales', 'atendimento_id', 'atendimento_id INTEGER');
 
+// ---- Cada vendedor entra com o próprio PIN ----
+// A venda fica com quem estava logado (a comissão depende disso) e o
+// vendedor não vê financeiro, custo nem configuração. Guardado só o hash;
+// trocar o PIN derruba as sessões abertas daquela pessoa.
+ensureColumn('team_members', 'pin_hash', 'pin_hash TEXT');
+// Onde a venda do PDV aconteceu: balcão, WhatsApp ou Instagram. Pedido da
+// Nuvemshop não usa — a origem dele vem do próprio pedido (sales.origem).
+ensureColumn('sales', 'canal', 'canal TEXT');
+// Quem fez a troca ou devolução (o dono ou o vendedor logado).
+ensureColumn('trocas', 'feito_por', 'feito_por TEXT');
+
+// Comissão paga: o mês, quanto e o lançamento de despesa que ela gerou.
+// O devido é sempre recalculado dos lançamentos; aqui só fica o que saiu.
+db.exec(`CREATE TABLE IF NOT EXISTS comissoes_pagas (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id  INTEGER NOT NULL REFERENCES team_members(id),
+  ym         TEXT NOT NULL,          -- AAAA-MM a que a comissão se refere
+  base       REAL NOT NULL,          -- vendido (líquido) no mês, na hora do pagamento
+  pct        REAL NOT NULL,
+  valor      REAL NOT NULL,          -- quanto foi pago agora
+  entry_id   INTEGER,                -- despesa "Comissões" no financeiro
+  created_at TEXT NOT NULL
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_comissoes_membro ON comissoes_pagas(member_id, ym)');
+
 // ---- CRM: o que a loja sabe sobre a pessoa ----
 // Vender de novo para quem já comprou é o que escala a operação. Para
 // isso o sistema precisa lembrar o que a pessoa veste, quando ela some

@@ -8,7 +8,7 @@
 <link rel="icon" href="/logo.webp">
 <link rel="stylesheet" href="/theme.css">
 <style>
-  .topo{display:grid;grid-template-columns:1.25fr 1fr;gap:var(--s3);margin-bottom:var(--s4)}
+  .topo{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:var(--s3);margin-bottom:var(--s4)}
   @media (max-width:900px){.topo{grid-template-columns:1fr}}
   .box{padding:var(--s4)}
   .box .big{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;
@@ -45,6 +45,15 @@
   .card-v .mini .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-3);font-weight:700}
   .card-v .mini .v{font-family:var(--font-mono);font-weight:700;font-size:13px;margin-top:2px}
   .card-v .acts{display:flex;gap:5px;margin-top:11px}
+  /* Comissão no cartão: quanto deu, quanto já foi pago, o que falta pagar. */
+  .com{margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid rgba(47,210,79,.25);background:rgba(47,210,79,.06)}
+  .com .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-3);font-weight:700}
+  .com .v{font-family:var(--font-mono);font-weight:700;font-size:17px;color:var(--brand-hi);margin-top:2px}
+  .com .s{font-size:11px;color:var(--ink-3);margin-top:3px;line-height:1.45}
+  .com .s b{color:var(--ink-2)}
+  .com.sem{border-color:var(--line-soft);background:var(--bg-elev)}
+  .com.sem .v{color:var(--ink-3);font-size:13px}
+  .tagf.pin{color:var(--brand-hi);border-color:rgba(47,210,79,.35)}
   .pctg{font-family:var(--font-mono);font-weight:700;font-size:13px}
   .pctg.ok{color:var(--ok)} .pctg.meio{color:var(--warn)} .pctg.baixo{color:var(--crit)}
 
@@ -137,7 +146,7 @@
 <body>
 <div class="app">
   <div class="pagehead">
-    <div><h1>Equipe</h1><div class="ph-sub">Quem é quem · metas do mês · quanto cada um vendeu</div></div>
+    <div><h1>Equipe</h1><div class="ph-sub">Quanto cada um vendeu · comissão · metas do mês</div></div>
     <div class="ph-actions"><button class="btn primary" id="nova" type="button">Adicionar pessoa</button></div>
   </div>
 
@@ -159,6 +168,11 @@
       <span class="label">Ritmo do mês</span>
       <div class="big" id="ritmoVal">—</div>
       <div class="sub" id="ritmoSub">—</div>
+    </div>
+    <div class="card box">
+      <span class="label">Comissões do mês</span>
+      <div class="big" id="comVal">—</div>
+      <div class="sub" id="comSub">—</div>
     </div>
   </div>
 
@@ -191,8 +205,18 @@
     </div>
     <div class="field"><label>Telefone / WhatsApp</label><input id="pFone" inputmode="tel"></div>
     <label class="sw"><input type="checkbox" id="pVende" checked>
-      <span><b>Vende no balcão</b> — aparece na hora de lançar a venda no PDV e entra no ranking de metas.
+      <span><b>Vende</b> (balcão ou internet) — entra no PDV, no ranking e na comissão.
         Desligue para quem não vende (estoquista, social media).</span></label>
+    <div class="g2" id="pVendeCampos">
+      <div class="field"><label>Comissão (%)</label>
+        <input id="pCom" type="number" step="0.1" min="0" max="100" inputmode="decimal" placeholder="ex.: 3">
+        <div class="hint">Sobre o que entrar pelas vendas dela no mês, já descontadas trocas e cancelamentos.</div></div>
+      <div class="field"><label>PIN para entrar</label>
+        <input id="pPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="new-password" placeholder="4 a 6 números">
+        <div class="hint" id="pPinInfo">Com o PIN, a pessoa entra no sistema, vende no PDV e vê só as vendas e a comissão dela.</div></div>
+    </div>
+    <label class="sw" id="pTiraPinW" hidden><input type="checkbox" id="pTiraPin">
+      <span><b>Tirar o acesso</b> — o PIN para de funcionar na hora.</span></label>
     <label class="sw"><input type="checkbox" id="pAtivo" checked>
       <span><b>Está na equipe</b> — desligue quando alguém sair, em vez de apagar: o histórico de
         vendas continua.</span></label>
@@ -241,7 +265,7 @@
         <div class="hint">Quanto ele ganha em cima do que vende.</div></div>
       <div class="field"><label>Atendimentos por dia</label>
         <input id="sDia" type="number" step="1" min="1" max="200" inputmode="numeric" value="10">
-        <div class="hint">O ritmo que <b>ele</b> escolheu.</div></div>
+        <div class="hint">Só conta se vocês anotam os atendimentos no funil. Sem isso, a conta usa as vendas.</div></div>
     </div>
     <details>
       <summary style="cursor:pointer;font-size:12px;color:var(--ink-3);padding:4px 0">
@@ -319,6 +343,16 @@ async function carregar(){
     RS.textContent='Mês encerrado.';
   }else{R.textContent='—';R.style.color='';RS.textContent='Defina uma meta para acompanhar o ritmo.';}
 
+  // Comissões do mês (soma de todos)
+  const cs=d.pessoas.map(p=>p.comissao);
+  const tot=(k)=>cs.reduce((t,c)=>t+(c[k]||0),0);
+  document.getElementById('comVal').textContent=BRL(tot('a_pagar'));
+  document.getElementById('comVal').style.color=tot('a_pagar')>0?'var(--warn)':'';
+  document.getElementById('comSub').innerHTML=cs.length
+    ?`a pagar · ${BRL(tot('devido'))} de comissão no mês · ${BRL(tot('pago'))} já pago`
+     +(cs.some(c=>!(c.pct>0))?'<br>Tem vendedor sem % de comissão: edite em <b>Todo mundo</b>.':'')
+    :'Sem vendedores ainda.';
+
   // Ranking
   const box=document.getElementById('ranking');
   document.getElementById('rankMeta').textContent=d.sem_vendedor.vendas
@@ -343,13 +377,42 @@ async function carregar(){
           <div class="mini"><div class="l">Vendas</div><div class="v">${p.vendas}</div></div>
           <div class="mini"><div class="l">Ticket médio</div><div class="v">${BRL(p.ticket)}</div></div>
         </div>
-        <div class="acts"><button class="btn sm ghost" data-meta="${p.id}" type="button">Definir meta</button></div>
+        ${blocoComissao(p)}
+        <div class="acts"><button class="btn sm ghost" data-meta="${p.id}" type="button">Definir meta</button>
+          <a class="btn sm ghost" href="/minhas?member_id=${p.id}&ym=${d.ym}">Ver vendas</a></div>
       </div>`).join('');
+    box.querySelectorAll('[data-pagar]').forEach(b=>b.onclick=()=>pagar(d.pessoas.find(x=>String(x.id)===b.dataset.pagar)));
+    box.querySelectorAll('[data-desfazer]').forEach(b=>b.onclick=async()=>{
+      if(!confirm('Desfazer este pagamento? A despesa some do financeiro e a comissão volta a ficar a pagar.'))return;
+      try{await api('/api/comissoes/'+b.dataset.desfazer,{method:'DELETE'});carregar();}catch(e){alert(e.message);}
+    });
     box.querySelectorAll('[data-meta]').forEach(b=>b.onclick=()=>{
       const p=d.pessoas.find(x=>String(x.id)===b.dataset.meta);abrirMeta(p);});
   }
   time();
   sonhos();
+}
+
+/* ---------- Comissão: segue o dinheiro ---------- */
+function blocoComissao(p){
+  const c=p.comissao;
+  if(!(c.pct>0))return `<div class="com sem"><div class="l">Comissão</div><div class="v">sem % definida</div>
+    <div class="s">Defina a % em <b>Todo mundo</b> → editar.</div></div>`;
+  const pg=c.pagamentos.length?c.pagamentos.map(x=>`${BRL(x.valor)} em ${new Date(x.created_at).toLocaleDateString('pt-BR')}
+    <a href="#" data-desfazer="${x.id}" style="color:var(--ink-3)">desfazer</a>`).join(' · '):'';
+  return `<div class="com"><div class="l">Comissão · ${c.pct}% de ${BRL(c.base)}</div>
+    <div class="v">${BRL(c.devido)}</div>
+    <div class="s">${c.pago>0?`<b>${BRL(c.pago)}</b> já pago (${pg})<br>`:''}${c.a_pagar>0?`<b>${BRL(c.a_pagar)}</b> a pagar`
+      :(c.a_pagar<0?`Pago a mais: ${BRL(-c.a_pagar)} (devolução depois do pagamento) — desconte no próximo.`:(c.devido>0?'Tudo pago.':'Nada a pagar ainda.'))}</div>
+    ${c.a_pagar>0?`<button class="btn sm primary" data-pagar="${p.id}" type="button" style="margin-top:8px">Pagar ${BRL(c.a_pagar)}</button>`:''}
+  </div>`;
+}
+async function pagar(p){
+  const c=p.comissao,[a,m]=c.ym.split('-');
+  const aviso=c.fechado?'':'\n\nO mês ainda não acabou: o que ele vender depois disto fica a pagar no próximo acerto.';
+  if(!confirm(`Pagar ${BRL(c.a_pagar)} de comissão para ${p.nome} (${m}/${a})?\n\nVira despesa "Comissões" no financeiro.${aviso}`))return;
+  try{await api('/api/comissoes/pagar',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({member_id:p.id,ym:c.ym})});carregar();}catch(e){alert(e.message);}
 }
 
 /* ---------- O sonho: a conta que o post ensina ---------- */
@@ -365,12 +428,21 @@ function linha(op,rs,extra,fim){
 
 function cardSonho(p){
   const s=p.sonho,c=p.conta;
+  // Sem funil anotado, o ritmo é de VENDAS por dia (o sistema conta sozinho);
+  // com funil, de atendimentos.
+  const porVendas=c.modo==='vendas';
   const pd=c.pronto?c.por_dia:s.por_dia;
-  const feitos=p.hoje.atendimentos;
+  const feitos=porVendas?p.hoje.vendas:p.hoje.atendimentos;
   const pts=Array.from({length:Math.min(24,pd)},(_,i)=>`<span class="p${i<feitos?' on':''}"></span>`).join('');
 
   let escada,aviso;
-  if(c.pronto){
+  if(c.pronto&&porVendas){
+    escada=linha(`${BRL(s.valor)} ÷ ${s.comissao_pct}%`,BRL(c.faturar))
+      +linha(`${BRL(c.faturar)} ÷ ${BRL(c.ticket)}`,NUM(c.vendas)+' vendas',selo(c.fontes.ticket))
+      +linha(`${NUM(c.vendas)} ÷ ${s.prazo_meses} ${pl(s.prazo_meses,'mês','meses')}`,NUM(c.vendas_mes)+' vendas por mês')
+      +linha(`÷ ${SONHOS.dias_uteis_mes} dias úteis`,NUM(c.por_dia)+' por dia','',true);
+    aviso=`<div class="ritmo-av">Meta do mês equivalente: <b>${BRL(c.meta_mes)}</b> — ${NUM(c.vendas_mes)} vendas.</div>`;
+  }else if(c.pronto){
     escada=linha(`${BRL(s.valor)} ÷ ${s.comissao_pct}%`,BRL(c.faturar))
       +linha(`${BRL(c.faturar)} ÷ ${BRL(c.ticket)}`,NUM(c.vendas)+' vendas',selo(c.fontes.ticket))
       +linha(`${NUM(c.vendas)} ÷ ${c.fechamento}%`,NUM(c.propostas)+' propostas',selo(c.fontes.fechamento))
@@ -383,14 +455,9 @@ function cardSonho(p){
          Para sair em ${s.prazo_meses}, o ritmo tem que ser <b>${NUM(c.por_dia_no_prazo)} por dia</b>.
          Não existe prazo — existe ritmo.</div>`;
   }else{
-    const falta=[];
-    if(!(c.ticket>0))falta.push('ticket médio');
-    if(!(c.fechamento>0))falta.push('taxa de fechamento');
-    if(!(c.proposta>0))falta.push('taxa de proposta');
     escada=linha(`${BRL(s.valor)} ÷ ${s.comissao_pct}%`,BRL(s.valor/(s.comissao_pct/100)));
-    aviso=`<div class="ritmo-av late">A conta para aí: falta <b>${falta.join(' e ')}</b>.
-      Registre os atendimentos no <a href="/funil">funil</a> — em poucos dias os números dele aparecem.
-      Ou preencha à mão em <b>Editar sonho</b> para começar.</div>`;
+    aviso=`<div class="ritmo-av late">A conta para aí: falta o <b>ticket médio</b>. Depois das primeiras
+      vendas o sistema calcula sozinho — ou preencha à mão em <b>Editar sonho</b> para começar.</div>`;
   }
 
   return `<div class="card sn">
@@ -403,7 +470,7 @@ function cardSonho(p){
       <div class="escada">${escada}</div>
       ${aviso}
       <div class="hojeb"><span class="pts">${pts}</span>
-        <span class="cnt" style="color:${feitos>=pd?'var(--brand-hi)':'var(--ink-3)'}">hoje ${feitos}/${pd}</span></div>
+        <span class="cnt" style="color:${feitos>=pd?'var(--brand-hi)':'var(--ink-3)'}">hoje ${feitos}/${pd}${porVendas?' '+pl(pd,'venda'):''}</span></div>
       <div class="acts">
         <button class="btn sm ghost" data-sonho="${p.id}" type="button">Editar sonho</button>
         ${c.pronto?`<button class="btn sm ghost" data-vmeta="${p.id}" type="button">Virar meta do mês</button>
@@ -453,9 +520,12 @@ function cartaz(p){
     <div class="ct-val">${BRL(s.valor)}</div>
     <div class="ct-l"><span>${BRL(s.valor)} ÷ ${s.comissao_pct}%</span><b>${BRL(c.faturar)}</b></div>
     <div class="ct-l"><span>${BRL(c.faturar)} ÷ ${BRL(c.ticket)}</span><b>${NUM(c.vendas)} vendas</b></div>
-    <div class="ct-l"><span>${NUM(c.vendas)} ÷ ${c.fechamento}%</span><b>${NUM(c.propostas)} propostas</b></div>
-    <div class="ct-l"><span>${NUM(c.propostas)} ÷ ${c.proposta}%</span><b>${NUM(c.atendimentos)} atendimentos</b></div>
-    <div class="ct-big">${NUM(c.por_dia)} atendimentos por dia.<br>${NUM(c.dias)} dias úteis.</div>
+    ${c.modo==='vendas'
+      ?`<div class="ct-l"><span>${NUM(c.vendas)} ÷ ${s.prazo_meses} meses</span><b>${NUM(c.vendas_mes)} por mês</b></div>
+        <div class="ct-big">${NUM(c.por_dia)} ${pl(c.por_dia,'venda')} por dia.<br>${NUM(c.dias)} dias úteis.</div>`
+      :`<div class="ct-l"><span>${NUM(c.vendas)} ÷ ${c.fechamento}%</span><b>${NUM(c.propostas)} propostas</b></div>
+        <div class="ct-l"><span>${NUM(c.propostas)} ÷ ${c.proposta}%</span><b>${NUM(c.atendimentos)} atendimentos</b></div>
+        <div class="ct-big">${NUM(c.por_dia)} atendimentos por dia.<br>${NUM(c.dias)} dias úteis.</div>`}
     <div class="ct-pe">Não existe prazo. Existe ritmo.<br>
       Quanto mais você faz, mais rápido isso sai do papel. — VN Store</div>`;
   window.print();
@@ -504,7 +574,7 @@ document.getElementById('apagarSonho').onclick=async()=>{
 async function time(){
   const d=await api('/api/team');
   document.getElementById('timeMeta').textContent=
-    `${d.total} na equipe · ${d.vendedores} vende(m) no balcão`;
+    `${d.total} na equipe · ${d.vendedores} ${pl(d.vendedores,'vende','vendem')}`;
   const box=document.getElementById('time');
   if(!d.membros.length){
     box.innerHTML=vazio('clientes','Equipe vazia','Comece adicionando você mesmo e depois os vendedores.');
@@ -514,8 +584,9 @@ async function time(){
       <span class="av">${esc(iniciais(m.name))}</span>
       <div><div class="nm">${esc(m.name)}
         <span class="tagf${m.vende?' vende':''}">${m.vende?'vende':'não vende'}</span>
+        ${m.vende?(m.tem_pin?'<span class="tagf pin">entra com PIN</span>':'<span class="tagf">sem acesso</span>'):''}
         ${m.active?'':'<span class="tagf">saiu</span>'}</div>
-        <div class="s">${esc(m.role)}${m.instagram?' · '+esc(m.instagram):''}${m.phone?' · '+esc(m.phone):''}${m.note?' · '+esc(m.note):''}</div></div>
+        <div class="s">${esc(m.role)}${m.vende&&m.commission_pct>0?' · '+m.commission_pct+'% de comissão':''}${m.instagram?' · '+esc(m.instagram):''}${m.phone?' · '+esc(m.phone):''}${m.note?' · '+esc(m.note):''}</div></div>
       <div class="acts">
         <button class="ib" data-ed="${m.id}" type="button" aria-label="editar">${ICO('editar',15)}</button>
         <button class="ib del" data-rm="${m.id}" type="button" aria-label="remover">${ICO('lixeira',15)}</button>
@@ -544,6 +615,13 @@ function abrir(m){
   document.getElementById('pObs').value=m?(m.note||''):'';
   document.getElementById('pVende').checked=m?!!m.vende:true;
   document.getElementById('pAtivo').checked=m?!!m.active:true;
+  document.getElementById('pCom').value=m&&m.commission_pct?m.commission_pct:'';
+  document.getElementById('pPin').value='';
+  document.getElementById('pPinInfo').innerHTML=m&&m.tem_pin
+    ?'Já entra com PIN. Digite um novo só para <b>trocar</b> (o antigo para de funcionar).'
+    :'Com o PIN, a pessoa entra no sistema, vende no PDV e vê só as vendas e a comissão dela.';
+  document.getElementById('pTiraPinW').hidden=!(m&&m.tem_pin);
+  document.getElementById('pTiraPin').checked=false;
   dlg.showModal();
 }
 document.getElementById('nova').onclick=()=>abrir(null);
@@ -559,7 +637,10 @@ document.getElementById('salvar').onclick=async e=>{
         phone:document.getElementById('pFone').value.trim(),
         note:document.getElementById('pObs').value.trim(),
         vende:document.getElementById('pVende').checked,
-        active:document.getElementById('pAtivo').checked})});
+        active:document.getElementById('pAtivo').checked,
+        commission_pct:document.getElementById('pCom').value,
+        pin:document.getElementById('pPin').value.trim(),
+        remover_pin:document.getElementById('pTiraPin').checked})});
     dlg.close();carregar();
   }catch(err){alert(err.message);}
 };

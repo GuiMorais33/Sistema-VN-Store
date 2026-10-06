@@ -393,12 +393,14 @@ async function load(){
 
   // Maestro
   const p=[];
-  const site=(d.por_origem_hoje||[]).find(o=>o.o==='site'), pdv=(d.por_origem_hoje||[]).find(o=>o.o==='pdv');
+  const ori=(k)=>(d.por_origem_hoje||[]).find(o=>o.o===k);
+  const site=ori('site'),pdv=ori('pdv'),net=ori('net');
   if(d.orders_today>0){
     const det=[];
     if(pdv) det.push(`<b>${pdv.n}</b> no balcão`);
+    if(net) det.push(`<b>${net.n}</b> por WhatsApp/Instagram`);
     if(site) det.push(`<b>${site.n}</b> pelo site`);
-    p.push(`${pl(d.orders_today,'Já saiu','Já saíram')} <b>${d.orders_today}</b> ${pl(d.orders_today,'venda')} hoje${det.length?' ('+det.join(' e ')+')':''}, <b class="hl">${BRL(d.revenue_today)}</b> vendidos${semCusto(d.custo_cobertura)?'':` com margem de <b>${d.margin_pct}%</b>`}.`);
+    p.push(`${pl(d.orders_today,'Já saiu','Já saíram')} <b>${d.orders_today}</b> ${pl(d.orders_today,'venda')} hoje${det.length?' ('+det.join(', ').replace(/, ([^,]*)$/,' e $1')+')':''}, <b class="hl">${BRL(d.revenue_today)}</b> vendidos${semCusto(d.custo_cobertura)?'':` com margem de <b>${d.margin_pct}%</b>`}.`);
   } else p.push('Ainda sem vendas hoje — o PDV está pronto.');
   if(d.receivable_count>0) p.push(`Tem <b class="hl">${BRL(d.receivable_total)}</b> em fiado pra receber.`);
   if(R.atrasados>0) p.push(`E <b>${R.atrasados}</b> ${pl(R.atrasados,'lembrete já passou','lembretes já passaram')} da data.`);

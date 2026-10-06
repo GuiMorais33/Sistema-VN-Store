@@ -41,8 +41,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// ---- Login por senha única (protege o sistema quando publicado) ----
-// Se APP_PASSWORD estiver vazio (ex.: rodando local), não exige login.
+// ---- Quem está usando: o dono (senha) ou um vendedor (nome + PIN) ----
+// O dono vê tudo. O vendedor entra com o PIN que o dono cria na Equipe:
+// vende, troca e recebe fiado, e a venda fica com ele — é isso que faz a
+// comissão ser dele sem ninguém precisar marcar. Financeiro, custo,
+// configuração e cancelamento ficam só com o dono.
+// Se APP_PASSWORD estiver vazio (ex.: rodando local), o dono não precisa de senha.
 const APP_PASSWORD = process.env.APP_PASSWORD || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'troque-este-segredo-no-.env';
 const AUTH_TOKEN = crypto.createHmac('sha256', SESSION_SECRET).update('vnstore-auth-v1').digest('hex');
@@ -53,25 +57,103 @@ function readCookies(req) {
 }
 const authed = (req) => !APP_PASSWORD || readCookies(req).vn_auth === AUTH_TOKEN;
 
+const hashPin = (id, pin) => crypto.createHash('sha256').update(`${SESSION_SECRET}:pin:${id}:${pin}`).digest('hex');
+// A assinatura leva o hash do PIN: trocar o PIN derruba a sessão antiga.
+const assinarVendedor = (id, pinHash) => crypto.createHmac('sha256', SESSION_SECRET).update(`vend:${id}:${pinHash}`).digest('hex');
+const vendedorDoCookie = (req) => {
+  const [id, sig] = String(readCookies(req).vn_vend || '').split('.');
+  if (!id || !sig) return null;
+  const m = db.prepare('SELECT id, name, pin_hash FROM team_members WHERE id = ? AND active = 1 AND vende = 1').get(id);
+  if (!m || !m.pin_hash) return null;
+  const certo = assinarVendedor(m.id, m.pin_hash);
+  return certo.length === sig.length && crypto.timingSafeEqual(Buffer.from(certo), Buffer.from(sig)) ? m : null;
+};
+// req.quem: { papel: 'dono' } | { papel: 'vendedor', id, nome } | null
+function quemE(req) {
+  const v = vendedorDoCookie(req);
+  if (v) return { papel: 'vendedor', id: v.id, nome: v.name };
+  return authed(req) ? { papel: 'dono' } : null;
+}
+// vn_quem é só para a tela montar o menu certo (o JS lê); quem decide o
+// que pode é o servidor, pela sessão.
+const cookie = (nome, valor, idade, httpOnly = true) =>
+  `${nome}=${encodeURIComponent(valor)};${httpOnly ? ' HttpOnly;' : ''} SameSite=Lax; Path=/; Max-Age=${idade}`;
+const TRINTA_DIAS = 60 * 60 * 24 * 30, DOZE_HORAS = 60 * 60 * 12;
+
 app.post('/api/login', (req, res) => {
   if (APP_PASSWORD && (req.body && req.body.password) === APP_PASSWORD) {
-    res.setHeader('Set-Cookie', `vn_auth=${AUTH_TOKEN}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${60 * 60 * 24 * 30}`);
-    return res.json({ ok: true });
+    res.setHeader('Set-Cookie', [cookie('vn_auth', AUTH_TOKEN, TRINTA_DIAS), cookie('vn_vend', '', 0),
+      cookie('vn_quem', 'dono', TRINTA_DIAS, false)]);
+    return res.json({ ok: true, papel: 'dono' });
   }
   res.status(401).json({ error: 'Senha incorreta.' });
 });
+
+// Na tela de entrar: só o primeiro nome de quem tem PIN, para tocar e digitar.
+app.get('/api/login/vendedores', (req, res) => {
+  const ms = db.prepare(`SELECT id, name FROM team_members
+    WHERE active = 1 AND vende = 1 AND pin_hash IS NOT NULL ORDER BY name`).all();
+  res.json(ms.map((m) => ({ id: m.id, nome: String(m.name).trim().split(/\s+/)[0] })));
+});
+
+// PIN de 4 números se adivinha rápido: 5 erros seguidos travam a pessoa
+// por 5 minutos.
+const errosPin = new Map();
+app.post('/api/login/vendedor', (req, res) => {
+  const id = Number((req.body || {}).id);
+  const pin = String((req.body || {}).pin || '').trim();
+  const trava = errosPin.get(id);
+  if (trava && trava.n >= 5 && Date.now() - trava.ultimo < 5 * 60e3) {
+    return res.status(429).json({ error: 'Muitas tentativas. Espere 5 minutos ou peça ao dono.' });
+  }
+  const m = db.prepare('SELECT id, name, pin_hash FROM team_members WHERE id = ? AND active = 1 AND vende = 1').get(id);
+  if (!m || !m.pin_hash || hashPin(m.id, pin) !== m.pin_hash) {
+    const t = errosPin.get(id) || { n: 0, ultimo: 0 };
+    errosPin.set(id, { n: (Date.now() - t.ultimo > 5 * 60e3 ? 0 : t.n) + 1, ultimo: Date.now() });
+    return res.status(401).json({ error: 'PIN errado.' });
+  }
+  errosPin.delete(id);
+  // Entrou um vendedor neste aparelho: a sessão do dono sai, senão o
+  // balcão ficaria com o financeiro aberto.
+  res.setHeader('Set-Cookie', [cookie('vn_vend', `${m.id}.${assinarVendedor(m.id, m.pin_hash)}`, DOZE_HORAS),
+    cookie('vn_auth', '', 0), cookie('vn_quem', `vendedor:${m.name}`, DOZE_HORAS, false)]);
+  res.json({ ok: true, papel: 'vendedor', nome: m.name });
+});
 app.post('/api/logout', (req, res) => {
-  res.setHeader('Set-Cookie', 'vn_auth=; HttpOnly; Path=/; Max-Age=0');
+  res.setHeader('Set-Cookie', [cookie('vn_auth', '', 0), cookie('vn_vend', '', 0), cookie('vn_quem', '', 0, false)]);
   res.json({ ok: true });
 });
 // Barreira: libera login, health e assets; bloqueia o resto sem sessão.
+const LIVRE = (p) => p === '/login' || p === '/api/login' || p === '/api/login/vendedores' || p === '/api/login/vendedor'
+  || p === '/api/health' || p === '/oauth/callback' || /\.(css|js|webp|png|jpe?g|svg|ico|woff2?)$/i.test(p);
 app.use((req, res, next) => {
-  if (req.agente || authed(req)) return next();
+  if (!req.agente) req.quem = quemE(req);
+  if (req.agente || req.quem) return next();
   const p = req.path;
-  if (p === '/login' || p === '/api/login' || p === '/api/health' || p === '/oauth/callback' || /\.(css|js|webp|png|jpe?g|svg|ico|woff2?)$/i.test(p)) return next();
+  if (LIVRE(p)) return next();
   if (p.startsWith('/api/')) return res.status(401).json({ error: 'não autenticado' });
   return res.redirect('/login');
 });
+
+// O que o vendedor pode fazer. Tudo fora daqui é só do dono — inclusive
+// cancelar venda (estornar dinheiro) e ver lucro, custo e financeiro.
+const DO_VENDEDOR = [
+  ['GET', /^\/(pdv|minhas|ajuda|como-usar)\/?$/],
+  ['GET', /^\/api\/(products|customers|eu|minhas|atendimentos)\/?$/],
+  ['GET', /^\/api\/vendas(\/\d+)?\/?$/],
+  ['POST', /^\/api\/sales\/?$/],
+  ['POST', /^\/api\/sales\/\d+\/(troca|settle)\/?$/],
+  ['POST', /^\/api\/customers\/?$/],
+  ['POST', /^\/api\/logout\/?$/],
+];
+app.use((req, res, next) => {
+  if (!req.quem || req.quem.papel !== 'vendedor') return next();
+  const p = req.path;
+  if (LIVRE(p) || DO_VENDEDOR.some(([m, re]) => m === req.method && re.test(p))) return next();
+  if (p.startsWith('/api/')) return res.status(403).json({ error: 'Só o dono pode fazer isto.' });
+  return res.redirect('/pdv');
+});
+app.get('/api/eu', (req, res) => res.json(req.quem || { papel: 'agente' }));
 
 // Fontes e o Three.js quase nunca mudam: o navegador guarda por uma semana.
 app.use('/fonts', express.static(join(PUBLIC, 'fonts'), { maxAge: '7d' }));
@@ -102,6 +184,9 @@ const desdeDias = (d) => new Date(Date.now() - d * 864e5).toISOString();
 // De que frente veio a venda: 'site' ou 'pdv' (= balcão, a loja física).
 // O PDV da Nuvemshop também vira pedido lá: "veio da Nuvemshop" não quer
 // dizer "veio do site" — quem diz é sales.origem.
+// Onde a venda do PDV aconteceu. "Internet" (WhatsApp, Instagram) é venda
+// do vendedor fora do balcão — conta separado do site no Financeiro.
+const CANAIS_PDV = ['balcao', 'whatsapp', 'instagram'];
 const FRENTE = (a = '') => `CASE WHEN ${a}channel = 'site' AND COALESCE(${a}origem,'site') <> 'balcao' THEN 'site' ELSE 'pdv' END`;
 const PIX_PENDENTE = () => `payment_status = 'pendente' AND channel = 'site' AND created_at >= '${desdeDias(PIX_VALE_DIAS)}'`;
 // A leitura automática relê os pedidos do site destes últimos dias. Pedido
@@ -1094,7 +1179,11 @@ function detectarInstagram() {
 
 // ==================== VENDA (PDV) ====================
 app.post('/api/sales', async (req, res) => {
-  const { items = [], customer_id = null, new_customer = null, customer_name = '', payment_method = '', payment_status = 'pago', discount = 0, seller_id = null, atendimento_id = null } = req.body || {};
+  const { items = [], customer_id = null, new_customer = null, customer_name = '', payment_method = '', payment_status = 'pago', discount = 0, atendimento_id = null } = req.body || {};
+  // Vendedor logado: a venda é dele, sem escolher. O dono escolhe quem
+  // vendeu (ou deixa sem ninguém — venda da loja, sem comissão).
+  const seller_id = req.quem && req.quem.papel === 'vendedor' ? req.quem.id : (req.body || {}).seller_id || null;
+  const canal = CANAIS_PDV.includes((req.body || {}).canal) ? req.body.canal : 'balcao';
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Adicione ao menos um item à venda.' });
 
   // Cliente: usa existente, cria novo, ou anônimo.
@@ -1148,9 +1237,9 @@ app.post('/api/sales', async (req, res) => {
   const code = 'VN-' + String(db.prepare('SELECT COALESCE(MAX(id),0)+1 AS n FROM sales').get().n).padStart(6, '0');
 
   const saleId = db.transaction(() => {
-    const id = db.prepare(`INSERT INTO sales (code, channel, customer_id, customer_name, payment_method, payment_status, paid_at, subtotal, discount, total, cost_total, margin, seller_id, seller_name, items_count, synced_nuvemshop, created_at)
-      VALUES (?, 'pdv', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`)
-      .run(code, custId, custName, payment_method, status, status === 'pago' ? ts : null, subtotal, disc, total, costTotal, margin,
+    const id = db.prepare(`INSERT INTO sales (code, channel, canal, customer_id, customer_name, payment_method, payment_status, paid_at, subtotal, discount, total, cost_total, margin, seller_id, seller_name, items_count, synced_nuvemshop, created_at)
+      VALUES (?, 'pdv', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`)
+      .run(code, canal, custId, custName, payment_method, status, status === 'pago' ? ts : null, subtotal, disc, total, costTotal, margin,
         vendedor ? vendedor.id : null, vendedor ? vendedor.name : null,
         lines.reduce((s, l) => s + l.qty, 0), ts).lastInsertRowid;
     const insItem = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, name, qty, unit_price, unit_cost, line_total, encomenda) VALUES (?,?,?,?,?,?,?,?)`);
@@ -1366,6 +1455,7 @@ app.post('/api/sales/:id/troca', async (req, res) => {
   const trocaId = db.transaction(() => {
     const tid = db.prepare(`INSERT INTO trocas (sale_id, devolvido, levado, diferenca, forma, nota, created_at)
       VALUES (?,?,?,?,?,?,?)`).run(s.id, devolvido, levado, diferenca, forma || null, nota, ts).lastInsertRowid;
+    db.prepare('UPDATE trocas SET feito_por = ? WHERE id = ?').run(req.quem && req.quem.papel === 'vendedor' ? req.quem.nome : 'dono', tid);
     const ins = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, name, qty, unit_price, unit_cost, line_total, encomenda, troca_id, ref_item_id)
       VALUES (?,?,?,?,?,?,?,?,?,?)`);
     for (const x of volta) {
@@ -1405,7 +1495,7 @@ app.get('/api/vendas', (req, res) => {
   const where = ['created_at >= ?'], args = [inicioDoDia(diaLocal(new Date(Date.now() - (dias - 1) * 864e5)))];
   if (q) { where.push('(code LIKE ? OR customer_name LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
   if (req.query.canal === 'pdv') where.push("channel = 'pdv'");
-  res.json(db.prepare(`SELECT id, code, channel, origem, created_at, customer_name, seller_name, payment_method,
+  res.json(db.prepare(`SELECT id, code, channel, origem, canal, created_at, customer_name, seller_name, payment_method,
       payment_status, total, items_count, cancelado_em,
       (SELECT COUNT(*) FROM trocas t WHERE t.sale_id = sales.id) trocas
     FROM sales WHERE ${where.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT 120`).all(...args));
@@ -1459,7 +1549,8 @@ app.get('/api/dashboard', (req, res) => {
     WHERE r.done = 0 AND (r.due_date IS NULL OR r.due_date <= date(?, '+2 day'))
     ORDER BY COALESCE(r.due_date,'9999-12-31') LIMIT 6`).all(hojeStr);
   // Vendas por origem hoje (PDV x Site)
-  const origemHoje = db.prepare(`SELECT ${FRENTE()} o,
+  const origemHoje = db.prepare(`SELECT CASE WHEN channel <> 'site' AND canal IN ('whatsapp','instagram')
+      THEN 'net' ELSE ${FRENTE()} END o,
     COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
     WHERE ${SQL_VENDA} AND created_at >= ? GROUP BY o`).all(iso);
   res.json({
@@ -1497,6 +1588,8 @@ app.get('/api/sales-series', (req, res) => {
 app.get('/api/team', (req, res) => {
   const rows = db.prepare(`SELECT * FROM team_members
     ORDER BY active DESC, vende DESC, name`).all();
+  // O hash do PIN nunca sai daqui; a tela só precisa saber se tem acesso.
+  for (const r of rows) { r.tem_pin = Boolean(r.pin_hash); delete r.pin_hash; }
   res.json({
     total: rows.filter((r) => r.active).length,
     vendedores: rows.filter((r) => r.active && r.vende).length,
@@ -1508,21 +1601,42 @@ app.post('/api/team', (req, res) => {
   const b = req.body || {};
   const nome = String(b.name || '').trim();
   if (!nome) return res.status(400).json({ error: 'Informe o nome.' });
+  // Comissão em % do que a pessoa vende (3 = 3%). Vazio mantém a atual.
+  const temComissao = b.commission_pct !== undefined && b.commission_pct !== '' && b.commission_pct !== null;
+  const comissao = temComissao ? Number(String(b.commission_pct).replace(',', '.')) : null;
+  if (temComissao && !(comissao >= 0 && comissao <= 100)) return res.status(400).json({ error: 'Comissão é uma porcentagem de 0 a 100.' });
+  // PIN: 4 a 6 números. Vazio mantém o atual; remover_pin tira o acesso.
+  const pin = String(b.pin || '').trim();
+  if (pin && !/^\d{4,6}$/.test(pin)) return res.status(400).json({ error: 'O PIN tem de 4 a 6 números.' });
   const dados = [nome, String(b.role || 'Vendedor').trim() || 'Vendedor',
     limpaInsta(b.instagram), String(b.phone || '').trim(),
     b.vende === false ? 0 : 1, b.active === false ? 0 : 1, String(b.note || '').trim()];
+  const acertarAcesso = (id) => {
+    if (temComissao) {
+      db.prepare('UPDATE team_members SET commission_pct = ? WHERE id = ?').run(money(comissao), id);
+      db.prepare('UPDATE dreams SET comissao_pct = ? WHERE member_id = ?').run(money(comissao), id);
+    }
+    if (pin) db.prepare('UPDATE team_members SET pin_hash = ? WHERE id = ?').run(hashPin(id, pin), id);
+    else if (b.remover_pin) db.prepare('UPDATE team_members SET pin_hash = NULL WHERE id = ?').run(id);
+  };
+  const membro = (id) => { const m = db.prepare('SELECT * FROM team_members WHERE id = ?').get(id);
+    m.tem_pin = Boolean(m.pin_hash); delete m.pin_hash; return m; };
   if (b.id) {
+    const ex = db.prepare('SELECT id FROM team_members WHERE lower(name) = lower(?) AND id <> ?').get(nome, b.id);
+    if (ex) return res.status(409).json({ error: 'Já existe alguém com esse nome na equipe.' });
     db.prepare(`UPDATE team_members SET name=?, role=?, instagram=?, phone=?, vende=?, active=?, note=? WHERE id=?`)
       .run(...dados, b.id);
+    acertarAcesso(b.id);
     // O nome também aparece nas vendas antigas — mantém coerente.
     db.prepare('UPDATE sales SET seller_name = ? WHERE seller_id = ?').run(nome, b.id);
-    return res.json({ ok: true, membro: db.prepare('SELECT * FROM team_members WHERE id = ?').get(b.id) });
+    return res.json({ ok: true, membro: membro(b.id) });
   }
   const ex = db.prepare('SELECT id FROM team_members WHERE lower(name) = lower(?)').get(nome);
   if (ex) return res.status(409).json({ error: 'Já existe alguém com esse nome na equipe.' });
   const id = db.prepare(`INSERT INTO team_members (name, role, instagram, phone, vende, active, note, created_at)
     VALUES (?,?,?,?,?,?,?,?)`).run(...dados, now()).lastInsertRowid;
-  res.json({ ok: true, membro: db.prepare('SELECT * FROM team_members WHERE id = ?').get(id) });
+  acertarAcesso(id);
+  res.json({ ok: true, membro: membro(id) });
 });
 
 app.delete('/api/team/:id', (req, res) => {
@@ -1537,6 +1651,109 @@ app.delete('/api/team/:id', (req, res) => {
   db.prepare('DELETE FROM goals WHERE member_id = ?').run(m.id);
   db.prepare('DELETE FROM team_members WHERE id = ?').run(m.id);
   res.json({ ok: true, apagado: true });
+});
+
+// ==================== COMISSÃO ====================
+// A comissão segue o dinheiro. A base do vendedor num mês é a soma dos
+// lançamentos de receita das vendas DELE naquele mês: a venda paga, o fiado
+// quando o cliente paga, a diferença de uma troca, o estorno de um
+// cancelamento. Por isso:
+//  - fiado só vira comissão quando o dinheiro entra;
+//  - troca e cancelamento descontam no mês em que acontecem, mesmo que a
+//    comissão daquela venda já tenha sido paga;
+//  - mês que passou não muda mais: o que se paga hoje continua certo amanhã.
+const proximoMes = (ym) => { const [a, m] = ym.split('-').map(Number);
+  return m === 12 ? `${a + 1}-01` : `${a}-${String(m + 1).padStart(2, '0')}`; };
+const mesAnterior = (ym) => { const [a, m] = ym.split('-').map(Number);
+  return m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}`; };
+const baseDeComissao = (memberId, desde, ate) => db.prepare(`SELECT COALESCE(SUM(fe.amount),0) v
+  FROM financial_entries fe JOIN sales s ON s.code = fe.ref
+  WHERE fe.type = 'receita' AND s.channel <> 'site' AND s.seller_id = ?
+    AND fe.created_at >= ? AND fe.created_at < ?`).get(memberId, desde, ate).v;
+
+function comissaoDoMes(m, ym) {
+  const ini = inicioDoMes(ym), fim = inicioDoMes(proximoMes(ym));
+  const base = money(baseDeComissao(m.id, ini, fim));
+  const pct = Number(m.commission_pct) || 0;
+  const devido = money((base * pct) / 100);
+  const pagamentos = db.prepare('SELECT id, valor, base, pct, created_at FROM comissoes_pagas WHERE member_id = ? AND ym = ? ORDER BY id')
+    .all(m.id, ym);
+  const pago = money(pagamentos.reduce((t, p) => t + p.valor, 0));
+  const v = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales WHERE seller_id = ? AND channel <> 'site'
+    AND payment_status <> 'cancelado' AND created_at >= ? AND created_at < ?`).get(m.id, ini, fim);
+  return { ym, base, pct, devido, pago, a_pagar: money(devido - pago), vendas: v.n,
+    ticket: v.n ? money(v.t / v.n) : 0, pagamentos, fechado: ym < mesLocal() };
+}
+
+app.get('/api/comissoes', (req, res) => {
+  const ym = /^\d{4}-\d{2}$/.test(req.query.ym || '') ? req.query.ym : mesLocal();
+  // Quem vende hoje e quem vendeu no mês (mesmo que já tenha saído).
+  const ms = db.prepare(`SELECT * FROM team_members WHERE (active = 1 AND vende = 1)
+    OR id IN (SELECT DISTINCT seller_id FROM sales WHERE seller_id IS NOT NULL AND created_at >= ? AND created_at < ?)
+    ORDER BY name`).all(inicioDoMes(ym), inicioDoMes(proximoMes(ym)));
+  const pessoas = ms.map((m) => ({ id: m.id, nome: m.name, ...comissaoDoMes(m, ym) }));
+  const soma = (k) => money(pessoas.reduce((t, p) => t + p[k], 0));
+  res.json({ ym, pessoas, total: { base: soma('base'), devido: soma('devido'), pago: soma('pago'), a_pagar: soma('a_pagar') } });
+});
+
+// Pagar a comissão do mês: vira despesa "Comissões" no financeiro (o lucro
+// já sai certo) e fica registrado quanto foi pago. Pode pagar mais de uma
+// vez no mês — paga só a diferença do que ainda falta.
+app.post('/api/comissoes/pagar', (req, res) => {
+  const b = req.body || {};
+  const ym = /^\d{4}-\d{2}$/.test(b.ym || '') ? b.ym : mesLocal();
+  const m = db.prepare('SELECT * FROM team_members WHERE id = ?').get(Number(b.member_id));
+  if (!m) return res.status(404).json({ error: 'Pessoa não encontrada.' });
+  const c = comissaoDoMes(m, ym);
+  if (!(c.a_pagar > 0)) return res.status(400).json({ error: 'Não há comissão a pagar neste mês.' });
+  const ts = now();
+  const [a, mm] = ym.split('-');
+  const id = db.transaction(() => {
+    const e = db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, ref, paid, paid_at, created_at)
+      VALUES ('despesa','Comissões',?,?,?,?,1,?,?)`).run(categoryId('Comissões', 'despesa'),
+      `Comissão ${m.name} · ${mm}/${a}`, c.a_pagar, `COMISSAO-${ym}-${m.id}`, ts, ts).lastInsertRowid;
+    return db.prepare(`INSERT INTO comissoes_pagas (member_id, ym, base, pct, valor, entry_id, created_at)
+      VALUES (?,?,?,?,?,?,?)`).run(m.id, ym, c.base, c.pct, c.a_pagar, e, ts).lastInsertRowid;
+  })();
+  res.json({ ok: true, id, pago: c.a_pagar, comissao: comissaoDoMes(m, ym) });
+});
+
+// Desfazer um pagamento lançado errado: some a despesa junto.
+app.delete('/api/comissoes/:id', (req, res) => {
+  const p = db.prepare('SELECT * FROM comissoes_pagas WHERE id = ?').get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Pagamento não encontrado.' });
+  db.transaction(() => {
+    if (p.entry_id) db.prepare('DELETE FROM financial_entries WHERE id = ?').run(p.entry_id);
+    db.prepare('DELETE FROM comissoes_pagas WHERE id = ?').run(p.id);
+  })();
+  res.json({ ok: true });
+});
+
+// A página do vendedor: o mês dele — quanto vendeu, a comissão, a meta e
+// as últimas vendas. O dono pode abrir a de qualquer um (?member_id=).
+app.get('/api/minhas', (req, res) => {
+  const mid = req.quem && req.quem.papel === 'vendedor' ? req.quem.id : Number(req.query.member_id);
+  const m = mid ? db.prepare('SELECT * FROM team_members WHERE id = ?').get(mid) : null;
+  if (!m) return res.status(404).json({ error: 'Escolha o vendedor.' });
+  const ym = /^\d{4}-\d{2}$/.test(req.query.ym || '') ? req.query.ym : mesLocal();
+  const c = comissaoDoMes(m, ym);
+  const g = db.prepare('SELECT target FROM goals WHERE member_id = ? AND ym = ?').get(m.id, ym);
+  const meta = g ? money(g.target) : 0;
+  const [ano, mes] = ym.split('-').map(Number);
+  const diasNoMes = new Date(ano, mes, 0).getDate();
+  const restam = ym === mesLocal() ? Math.max(0, diasNoMes - new Date().getDate()) : 0;
+  const ultimas = db.prepare(`SELECT id, code, canal, created_at, customer_name, total, payment_status, payment_method,
+      (SELECT COUNT(*) FROM trocas t WHERE t.sale_id = sales.id) trocas
+    FROM sales WHERE seller_id = ? AND channel <> 'site' AND created_at >= ? AND created_at < ?
+    ORDER BY created_at DESC LIMIT 60`).all(m.id, inicioDoMes(ym), inicioDoMes(proximoMes(ym)));
+  const ant = comissaoDoMes(m, mesAnterior(ym));
+  res.json({
+    id: m.id, nome: m.name, ym, comissao: c,
+    meta, pct_meta: meta > 0 ? Math.round((c.base / meta) * 100) : null, falta: money(Math.max(0, meta - c.base)),
+    por_dia: restam > 0 && meta > c.base ? money((meta - c.base) / restam) : 0, restam,
+    mes_anterior: { ym: ant.ym, base: ant.base, devido: ant.devido, pago: ant.pago, a_pagar: ant.a_pagar },
+    ultimas,
+  });
 });
 
 // ==================== METAS ====================
@@ -1563,13 +1780,16 @@ app.get('/api/metas', (req, res) => {
     const v = porId.get(String(m.id)) || { vendas: 0, valor: 0, margem: 0, itens: 0 };
     const g = metaDe.get(String(m.id));
     const alvo = g ? g.target : 0;
-    const pct = alvo > 0 ? Math.round((v.valor / alvo) * 100) : null;
+    // Vendido = o que entrou no mês pelas vendas dele, já descontadas trocas
+    // e cancelamentos — o mesmo número da comissão, para não haver dois.
+    const c = comissaoDoMes(m, ym);
+    const pct = alvo > 0 ? Math.round((c.base / alvo) * 100) : null;
     return {
       id: m.id, nome: m.name, funcao: m.role, instagram: m.instagram,
-      meta: money(alvo), vendido: money(v.valor), vendas: v.vendas,
+      meta: money(alvo), vendido: c.base, vendas: c.vendas,
       margem: money(v.margem), itens: v.itens,
-      pct, falta: money(Math.max(0, alvo - v.valor)),
-      ticket: v.vendas ? money(v.valor / v.vendas) : 0,
+      pct, falta: money(Math.max(0, alvo - c.base)),
+      ticket: c.ticket, comissao: c,
     };
   }).sort((a, b) => b.vendido - a.vendido);
 
@@ -1716,18 +1936,29 @@ function escadaDoSonho(s, t) {
     fechamento: s.fech_manual > 0 ? 'manual' : t.fechamento.fonte,
     proposta: s.prop_manual > 0 ? 'manual' : t.proposta.fonte,
   };
-  if (!(s.comissao_pct > 0) || !(ticket > 0) || !(fech > 0) || !(prop > 0)) {
+  if (!(s.comissao_pct > 0) || !(ticket > 0)) {
     return { pronto: false, ticket, fechamento: fech, proposta: prop, fontes };
   }
   const faturar = money(s.valor / (s.comissao_pct / 100));
   const vendas = Math.ceil(faturar / ticket);
+  if (!(fech > 0) || !(prop > 0)) {
+    // Sem atendimentos anotados no funil, a escada para nas vendas — que o
+    // sistema conta sozinho. Ninguém precisa registrar nada para ter a conta.
+    const prazoV = Math.max(1, s.prazo_meses || 12);
+    return {
+      pronto: true, modo: 'vendas', ticket, fechamento: fech, proposta: prop, fontes, faturar, vendas,
+      vendas_mes: Math.ceil(vendas / prazoV),
+      por_dia: Math.max(1, Math.ceil(vendas / (prazoV * DIAS_UTEIS_MES))), dias: prazoV * DIAS_UTEIS_MES,
+      meses: prazoV, no_prazo: true, meta_mes: money(faturar / prazoV),
+    };
+  }
   const propostas = Math.ceil(vendas / (fech / 100));
   const atendimentos = Math.ceil(propostas / (prop / 100));
   const porDia = Math.max(1, s.por_dia || 1);
   const dias = Math.ceil(atendimentos / porDia);
   const prazo = Math.max(1, s.prazo_meses || 12);
   return {
-    pronto: true, ticket, fechamento: fech, proposta: prop, fontes,
+    pronto: true, modo: 'funil', ticket, fechamento: fech, proposta: prop, fontes,
     faturar, vendas, propostas, atendimentos,
     por_dia: porDia, dias,
     meses: Math.round((dias / DIAS_UTEIS_MES) * 10) / 10,
@@ -1752,21 +1983,21 @@ app.get('/api/sonhos', (req, res) => {
         SUM(CASE WHEN stage IN ${SQL_PROPOSTA} THEN 1 ELSE 0 END) prop,
         SUM(CASE WHEN stage = 'vendido' THEN 1 ELSE 0 END) vend
       FROM atendimentos WHERE member_id = ? AND day = ?`).get(m.id, hoje);
+    const vendasHoje = db.prepare(`SELECT COUNT(*) n FROM sales WHERE seller_id = ? AND channel <> 'site'
+      AND payment_status <> 'cancelado' AND created_at >= ?`).get(m.id, inicioDoDia(hoje)).n;
     const base = {
       id: m.id, nome: m.name, funcao: m.role, instagram: m.instagram,
       comissao_pct: m.commission_pct || 0,
       taxas: t,
-      hoje: { atendimentos: hojeF.atend || 0, propostas: hojeF.prop || 0, vendas: hojeF.vend || 0 },
+      hoje: { atendimentos: hojeF.atend || 0, propostas: hojeF.prop || 0, vendas: vendasHoje },
     };
     if (!s) return { ...base, sonho: null };
+    // A comissão vive na pessoa (Equipe): o sonho usa a de hoje.
+    if (m.commission_pct > 0) s.comissao_pct = m.commission_pct;
 
-    // Quanto do sonho já está no bolso: comissão do que ele vendeu e
-    // recebeu desde que o sonho foi escrito.
-    const desde = db.prepare(`SELECT COALESCE(SUM(total),0) v FROM sales
-      WHERE seller_id = ? AND payment_status = 'pago' AND created_at >= ?`).get(m.id, s.created_at).v;
-    const ganho = money(desde * (s.comissao_pct / 100));
-    const noMes = db.prepare(`SELECT COALESCE(SUM(total),0) v FROM sales
-      WHERE seller_id = ? AND payment_status = 'pago' AND created_at >= ?`).get(m.id, inicioDoMes(ym)).v;
+    // Quanto do sonho já está no bolso: a comissão do que entrou pelas
+    // vendas dele desde que o sonho foi escrito (a mesma conta da comissão).
+    const ganho = money(baseDeComissao(m.id, s.created_at, '9999') * (s.comissao_pct / 100));
     const conta = escadaDoSonho(s, t);
     return {
       ...base,
@@ -1776,7 +2007,7 @@ app.get('/api/sonhos', (req, res) => {
         ticket_manual: s.ticket_manual, fech_manual: s.fech_manual, prop_manual: s.prop_manual,
         ganho, falta: money(Math.max(0, s.valor - ganho)),
         pct: s.valor > 0 ? Math.min(100, Math.round((ganho / s.valor) * 100)) : 0,
-        comissao_mes: money(noMes * (s.comissao_pct / 100)),
+        comissao_mes: comissaoDoMes(m, ym).devido,
       },
       conta,
     };
@@ -2898,7 +3129,12 @@ app.get('/api/financial', (req, res) => {
       WHERE type = ? AND paid = 1 ${cond} GROUP BY label ORDER BY total DESC`).all(tipo, ...a);
   // Receita por origem — as duas frentes: balcão (o PDV daqui e, até a
   // troca, o PDV da Nuvemshop) e site.
-  const porOrigem = db.prepare(`SELECT CASE WHEN channel <> 'site' THEN 'PDV'
+  // Venda do vendedor por WhatsApp/Instagram (lançada no PDV) é "Internet":
+  // não é balcão nem site, e é por ela que dá para ver se vender fora da
+  // loja está valendo a pena.
+  const porOrigem = db.prepare(`SELECT CASE
+        WHEN channel <> 'site' AND canal IN ('whatsapp','instagram') THEN 'Internet'
+        WHEN channel <> 'site' THEN 'PDV'
         WHEN origem = 'balcao' THEN 'PDV Nuvemshop' ELSE 'Site' END origem,
       COUNT(*) n, COALESCE(SUM(total),0) total FROM sales
       WHERE payment_status='pago' ${cond} GROUP BY origem ORDER BY total DESC`).all(...a);
@@ -3853,6 +4089,7 @@ app.get('/encomenda', page('produtos.html'));   // aba Na loja × encomenda   //
 app.get('/custos', page('custos.html'));
 app.get('/relatorios', page('financeiro.html'));   // virou a aba Lucro
 app.get('/equipe', page('equipe.html'));
+app.get('/minhas', page('minhas.html'));   // o mês do vendedor (o dono abre pela Equipe)
 app.get('/ajuda', page('ajuda.html'));
 app.get('/como-usar', page('ajuda.html'));
 

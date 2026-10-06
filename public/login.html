@@ -33,6 +33,18 @@
   .err{color:var(--crit);font-size:13px;min-height:16px;font-weight:600}
   .box .btn{padding:13px 15px;font-size:14px}
   .box.nega{animation:nega .4s ease}
+  /* Vendedores: toca no nome e digita o PIN — rápido no balcão. */
+  .vends{display:flex;flex-direction:column;gap:10px;padding-top:6px;border-top:1px solid rgba(85,245,118,.12)}
+  .vends[hidden]{display:none}
+  .vends .t{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+  .vgrid{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+  .vbtn{padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.03);
+    color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;min-width:84px}
+  .vbtn:hover{border-color:rgba(85,245,118,.45)}
+  .vbtn.sel{border-color:var(--brand);background:rgba(47,210,79,.12);color:var(--brand-hi)}
+  input#pin{padding:14px 15px;border-radius:12px;font-size:22px;text-align:center;letter-spacing:10px}
+  .modo{background:none;border:none;color:var(--ink-3);font-size:12px;cursor:pointer;text-decoration:underline}
+  .so-dono[hidden],.so-vend[hidden]{display:none}
   @keyframes nega{20%,60%{transform:translateX(-7px)}40%,80%{transform:translateX(7px)}}
 
   /* computador: moeda à esquerda, formulário à direita */
@@ -53,9 +65,17 @@
       <div class="wm">VN Store</div>
       <div class="sub">Sala de Comando</div>
     </div>
-    <input id="pwd" type="password" placeholder="Senha" autocomplete="current-password" autofocus>
+    <div class="so-dono" id="blocoDono">
+      <input id="pwd" type="password" placeholder="Senha do dono" autocomplete="current-password" autofocus style="width:100%">
+    </div>
+    <div class="vends" id="blocoVend" hidden>
+      <div class="t">Vendedor · toque no seu nome</div>
+      <div class="vgrid" id="vgrid"></div>
+      <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="PIN" autocomplete="off" hidden>
+    </div>
     <div class="err" id="err"></div>
-    <button class="btn primary" type="submit" style="width:100%">Entrar</button>
+    <button class="btn primary" type="submit" style="width:100%" id="entrar">Entrar</button>
+    <button class="modo" type="button" id="trocaModo" hidden></button>
   </form>
 <script type="module">
 // A moeda 3D é enfeite: se não carregar, a tela de sempre continua funcionando.
@@ -69,16 +89,53 @@ window.vnMoeda = moeda;
 </script>
 <script>
 const form = document.getElementById('form');
+const err = document.getElementById('err');
+const $ = (id) => document.getElementById(id);
+let modo = 'dono', vendId = null;
+
+// Dois jeitos de entrar: o dono com a senha; o vendedor tocando no nome e
+// digitando o PIN que o dono criou na Equipe. No balcão o normal é o
+// vendedor — "Trocar vendedor" chega aqui com ?vendedor=1.
+function mostrar(m) {
+  modo = m;
+  $('blocoDono').hidden = m !== 'dono';
+  $('blocoVend').hidden = m !== 'vendedor';
+  $('trocaModo').textContent = m === 'dono' ? 'Sou vendedor' : 'Sou o dono';
+  err.textContent = '';
+  (m === 'dono' ? $('pwd') : (vendId ? $('pin') : null))?.focus();
+}
+$('trocaModo').onclick = () => mostrar(modo === 'dono' ? 'vendedor' : 'dono');
+(async () => {
+  try {
+    const vs = await (await fetch('/api/login/vendedores')).json();
+    if (!vs.length) return;
+    $('vgrid').innerHTML = vs.map((v) => `<button type="button" class="vbtn" data-id="${v.id}">${v.nome.replace(/[<>&"]/g, '')}</button>`).join('');
+    $('vgrid').onclick = (e) => {
+      const b = e.target.closest('.vbtn'); if (!b) return;
+      document.querySelectorAll('.vbtn').forEach((x) => x.classList.toggle('sel', x === b));
+      vendId = Number(b.dataset.id); $('pin').hidden = false; $('pin').value = ''; $('pin').focus(); err.textContent = '';
+    };
+    $('trocaModo').hidden = false;
+    if (new URLSearchParams(location.search).has('vendedor')) mostrar('vendedor'); else mostrar('dono');
+  } catch (_) {}
+})();
+
 form.addEventListener('submit', async (e)=>{
   e.preventDefault();
-  const err=document.getElementById('err'); err.textContent='';
+  err.textContent='';
+  if (modo === 'vendedor' && !vendId) { err.textContent = 'Toque no seu nome.'; return; }
   try{
-    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('pwd').value})});
+    const r = modo === 'dono'
+      ? await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('pwd').value})})
+      : await fetch('/api/login/vendedor',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:vendId,pin:$('pin').value})});
     if(r.ok){
-      if(window.vnMoeda){ window.vnMoeda.entrar(); setTimeout(()=>location.href='/',380); }
-      else location.href='/';
+      // O vendedor vai direto para o PDV: é lá que ele trabalha.
+      const destino = modo === 'dono' ? '/' : '/pdv';
+      if(window.vnMoeda){ window.vnMoeda.entrar(); setTimeout(()=>location.href=destino,380); }
+      else location.href=destino;
     } else {
-      const d=await r.json().catch(()=>({})); err.textContent=d.error||'Senha incorreta.';
+      const d=await r.json().catch(()=>({})); err.textContent=d.error||'Não deu para entrar.';
+      if (modo === 'vendedor') { $('pin').value = ''; $('pin').focus(); }
       window.vnMoeda?.negar();
       form.classList.remove('nega'); void form.offsetWidth; form.classList.add('nega');
     }

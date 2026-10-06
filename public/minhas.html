@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070907">
+<title>VN Store — Minhas vendas</title>
+<link rel="icon" href="/logo.webp">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .bar{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center;margin-bottom:var(--s4)}
+  .bar input[type=month]{width:auto}
+  .kpis{margin-bottom:var(--s4)}
+  /* Barra da meta: o traço mostra onde deveria estar pelo dia do mês. */
+  .metabox{padding:var(--s4);margin-bottom:var(--s4)}
+  .prog{height:12px;border-radius:7px;background:var(--bg-elev);border:1px solid var(--line-soft);overflow:hidden;margin-top:10px}
+  .prog i{display:block;height:100%;border-radius:7px;background:linear-gradient(90deg,var(--brand-deep),var(--brand))}
+  .metabox .sub{font-size:12px;color:var(--ink-3);margin-top:7px;line-height:1.5}
+  .metabox .sub b{color:var(--ink)}
+  .vl{display:flex;flex-direction:column;gap:5px}
+  .vrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s3);align-items:center;padding:10px 13px;
+    border:1px solid var(--line);border-radius:var(--r);background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+  .vrow .n{font-weight:600;font-size:13.5px}
+  .vrow .s{font-size:11px;color:var(--ink-3);margin-top:2px;font-family:var(--font-mono)}
+  .vrow .r{font-family:var(--font-mono);font-weight:700;font-size:14px;text-align:right}
+  .vrow.canc{opacity:.5}
+  .vrow.canc .r{text-decoration:line-through}
+  .tag{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:999px;
+    border:1px solid var(--line);color:var(--ink-3);margin-left:6px}
+  .tag.fiado{color:var(--warn);border-color:rgba(232,163,23,.4)}
+  .quem{display:none}
+  .quem.on{display:flex}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="pagehead">
+    <div><h1 id="tit">Minhas vendas</h1><div class="ph-sub">O mês · a comissão · cada venda</div></div>
+    <div class="ph-actions"><a class="btn primary" href="/pdv">Abrir PDV</a></div>
+  </div>
+
+  <div class="bar">
+    <input type="month" id="mes">
+    <span class="pill quem" id="quemDono"></span>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+  <div class="card metabox" id="meta" hidden></div>
+
+  <div class="sec"><h2>As vendas do mês</h2><span class="rule"></span><span class="meta" id="vMeta"></span></div>
+  <div class="vl" id="vendas"><div class="sk" style="height:58px"></div></div>
+</div>
+
+<script src="/icons.js"></script>
+<script src="/nav.js"></script>
+<script>
+const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(p){const r=await fetch(p);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
+const vazio=(i,t,d)=>`<div class="empty">${ICO(i,30)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
+const kpi=(o)=>`<div class="kpi"><div class="kpi-top"><span class="label">${o.label}</span>
+  <span class="ico-box ${o.tone||''}" style="width:30px;height:30px">${ICO(o.ico,16)}</span></div>
+  <div class="kpi-val" style="${o.color?'color:'+o.color:''}">${o.val}</div><div class="kpi-sub"><span>${o.sub}</span></div></div>`;
+const CANAL={balcao:'Balcão',whatsapp:'WhatsApp',instagram:'Instagram'};
+const quando=(iso)=>new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+
+// O vendedor vê o mês dele; o dono abre a de qualquer um pela Equipe.
+const qs=new URLSearchParams(location.search);
+const membro=qs.get('member_id');
+document.getElementById('mes').value=qs.get('ym')||mesLocal();
+
+async function carregar(){
+  const ym=document.getElementById('mes').value||mesLocal();
+  let d;
+  try{d=await api(`/api/minhas?ym=${ym}${membro?'&member_id='+membro:''}`);}
+  catch(e){document.getElementById('vendas').innerHTML=vazio('clientes','Abra pela Equipe',e.message);return;}
+  const c=d.comissao;
+  if(quem.papel==='dono'){
+    document.getElementById('tit').textContent='Vendas de '+d.nome.split(' ')[0];
+    const q=document.getElementById('quemDono');q.textContent='como '+d.nome+' vê';q.classList.add('on');
+  }
+  // Comissão: sobre o que entrou no mês pelas vendas dele, já com trocas e
+  // cancelamentos descontados — fiado entra quando o cliente paga.
+  document.getElementById('kpis').innerHTML=
+    kpi({label:'Vendido no mês',ico:'subiu',tone:'brand',val:BRL(c.base),color:'var(--brand-hi)',
+      sub:`${c.vendas} ${pl(c.vendas,'venda')}${c.vendas?' · ticket '+BRL(c.ticket):''}`})
+    +kpi({label:'Comissão',ico:'financeiro',tone:'brand',val:c.pct>0?BRL(c.devido):'—',
+      sub:c.pct>0?`${c.pct}% do vendido`:'a % ainda não foi definida'})
+    +kpi({label:'Já recebida',ico:'recibo',val:BRL(c.pago),
+      sub:c.a_pagar>0?`${BRL(c.a_pagar)} a receber`:(c.devido>0?'tudo recebido':'nada ainda')})
+    +kpi({label:'Mês passado',ico:'grafico',val:BRL(d.mes_anterior.base),
+      sub:d.mes_anterior.devido>0?`comissão ${BRL(d.mes_anterior.devido)}${d.mes_anterior.a_pagar>0?' · '+BRL(d.mes_anterior.a_pagar)+' a receber':''}`:'sem comissão'});
+
+  const m=document.getElementById('meta');
+  if(d.meta>0){
+    m.hidden=false;
+    m.innerHTML=`<span class="label">Meta do mês</span>
+      <div class="prog"><i style="width:${Math.min(100,d.pct_meta||0)}%"></i></div>
+      <div class="sub"><b>${d.pct_meta}%</b> de ${BRL(d.meta)}${d.falta>0?` · faltam <b>${BRL(d.falta)}</b>`
+        +(d.por_dia>0?` — <b>${BRL(d.por_dia)}</b> por dia ${d.restam===1?'no último dia':`nos ${d.restam} dias que restam`}`:''):' · meta batida 🎯'}</div>`;
+  }else m.hidden=true;
+
+  const box=document.getElementById('vendas');
+  document.getElementById('vMeta').textContent=d.ultimas.length?`${d.ultimas.length} ${pl(d.ultimas.length,'venda')}`:'';
+  box.innerHTML=d.ultimas.length?d.ultimas.map(v=>{
+    const canc=v.payment_status==='cancelado',fiado=v.payment_status==='pendente';
+    return `<div class="vrow${canc?' canc':''}"><div>
+      <div class="n">${esc(v.customer_name||'Sem cliente')}${fiado?'<span class="tag fiado">fiado</span>':''}${canc?'<span class="tag">cancelada</span>':''}${v.trocas?`<span class="tag">${v.trocas} ${pl(v.trocas,'troca')}</span>`:''}</div>
+      <div class="s">${esc(v.code)} · ${quando(v.created_at)} · ${CANAL[v.canal]||'Balcão'}${v.payment_method&&!fiado?' · '+esc(v.payment_method):''}</div></div>
+      <div class="r">${BRL(v.total)}</div></div>`;}).join('')
+    :vazio('pdv','Nenhuma venda neste mês','As vendas que você lança no PDV aparecem aqui, com a comissão.');
+}
+document.getElementById('mes').onchange=carregar;
+carregar();
+</script>
+</body>
+</html>
