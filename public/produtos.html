@@ -143,6 +143,38 @@
     font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
   .aba.on{color:var(--brand-hi);border-bottom-color:var(--brand)}
 
+  /* ---- Repor: o que vendeu e acabou ---- */
+  .rdias{display:inline-flex;gap:3px;padding:3px;border:1px solid var(--line);border-radius:11px;background:var(--bg-elev)}
+  .rdias button{padding:7px 12px;border:none;background:none;color:var(--ink-3);font-size:12px;font-weight:700;border-radius:8px;cursor:pointer}
+  .rdias button.sel{background:var(--surface-2);color:var(--ink);box-shadow:var(--sh-1)}
+  .rp{display:grid;grid-template-columns:52px minmax(0,1fr);gap:8px var(--s3);padding:10px var(--s4);
+    border:1px solid var(--line);border-radius:var(--r);margin-bottom:6px;background:var(--surface)}
+  .rp .thumb{width:52px;height:52px;grid-row:1/span 2}
+  .rp .nm{font-weight:600;font-size:13.5px}
+  .rp .meta{font-size:11.5px;color:var(--ink-3);margin-top:2px}
+  .rp .meta b{color:var(--ink-2)}
+  .rts{display:flex;flex-wrap:wrap;gap:6px}
+  .rt{display:flex;align-items:center;gap:7px;padding:5px 6px 5px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg-elev)}
+  .rt .tn{font-family:var(--font-mono);font-weight:700;font-size:12.5px;color:var(--ink)}
+  .rt .ti{font-size:10.5px;color:var(--ink-3);line-height:1.3}
+  .rt .ti b{color:var(--warn)}
+  .rt input{width:58px;padding:6px 7px;font-size:13px;border-radius:7px;text-align:center;font-family:var(--font-mono)}
+  .rt.zero{opacity:.55}
+  .rgrupo-pe{display:flex;justify-content:flex-end;align-items:center;gap:var(--s3);margin:4px 0 var(--s5);flex-wrap:wrap}
+  .rgrupo-pe .meta{font-size:12px;color:var(--ink-3)}
+  .ped{padding:var(--s4);margin-bottom:8px;display:flex;flex-direction:column;gap:8px}
+  .ped .t{font-weight:700;font-size:14px}
+  .ped .t .meta{font-weight:400;font-size:12px;color:var(--ink-3);margin-left:6px}
+  .ped .it{font-size:12.5px;color:var(--ink-2);line-height:1.6}
+  .ped .acts{display:flex;gap:6px;flex-wrap:wrap}
+  .banner-ped{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;margin-bottom:var(--s3);
+    border-radius:var(--r);border:1px solid rgba(47,210,79,.4);background:rgba(47,210,79,.08);font-size:12.5px;color:var(--ink-2)}
+  .banner-ped[hidden]{display:none}
+  .lin .cf{color:var(--brand-hi)}
+  .tag.giro{color:var(--ink-3);background:var(--surface-2)}
+  .tag.giro.ok{color:var(--ok);background:rgba(53,192,138,.1)}
+  .tag.giro.lento{color:var(--warn);background:rgba(232,163,23,.1)}
+
   /* ---- Entradas de mercadoria ---- */
 
   .layout{display:grid;grid-template-columns:1fr 380px;gap:var(--s4);align-items:start}
@@ -229,6 +261,7 @@
 
   <div class="abas">
     <button class="aba on" data-t="produtos" type="button">Produtos</button>
+    <button class="aba" data-t="repor" type="button">Repor</button>
     <button class="aba" data-t="entradas" type="button">Entradas</button>
     <button class="aba" data-t="conferir" type="button">Na loja × encomenda</button>
   </div>
@@ -311,7 +344,23 @@
   <div class="rowsw" id="rows"></div>
   </div>
 
+  <div data-pane="repor" hidden>
+    <div class="card conf-intro">
+      <p>O que <b class="g">vendeu e acabou</b> — ou vendeu mais do que sobrou. A sugestão de cada tamanho é
+        <b>o que vendeu − o que tem − o que já está pedido</b>: repor o que saiu, no ritmo em que saiu. Mude o
+        número à vontade (0 tira do pedido). Sob encomenda fica de fora: o par vem do fornecedor na hora da venda.</p>
+      <div class="conf-acao"><span class="hint">Vendeu nos últimos</span>
+        <div class="rdias" id="rDias"><button type="button" data-d="15">15 dias</button><button type="button" data-d="30" class="sel">30 dias</button>
+          <button type="button" data-d="60">60 dias</button><button type="button" data-d="90">90 dias</button></div></div>
+    </div>
+    <div class="conf-res" id="rRes"></div>
+    <div id="rPedidos"></div>
+    <div id="rLista"><div class="sk" style="height:80px"></div></div>
+  </div>
+
   <div data-pane="entradas" hidden>
+  <div class="banner-ped" id="bannerPed" hidden><span id="bannerPedTxt"></span>
+    <button type="button" class="btn ghost sm" id="bannerPedSair">Não é deste pedido</button></div>
 
   <div class="layout">
     <div>
@@ -362,6 +411,21 @@
   </div>
   </div>
 </div>
+
+<dialog id="dlgPed">
+  <form class="dlg" method="dialog">
+    <h3>Pedido ao fornecedor</h3>
+    <div class="hint" id="pedResumo"></div>
+    <div class="field"><label>Fornecedor *</label>
+      <input id="pedForn" list="fornList" placeholder="Nome do fornecedor" autocomplete="off">
+      <div class="hint">Se for novo, é cadastrado sozinho.</div></div>
+    <div class="field"><label>Observação</label><input id="pedObs" placeholder="Prazo, condição, combinado…"></div>
+    <div class="dlg-foot">
+      <button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn primary" id="pedOk" value="ok" type="submit">Criar pedido</button>
+    </div>
+  </form>
+</dialog>
 
 <dialog id="dlg">
   <form class="dlg" method="dialog">
@@ -730,7 +794,7 @@ function render(){
   for(const [id,it] of carrinho){
     const el=document.createElement('div');el.className='lin';
     el.innerHTML=`<div class="who"><div class="nm">${esc(it.v.product_name)} · ${esc(it.v.variant_name||'Único')}</div>
-        <div class="meta">${esc(it.v.brand||'sem marca')}${it.v.cost>0?' · custo atual '+BRL(it.v.cost):' · sem custo'}</div></div>
+        <div class="meta">${esc(it.v.brand||'sem marca')}${it.v.cost>0?' · custo atual '+BRL(it.v.cost):' · sem custo'}<span class="cf"></span></div></div>
       <input class="q" type="number" min="1" step="1" value="${it.qty}" inputmode="numeric" aria-label="quantidade">
       <input class="c" type="number" min="0" step="0.01" value="${it.custo>0?it.custo:''}"
         placeholder="0,00" inputmode="decimal" aria-label="custo unitário">
@@ -751,6 +815,10 @@ function totais(){
   document.getElementById('tItens').textContent=BRL(it);
   document.getElementById('tFrete').textContent=BRL(fr);
   document.getElementById('tTotal').textContent=BRL(it+fr);
+  // O frete vai para dentro do custo de cada peça, pelo valor dela.
+  const linhas=[...document.querySelectorAll('#lins .lin')];
+  [...carrinho.values()].forEach((x,i)=>{const cf=linhas[i]?.querySelector('.cf');if(!cf)return;
+    cf.textContent=fr>0&&it>0&&x.custo>0?` · com frete ${BRL(x.custo+(fr*x.custo/it))}`:'';});
   // Só libera quando toda peça tem custo — entrada sem custo não serve.
   const semCusto=[...carrinho.values()].some(x=>!(x.custo>0));
   document.getElementById('lancar').disabled=!carrinho.size||semCusto;
@@ -778,20 +846,31 @@ document.getElementById('lancar').onclick=async()=>{
       body:JSON.stringify({items,supplier_name:document.getElementById('forn').value.trim(),
         freight:parseFloat(document.getElementById('frete').value)||0,
         paid:pago==='1',due_date:document.getElementById('venc').value||null,
+        pedido_id:PEDIDO_ATUAL?PEDIDO_ATUAL.id:null,
         note:document.getElementById('obs').value.trim()})});
     const sinc=r.stock_synced?' · estoque atualizado na loja'
       :r.stock_na_fila?' · estoque sobe para a loja na próxima rodada'
-      :(r.notes&&r.notes.length?' · estoque não sincronizou':'');
+      :(r.notes&&r.notes.some(n=>/demonstra/i.test(n))?' · demonstração: estoque não vai para a loja'
+      :(r.notes&&r.notes.length?' · estoque não sincronizou':''));
     toast(`${r.code} · ${BRL(r.total)}`,
       `${r.pecas} ${pl(r.pecas,'peça')} em ${r.itens} ${pl(r.itens,'item','itens')}${r.fornecedor?' · '+r.fornecedor:''}`
-      +` · ${r.paid?'pago':'a pagar'}${sinc}`);
+      +` · ${r.paid?'pago':'a pagar'}${r.pedido?' · fechou o '+r.pedido:''}${r.frete_no_custo?' · frete somado ao custo das peças':''}${sinc}`);
     carrinho.clear();
-    ['frete','obs','venc'].forEach(i=>document.getElementById(i).value='');
+    if(PEDIDO_ATUAL){PEDIDO_ATUAL=null;document.getElementById('bannerPed').hidden=true;if(reporCarregado)repor();}
+    ['forn','frete','obs','venc'].forEach(i=>document.getElementById(i).value='');
     render();historico();fornecedores();
   }catch(e){toast('Não deu pra lançar',e.message,true);}
   finally{b.disabled=false;b.textContent=t;totais();}
 };
 
+// Giro: quanto da compra já vendeu. Depois de 30 dias, menos da metade
+// vendida é dinheiro parado — vale olhar antes de comprar de novo.
+function giro(c){
+  if(!c.items_count)return '';
+  const pct=Math.round((c.vendidas/c.items_count)*100),dias=(Date.now()-new Date(c.created_at))/864e5;
+  const cls=pct>=70?'ok':(dias>=30&&pct<50?'lento':'');
+  return `<span class="tag giro ${cls}" title="Peças desta entrada que já venderam">vendeu ${c.vendidas}/${c.items_count}</span>`;
+}
 async function historico(){
   const d=await api('/api/purchases?days=90');
   document.getElementById('histMeta').textContent=
@@ -801,7 +880,7 @@ async function historico(){
   if(!d.compras.length){box.innerHTML=vazio('recibo','Nenhuma entrada ainda','O que você lançar aqui aparece nesta lista.');return;}
   box.innerHTML=d.compras.map(c=>`<div class="h">
       <div><div>${esc(c.code)}${esc(c.supplier_name?' · '+c.supplier_name:'')}
-        <span class="tag ${c.paid?'pg':'ap'}">${c.paid?'pago':'a pagar'}</span></div>
+        <span class="tag ${c.paid?'pg':'ap'}">${c.paid?'pago':'a pagar'}</span>${giro(c)}</div>
         <div class="c">${D(c.created_at)} · ${c.items_count} ${pl(c.items_count,'peça')}${c.note?' · '+esc(c.note):''}</div></div>
       <div class="v">${BRL(c.total)}</div>
     </div>`).join('');
@@ -814,6 +893,148 @@ async function fornecedores(){
 }
 
 function iniciarEntradas(){render();historico();fornecedores();}
+
+/* ================= REPOR → PEDIDO → ENTRADA =================
+   A compra começa pela venda: o que saiu e não tem mais. Cada fornecedor
+   vira um pedido; o pedido em aberto sai da sugestão; quando a mercadoria
+   chega, o pedido vira a entrada (que grava estoque, custo e despesa). */
+let RDIAS=30,REPOR=null;
+const RQ=new Map();   // variant_id -> quanto pedir (começa na sugestão)
+const fotoP=(url)=>url?`<img src="${esc(url)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:ICO('estoque',18)}))">`:ICO('estoque',18);
+async function repor(){
+  const [d,peds]=await Promise.all([api('/api/repor?dias='+RDIAS),api('/api/pedidos?status=aberto')]);
+  REPOR=d;RQ.clear();
+  for(const p of d.produtos)for(const t of p.tamanhos)RQ.set(t.variant_id,t.sugestao);
+  document.getElementById('rRes').innerHTML=d.produtos.length
+    ?`<span>Para repor: <b>${d.resumo.produtos}</b> ${pl(d.resumo.produtos,'produto')}</span>
+      <span>Peças sugeridas: <b>${d.resumo.pecas}</b></span>
+      <span>A custo: <b class="g">${BRL(d.resumo.valor)}</b>${d.resumo.sem_custo?` <span class="hint">(${d.resumo.sem_custo} sem custo — não entram na conta)</span>`:''}</span>`:'';
+  pedidosAbertos(peds);
+  listaRepor();
+}
+function listaRepor(){
+  const box=document.getElementById('rLista'),d=REPOR;
+  if(!d.produtos.length){box.innerHTML=vazio('ok','Nada para repor',`Tudo o que vendeu nos últimos ${d.dias} dias ainda tem na loja (ou já está pedido).`);return;}
+  // Um grupo por fornecedor (o da última compra do produto).
+  const grupos=new Map();
+  for(const p of d.produtos){const k=p.fornecedor?p.fornecedor.nome:'';
+    if(!grupos.has(k))grupos.set(k,[]);grupos.get(k).push(p);}
+  const chaves=[...grupos.keys()].sort((a,b)=>(a===''?1:0)-(b===''?1:0)||a.localeCompare(b));
+  box.innerHTML=chaves.map((k,gi)=>{
+    const ps=grupos.get(k);
+    return `<div class="sec"><h2>${k?esc(k):'Sem fornecedor ainda'}</h2><span class="rule"></span>
+        <span class="meta">${k?'última compra foi dele':'ainda não houve entrada desses produtos'}</span></div>
+      ${ps.map(p=>`<div class="rp">
+        <span class="thumb">${fotoP(p.image_url)}</span>
+        <div><div class="nm">${esc(p.nome)}</div>
+          <div class="meta">${esc(p.marca||'sem marca')} · vendeu <b>${p.vendidas}</b> em ${d.dias} dias · ${BRL(p.faturou)}</div></div>
+        <div class="rts">${p.tamanhos.map(t=>`<label class="rt" data-v="${t.variant_id}">
+            <span class="tn">${esc(t.nome||'Único')}</span>
+            <span class="ti">vendeu ${t.vendidas} · tem ${t.estoque===0?'<b>0</b>':t.estoque}${t.pedido?' · pedido '+t.pedido:''}</span>
+            <input type="number" min="0" step="1" inputmode="numeric" value="${RQ.get(t.variant_id)}" aria-label="quanto pedir"></label>`).join('')}</div>
+      </div>`).join('')}
+      <div class="rgrupo-pe"><span class="meta" id="gTot${gi}"></span>
+        <button class="btn primary" type="button" data-pedir="${gi}">Fazer pedido${k?' para '+esc(k):''}</button></div>`;
+  }).join('');
+  box.querySelectorAll('.rt input').forEach(inp=>inp.oninput=()=>{
+    const vid=Number(inp.closest('.rt').dataset.v);
+    RQ.set(vid,Math.max(0,parseInt(inp.value,10)||0));
+    inp.closest('.rt').classList.toggle('zero',!RQ.get(vid));totaisGrupos();
+  });
+  box.querySelectorAll('[data-pedir]').forEach(b=>b.onclick=()=>{
+    const k=chaves[Number(b.dataset.pedir)];abrirPedido(k,grupos.get(k));});
+  RGRUPOS={chaves,grupos};totaisGrupos();
+}
+let RGRUPOS=null;
+const itensDoGrupo=(ps)=>ps.flatMap(p=>p.tamanhos.map(t=>({p,t,qty:RQ.get(t.variant_id)||0}))).filter(x=>x.qty>0);
+function totaisGrupos(){
+  RGRUPOS.chaves.forEach((k,gi)=>{
+    const its=itensDoGrupo(RGRUPOS.grupos.get(k));
+    const pecas=its.reduce((s,x)=>s+x.qty,0),valor=its.reduce((s,x)=>s+x.qty*(x.t.custo||0),0);
+    document.getElementById('gTot'+gi).textContent=pecas?`${pecas} ${pl(pecas,'peça')}${valor>0?' · ~'+BRL(valor)+' a custo':''}`:'nada marcado';
+    document.querySelector(`[data-pedir="${gi}"]`).disabled=!pecas;
+  });
+}
+const dlgPed=document.getElementById('dlgPed');let PED_ITENS=[];
+function abrirPedido(forn,ps){
+  PED_ITENS=itensDoGrupo(ps);
+  const pecas=PED_ITENS.reduce((s,x)=>s+x.qty,0);
+  document.getElementById('pedResumo').textContent=`${pecas} ${pl(pecas,'peça')} de ${new Set(PED_ITENS.map(x=>x.p.product_id)).size} ${pl(new Set(PED_ITENS.map(x=>x.p.product_id)).size,'produto')}.`
+    +' O que entra no pedido sai da sugestão até chegar.';
+  document.getElementById('pedForn').value=forn||'';document.getElementById('pedObs').value='';
+  fornecedores();dlgPed.showModal();
+}
+document.getElementById('pedOk').onclick=async(e)=>{
+  e.preventDefault();
+  const forn=document.getElementById('pedForn').value.trim();
+  if(!forn)return alert('De qual fornecedor é o pedido?');
+  try{
+    const r=await api('/api/pedidos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      supplier_name:forn,note:document.getElementById('pedObs').value.trim(),
+      items:PED_ITENS.map(x=>({variant_id:x.t.variant_id,qty:x.qty,unit_cost:x.t.custo||0}))})});
+    dlgPed.close();toast(r.pedido.code+' criado',`${r.pedido.pecas} ${pl(r.pedido.pecas,'peça')} para ${r.pedido.supplier_name}. Agora é só mandar no WhatsApp.`);
+    repor();
+  }catch(err){alert(err.message);}
+};
+// O texto que vai para o fornecedor: produto e tamanhos, sem custo.
+function textoPedido(p){
+  const por=new Map();
+  for(const i of p.itens){const k=i.product_name||i.name;if(!por.has(k))por.set(k,[]);por.get(k).push(`${i.variant_name||'Único'}: ${i.qty}`);}
+  return `Olá! Pedido da VN Store (${p.code}):\n`+[...por].map(([n,ts])=>`• ${n} — ${ts.join(', ')}`).join('\n')
+    +`\nTotal: ${p.pecas} ${pl(p.pecas,'peça')}.${p.note?'\nObs.: '+p.note:''}`;
+}
+function pedidosAbertos(peds){
+  const box=document.getElementById('rPedidos');
+  if(!peds.length){box.innerHTML='';return;}
+  box.innerHTML=`<div class="sec" style="margin-top:0"><h2>Pedidos em aberto</h2><span class="rule"></span>
+      <span class="meta">pedido e ainda não chegou — não entra na sugestão</span></div>`
+    +peds.map(p=>{
+      const por=new Map();
+      for(const i of p.itens){const k=i.product_name||i.name;if(!por.has(k))por.set(k,[]);por.get(k).push(`${esc(i.variant_name||'Único')} ×${i.qty}`);}
+      return `<div class="card ped" data-ped="${p.id}">
+        <div class="t">${esc(p.code)} · ${esc(p.supplier_name||'sem fornecedor')}<span class="meta">${D(p.created_at)} · ${p.pecas} ${pl(p.pecas,'peça')}${p.valor>0?' · ~'+BRL(p.valor):''}</span></div>
+        <div class="it">${[...por].map(([n,ts])=>`<b>${esc(n)}</b>: ${ts.join(', ')}`).join(' · ')}</div>
+        ${p.note?`<div class="hint">${esc(p.note)}</div>`:''}
+        <div class="acts">
+          <a class="btn sm primary" target="_blank" rel="noopener" href="https://wa.me/${(p.supplier_phone||'').replace(/\D/g,'')}?text=${encodeURIComponent(textoPedido(p))}">Mandar no WhatsApp</a>
+          <button class="btn sm ghost" type="button" data-copiar="${p.id}">Copiar texto</button>
+          <button class="btn sm" type="button" data-chegou="${p.id}">Chegou — lançar entrada</button>
+          <button class="btn sm ghost" type="button" data-cancelar="${p.id}">Cancelar</button>
+        </div></div>`;}).join('');
+  const achar=(id)=>peds.find(x=>String(x.id)===String(id));
+  box.querySelectorAll('[data-copiar]').forEach(b=>b.onclick=async()=>{
+    try{await navigator.clipboard.writeText(textoPedido(achar(b.dataset.copiar)));toast('Copiado','Cole na conversa com o fornecedor.');}
+    catch(_){prompt('Copie o texto do pedido:',textoPedido(achar(b.dataset.copiar)));}
+  });
+  box.querySelectorAll('[data-cancelar]').forEach(b=>b.onclick=async()=>{
+    const p=achar(b.dataset.cancelar);
+    if(!confirm(`Cancelar ${p.code}? As peças voltam para a sugestão de reposição.`))return;
+    try{await api('/api/pedidos/'+p.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'cancelado'})});repor();}
+    catch(e){alert(e.message);}
+  });
+  box.querySelectorAll('[data-chegou]').forEach(b=>b.onclick=()=>pedidoChegou(achar(b.dataset.chegou)));
+}
+// Chegou: o pedido vira a entrada já preenchida. Confere quantidade e o
+// custo que veio na nota, põe o frete, e lança.
+let PEDIDO_ATUAL=null;
+function pedidoChegou(p){
+  document.querySelector('.aba[data-t="entradas"]').click();
+  carrinho.clear();
+  for(const i of p.itens){
+    if(!i.variant_id)continue;
+    carrinho.set(i.variant_id,{v:{id:i.variant_id,product_name:i.product_name,variant_name:i.variant_name,brand:i.brand,cost:i.custo_atual},
+      qty:i.qty,custo:i.unit_cost||i.custo_atual||0});
+  }
+  document.getElementById('forn').value=p.supplier_name||'';
+  PEDIDO_ATUAL=p;
+  document.getElementById('bannerPedTxt').innerHTML=`Entrada do pedido <b>${esc(p.code)}</b> · ${esc(p.supplier_name||'')} — confira as quantidades e o custo que veio na nota. Ao lançar, o pedido fecha.`;
+  document.getElementById('bannerPed').hidden=false;
+  render();window.scrollTo({top:0,behavior:'smooth'});
+}
+document.getElementById('bannerPedSair').onclick=()=>{PEDIDO_ATUAL=null;document.getElementById('bannerPed').hidden=true;};
+document.getElementById('rDias').onclick=(e)=>{const b=e.target.closest('button');if(!b)return;
+  document.querySelectorAll('#rDias button').forEach(x=>x.classList.toggle('sel',x===b));RDIAS=Number(b.dataset.d);repor();};
+let reporCarregado=false;
 
 // ---- Na loja × encomenda ----
 let CONF=[];
@@ -902,11 +1123,13 @@ document.querySelectorAll('.aba').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.aba').forEach(x=>x.classList.toggle('on',x===b));
   document.querySelectorAll('[data-pane]').forEach(x=>{x.hidden=x.dataset.pane!==b.dataset.t;});
   if(b.dataset.t==='entradas'&&!entradasCarregadas){entradasCarregadas=true;iniciarEntradas();}
+  if(b.dataset.t==='repor'&&!reporCarregado){reporCarregado=true;repor();fornecedores();}
   if(b.dataset.t==='conferir'&&!conferirCarregado){conferirCarregado=true;iniciarConferir();}
 });
 // Quem chega por /compras cai direto na aba certa — depois dos cliques existirem.
 if(location.pathname.startsWith('/compras'))document.querySelector('.aba[data-t="entradas"]').click();
 if(location.pathname.startsWith('/encomenda'))document.querySelector('.aba[data-t="conferir"]').click();
+if(location.pathname.startsWith('/repor'))document.querySelector('.aba[data-t="repor"]').click();
 </script>
 </body>
 </html>

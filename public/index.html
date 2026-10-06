@@ -188,7 +188,8 @@
 
   <div class="cols" style="margin-top:var(--s3)">
     <div class="card panel">
-      <h3>Estoque no vermelho</h3>
+      <h3 style="display:flex;justify-content:space-between;align-items:center">Estoque no vermelho
+        <a href="/repor" style="font-size:12px;font-weight:700;color:var(--brand-hi);text-transform:none;letter-spacing:0">Repor →</a></h3>
       <div class="rows" id="low"></div>
     </div>
     <div class="card panel" id="painelLem">
@@ -414,7 +415,7 @@ async function load(){
   if(R.atrasados>0) tags.push(`<a class="m-tag crit" href="#painelLem">${ICO('alerta',13)}${R.atrasados} ${pl(R.atrasados,'lembrete')} ${pl(R.atrasados,'atrasado')}</a>`);
   if(R.hoje>0) tags.push(`<a class="m-tag warn" href="#painelLem">${ICO('calendario',13)}${R.hoje} pra hoje</a>`);
   if(d.receivable_count>0) tags.push(`<a class="m-tag warn" href="/clientes">${ICO('recibo',13)}${BRL(d.receivable_total)} a receber</a>`);
-  if(d.low_stock>0) tags.push(`<a class="m-tag warn" href="/produtos">${ICO('estoque',13)}${d.low_stock} acabando</a>`);
+  if(d.low_stock>0) tags.push(`<a class="m-tag warn" href="/repor">${ICO('estoque',13)}${d.low_stock} acabando</a>`);
   if(!tags.length) tags.push(`<span class="m-tag ok">${ICO('ok',13)}Tudo em dia</span>`);
   document.getElementById('maestroTags').innerHTML=tags.join('');
 }

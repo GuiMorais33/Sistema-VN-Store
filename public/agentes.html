@@ -120,6 +120,9 @@ async function load(){
      txt:R.atrasados>0?`<b>${R.atrasados}</b> ${pl(R.atrasados,'lembrete passou','lembretes passaram')} da data e <b>${R.abertos}</b> ${pl(R.abertos,'está','estão')} em aberto.`
         :(R.hoje>0?`<b>${R.hoje}</b> ${pl(R.hoje,'lembrete vence','lembretes vencem')} hoje.`:(R.abertos>0?`<b>${R.abertos}</b> ${pl(R.abertos,'lembrete')} em aberto, nenhum vencido.`:'Nada pendente por aqui.')),
      link:'/lembretes',linkTxt:'Ver lembretes',meta:'pagamentos e encomendas'},
+    {nome:'Compras',fn:'Repor & fornecedores',ico:'etiqueta',tone:'brand',estado:'Ativo',pill:'live',k:'Como funciona',
+     txt:'Mostra o que vendeu e acabou, monta o pedido de cada fornecedor (pronto para o WhatsApp) e, quando chega, vira a entrada com o custo certo.',
+     link:'/repor',linkTxt:'Ver o que repor',meta:'a partir das vendas'},
   ];
   const futuros=[
     {nome:'Atendimento',fn:'SAC · WhatsApp',ico:'conversa',estado:'Em breve',k:'Vai fazer',soon:true,
@@ -128,8 +131,6 @@ async function load(){
      txt:'Calendário de posts e campanhas a partir do que mais vende na loja.',meta:'roadmap'},
     {nome:'Logística',fn:'Envios & rastreio',ico:'entrega',estado:'Em breve',k:'Vai fazer',soon:true,
      txt:'Acompanhar encomendas e avisar o cliente antes dele perguntar.',meta:'roadmap'},
-    {nome:'Compras',fn:'Fornecedores',ico:'etiqueta',estado:'Em breve',k:'Vai fazer',soon:true,
-     txt:'Sugerir reposição dos campeões de venda e organizar cotações.',meta:'roadmap'},
   ];
   document.getElementById('ativos').innerHTML=ativos.map(card).join('');
   document.getElementById('futuros').innerHTML=futuros.map(card).join('');

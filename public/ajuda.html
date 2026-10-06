@@ -73,7 +73,7 @@
       <a href="#inicio">Início</a>
       <a href="#pdv">Vender no PDV</a>
       <a href="#estoque">Estoque</a>
-      <a href="#compras">Entradas e custos</a>
+      <a href="#compras">Compra: repor, pedir, receber</a>
       <a href="#crm">Clientes</a>
       <a href="#negocio">Visão do negócio</a>
       <a href="#financeiro">Financeiro e lucro</a>
@@ -305,10 +305,26 @@
 
       <!-- COMPRAS E CUSTOS -->
       <section id="compras" class="card">
-        <h2><span class="ico-box brand" id="i12"></span>Compras e custos</h2>
-        <p>Fica em <span class="rota">Estoque → Entradas</span>: a segunda aba da tela de produtos.</p>
+        <h2><span class="ico-box brand" id="i12"></span>Compra: repor, pedir, receber</h2>
+        <p>No streetwear o lucro se decide na compra. O caminho inteiro fica no <span class="rota">Estoque</span>,
+          em três passos que se ligam sozinhos:</p>
+        <ol class="passos">
+          <li><div><b>Repor</b> — a aba mostra o que <b>vendeu e acabou</b> (ou vendeu mais do que
+            sobrou). Para cada tamanho, a sugestão é <b>o que vendeu − o que tem − o que já está
+            pedido</b>: repor o que saiu, no ritmo em que saiu. Escolha a janela (15, 30, 60 ou 90 dias)
+            e mude qualquer número (0 tira do pedido). Sob encomenda fica de fora — o par vem do
+            fornecedor na hora da venda.</div></li>
+          <li><div><b>Pedir</b> — os produtos vêm agrupados pelo <b>último fornecedor</b> de cada um.
+            <b>Fazer pedido</b> cria o pedido daquele fornecedor; <b>Mandar no WhatsApp</b> abre a conversa
+            com a lista pronta (produto e tamanhos, sem preço). Enquanto o pedido está aberto, o que foi
+            pedido <b>sai da sugestão</b> — o sistema não manda pedir de novo.</div></li>
+          <li><div><b>Receber</b> — quando a mercadoria chega, <b>Chegou — lançar entrada</b> abre a
+            entrada já preenchida com o pedido. Confira as quantidades e o custo que veio na nota, ponha
+            o frete e lance. O pedido fecha sozinho.</div></li>
+        </ol>
         <p>Sem custo preenchido, três números do sistema mentem: a <b>margem</b> da venda, o
-          <b>valor do estoque</b> e o <b>lucro</b> do mês. Aqui é onde isso se resolve.</p>
+          <b>valor do estoque</b> e o <b>lucro</b> do mês. A entrada é o jeito de o custo nunca mais
+          ficar vazio; para o que já está na loja, use os custos em massa.</p>
 
         <h3>Custos em massa</h3>
         <p>Em <span class="rota">Estoque</span>, o botão <b>Custos em massa</b> avisa quantos produtos
@@ -330,20 +346,23 @@
         </ul>
 
         <h3>Entrada de mercadoria</h3>
-        <p>Na aba <span class="rota">Compras</span>, você lança o que chegou do fornecedor uma vez e
+        <p>Na aba <span class="rota">Entradas</span>, você lança o que chegou do fornecedor uma vez e
           o sistema resolve <b>três coisas de uma vez</b>:</p>
         <div class="tw"><table>
           <tr><th>O que acontece</th><th>Detalhe</th></tr>
           <tr><td>Soma o estoque</td><td>Aqui e na Nuvemshop. Em produto <b>sob encomenda</b>, sobe
             só o "em mãos" — a grade do site é sua.</td></tr>
-          <tr><td>Atualiza o custo</td><td>O custo que você digitou na entrada passa a ser o custo
-            da peça, então a margem das próximas vendas já sai certa.</td></tr>
+          <tr><td>Atualiza o custo</td><td>O custo da nota <b>mais a parte do frete</b> passa a ser o
+            custo da peça — o frete é dividido pelo valor de cada item (peça de R$ 100 carrega o dobro de
+            frete da de R$ 50). Assim a margem das próximas vendas já sai certa.</td></tr>
           <tr><td>Lança no caixa</td><td>Vira despesa em <b>Compra de mercadoria</b>. Se marcar
             <b>A pagar</b>, fica agendada com vencimento em vez de sair do caixa agora.</td></tr>
         </table></div>
-        <p>O <b>fornecedor</b> é cadastrado sozinho se for novo, e o <b>frete</b> entra no total da
-          despesa. O botão só libera quando <b>toda peça tem custo</b> — entrada sem custo não serve
-          para nada.</p>
+        <p>O <b>fornecedor</b> é cadastrado sozinho se for novo. O botão só libera quando <b>toda peça
+          tem custo</b> — entrada sem custo não serve para nada.</p>
+        <p><b>A compra girou?</b> Em <b>Últimas entradas</b>, cada uma mostra quanto já vendeu
+          ("vendeu 7/10"). Verde quando vendeu 70% ou mais; amarelo quando passou de 30 dias e não vendeu
+          nem a metade — é dinheiro parado, vale lembrar antes de comprar daquele jeito de novo.</p>
 
         <div class="aviso dica"><span class="ico" id="d6"></span>
           <div>Comece pela <b>marca que mais vende</b> nos custos em massa. Depois disso, use a

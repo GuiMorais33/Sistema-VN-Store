@@ -1017,17 +1017,28 @@ app.post('/api/purchases', async (req, res) => {
   const frete = money(Math.max(0, parseFloat(b.freight) || 0));
   const totalItens = money(linhas.reduce((s, l) => s + l.total, 0));
   const total = money(totalItens + frete);
+  // O frete entra no custo da peça, dividido pelo valor de cada item: peça
+  // que custou R$ 100 carrega o dobro de frete da que custou R$ 50. Sem
+  // isso a margem sai maior do que é.
+  for (const l of linhas) {
+    const parte = totalItens > 0 ? (frete * l.total) / totalItens : 0;
+    l.custoFinal = money(l.custo + parte / l.qty);
+  }
+  // Veio de um pedido ao fornecedor? A entrada fecha ele.
+  const pedido = b.pedido_id ? db.prepare("SELECT * FROM pedidos_compra WHERE id = ? AND status = 'aberto'").get(b.pedido_id) : null;
   const pago = b.paid === false ? 0 : 1;
   const ts = now();
   const code = 'EM-' + String(db.prepare('SELECT COALESCE(MAX(id),0)+1 AS n FROM purchases').get().n).padStart(5, '0');
 
   const compraId = db.transaction(() => {
-    const id = db.prepare(`INSERT INTO purchases (code, supplier_id, supplier_name, note, items_count, total, freight, paid, due_date, created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`)
-      .run(code, fornId, fornNome, b.note || '', linhas.reduce((s, l) => s + l.qty, 0), total, frete, pago, b.due_date || null, ts).lastInsertRowid;
+    const id = db.prepare(`INSERT INTO purchases (code, supplier_id, supplier_name, note, items_count, total, freight, paid, due_date, pedido_id, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(code, fornId, fornNome, b.note || '', linhas.reduce((s, l) => s + l.qty, 0), total, frete, pago, b.due_date || null,
+        pedido ? pedido.id : null, ts).lastInsertRowid;
+    if (pedido) db.prepare("UPDATE pedidos_compra SET status = 'chegou', purchase_id = ?, updated_at = ? WHERE id = ?").run(id, ts, pedido.id);
 
-    const insItem = db.prepare(`INSERT INTO purchase_items (purchase_id, variant_id, name, qty, unit_cost, line_total)
-      VALUES (?,?,?,?,?,?)`);
+    const insItem = db.prepare(`INSERT INTO purchase_items (purchase_id, variant_id, name, qty, unit_cost, line_total, custo_final)
+      VALUES (?,?,?,?,?,?,?)`);
     // Entrada soma o que existe de verdade (em mãos). O número do site
     // só sobe em produto de estoque próprio — sob encomenda a grade é sua.
     // Em estoque próprio "em mãos" é o próprio estoque — mantém os dois
@@ -1039,9 +1050,9 @@ app.post('/api/purchases', async (req, res) => {
     const insMove = db.prepare('INSERT INTO stock_movements (variant_id, delta, reason, ref, created_at) VALUES (?,?,?,?,?)');
 
     for (const l of linhas) {
-      insItem.run(id, l.v.id, `${l.v.product_name} ${l.v.variant_name}`, l.qty, l.custo, l.total);
-      if (l.v.on_demand) updEncomenda.run(l.qty, l.custo, ts, l.v.id);
-      else updProprio.run(l.qty, l.qty, l.qty, l.custo, ts, l.v.id);
+      insItem.run(id, l.v.id, `${l.v.product_name} ${l.v.variant_name}`, l.qty, l.custo, l.total, l.custoFinal);
+      if (l.v.on_demand) updEncomenda.run(l.qty, l.custoFinal, ts, l.v.id);
+      else updProprio.run(l.qty, l.qty, l.qty, l.custoFinal, ts, l.v.id);
       insMove.run(l.v.id, l.qty, 'entrada', code, ts);
     }
 
@@ -1067,7 +1078,8 @@ app.post('/api/purchases', async (req, res) => {
   res.json({
     ok: true, code, total, itens: linhas.length,
     pecas: linhas.reduce((s, l) => s + l.qty, 0),
-    fornecedor: fornNome, paid: !!pago,
+    fornecedor: fornNome, paid: !!pago, pedido: pedido ? pedido.code : null,
+    frete_no_custo: frete > 0,
     stock_synced: sincOk && isLive(), notes: notas, stock_na_fila: estoqueNaFila,
   });
 });
@@ -1077,6 +1089,14 @@ app.get('/api/purchases', (req, res) => {
   const dias = parseInt(req.query.days, 10) || 90;
   const desde = new Date(Date.now() - dias * 864e5).toISOString();
   const rows = db.prepare(`SELECT * FROM purchases WHERE created_at >= ? ORDER BY id DESC LIMIT 100`).all(desde);
+  // Giro: de cada entrada, quanto já vendeu desde que chegou. Por peça,
+  // limitado ao que entrou (o que vendeu além disso veio de outra compra).
+  const itensDe = db.prepare('SELECT variant_id, qty FROM purchase_items WHERE purchase_id = ?');
+  const vendeuDesde = db.prepare(`SELECT COALESCE(SUM(i.qty),0) n FROM sale_items i JOIN sales s ON s.id = i.sale_id
+    WHERE i.variant_id = ? AND s.created_at >= ? AND ${VENDA('s.')}`);
+  for (const c of rows) {
+    c.vendidas = itensDe.all(c.id).reduce((t, it) => t + Math.min(it.qty, Math.max(0, vendeuDesde.get(it.variant_id, c.created_at).n)), 0);
+  }
   const tot = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(total),0) total,
       COALESCE(SUM(CASE WHEN paid = 0 THEN total ELSE 0 END),0) a_pagar
     FROM purchases WHERE created_at >= ?`).get(desde);
@@ -1088,6 +1108,160 @@ app.get('/api/purchases/:id', (req, res) => {
   if (!c) return res.status(404).json({ error: 'Entrada não encontrada.' });
   c.items = db.prepare('SELECT * FROM purchase_items WHERE purchase_id = ? ORDER BY id').all(c.id);
   res.json(c);
+});
+
+// ==================== REPOR: O QUE VENDEU E ACABOU ====================
+// A compra começa pela venda: o que saiu nos últimos dias e não tem mais
+// (ou tem menos do que vendeu) é o que precisa voltar. Sugestão por tamanho:
+//   vendeu na janela − tem na loja − já está pedido (pedido em aberto)
+// Fora: sob encomenda (o par vem do fornecedor na hora, pela venda) e o que
+// a loja não controla estoque. Agrupado pelo último fornecedor do produto —
+// um pedido por fornecedor.
+app.get('/api/repor', (req, res) => {
+  const dias = [15, 30, 60, 90].includes(Number(req.query.dias)) ? Number(req.query.dias) : 30;
+  const desde = desdeDias(dias);
+  const linhas = db.prepare(`
+    SELECT v.id variant_id, v.product_id, v.product_name, v.variant_name, v.price, COALESCE(v.cost,0) cost,
+      MAX(0, COALESCE(v.stock,0)) estoque, p.brand, p.category, p.image_url,
+      SUM(i.qty) vendidas, SUM(i.line_total) faturou,
+      (SELECT COALESCE(SUM(pi.qty),0) FROM pedido_itens pi JOIN pedidos_compra pc ON pc.id = pi.pedido_id
+        WHERE pi.variant_id = v.id AND pc.status = 'aberto') pedido
+    FROM sale_items i JOIN sales s ON s.id = i.sale_id
+      JOIN variants v ON v.id = i.variant_id JOIN products p ON p.id = v.product_id
+    WHERE s.created_at >= ? AND ${VENDA('s.')} AND COALESCE(p.on_demand,0) = 0 AND v.stock_management = 1
+    GROUP BY v.id`).all(desde);
+  const ultimoForn = db.prepare(`SELECT pu.supplier_id, pu.supplier_name, pi.unit_cost, pu.created_at
+    FROM purchase_items pi JOIN purchases pu ON pu.id = pi.purchase_id JOIN variants vv ON vv.id = pi.variant_id
+    WHERE vv.product_id = ? ORDER BY pu.id DESC LIMIT 1`);
+  const porProduto = new Map();
+  for (const l of linhas) {
+    l.sugestao = Math.max(0, l.vendidas - l.estoque - l.pedido);
+    if (!porProduto.has(l.product_id)) {
+      const u = ultimoForn.get(l.product_id);
+      porProduto.set(l.product_id, {
+        product_id: l.product_id, nome: l.product_name, marca: l.brand || '', categoria: l.category || '',
+        image_url: l.image_url, vendidas: 0, faturou: 0, sugestao: 0, valor: 0,
+        fornecedor: u && u.supplier_name ? { id: u.supplier_id, nome: u.supplier_name } : null,
+        ultima_compra: u ? u.created_at : null, tamanhos: [],
+      });
+    }
+    const p = porProduto.get(l.product_id);
+    p.vendidas += l.vendidas; p.faturou = money(p.faturou + l.faturou);
+    if (l.sugestao > 0) {
+      p.sugestao += l.sugestao; p.valor = money(p.valor + l.sugestao * l.cost);
+      p.tamanhos.push({ variant_id: l.variant_id, nome: l.variant_name, vendidas: l.vendidas, estoque: l.estoque,
+        pedido: l.pedido, sugestao: l.sugestao, custo: l.cost, preco: l.price });
+    }
+  }
+  const produtos = [...porProduto.values()].filter((p) => p.sugestao > 0)
+    .sort((a, b) => b.faturou - a.faturou);
+  // Tamanhos na ordem da grade (P, M, G…), não na ordem em que venderam.
+  const ordem = db.prepare('SELECT id FROM variants WHERE product_id = ? ORDER BY id');
+  for (const p of produtos) {
+    const pos = new Map(ordem.all(p.product_id).map((v, i) => [v.id, i]));
+    p.tamanhos.sort((a, b) => pos.get(a.variant_id) - pos.get(b.variant_id));
+  }
+  const semCusto = produtos.filter((p) => p.tamanhos.some((t) => !(t.custo > 0))).length;
+  res.json({
+    dias, produtos,
+    resumo: { produtos: produtos.length, pecas: produtos.reduce((t, p) => t + p.sugestao, 0),
+      valor: money(produtos.reduce((t, p) => t + p.valor, 0)), sem_custo: semCusto },
+    pedidos_abertos: db.prepare("SELECT COUNT(*) n FROM pedidos_compra WHERE status = 'aberto'").get().n,
+  });
+});
+
+// ==================== PEDIDO AO FORNECEDOR ====================
+const fornecedorDe = (b) => {
+  let id = b.supplier_id ? Number(b.supplier_id) : null;
+  if (!id && b.supplier_name && String(b.supplier_name).trim()) {
+    const nome = String(b.supplier_name).trim();
+    const ex = db.prepare('SELECT id FROM suppliers WHERE lower(name) = lower(?)').get(nome);
+    id = ex ? ex.id : db.prepare('INSERT INTO suppliers (name, created_at) VALUES (?,?)').run(nome, now()).lastInsertRowid;
+  }
+  return id ? db.prepare('SELECT * FROM suppliers WHERE id = ?').get(id) : null;
+};
+function pedidoCompleto(id) {
+  const p = db.prepare('SELECT * FROM pedidos_compra WHERE id = ?').get(id);
+  if (!p) return null;
+  p.itens = db.prepare(`SELECT pi.*, v.product_name, v.variant_name, v.price, COALESCE(v.cost,0) custo_atual,
+      v.sku, pr.brand, pr.image_url, COALESCE(pr.on_demand,0) on_demand, MAX(0, COALESCE(v.stock,0)) estoque
+    FROM pedido_itens pi LEFT JOIN variants v ON v.id = pi.variant_id LEFT JOIN products pr ON pr.id = v.product_id
+    WHERE pi.pedido_id = ? ORDER BY pi.id`).all(id);
+  p.pecas = p.itens.reduce((t, i) => t + i.qty, 0);
+  p.valor = money(p.itens.reduce((t, i) => t + i.qty * (i.unit_cost || i.custo_atual || 0), 0));
+  const f = p.supplier_id ? db.prepare('SELECT phone FROM suppliers WHERE id = ?').get(p.supplier_id) : null;
+  p.supplier_phone = f ? f.phone || '' : '';
+  return p;
+}
+const lerItensPedido = (itens) => {
+  const getV = db.prepare('SELECT id, product_name, variant_name, COALESCE(cost,0) cost FROM variants WHERE id = ?');
+  const out = [];
+  for (const it of Array.isArray(itens) ? itens : []) {
+    const qty = parseInt(it.qty, 10) || 0;
+    if (qty <= 0) continue;
+    const v = getV.get(it.variant_id);
+    if (!v) throw Object.assign(new Error(`Produto não encontrado (id ${it.variant_id}).`), { status: 400 });
+    out.push({ v, qty, custo: money(it.unit_cost != null && it.unit_cost !== '' ? it.unit_cost : v.cost) });
+  }
+  return out;
+};
+
+app.get('/api/pedidos', (req, res) => {
+  const status = ['aberto', 'chegou', 'cancelado'].includes(req.query.status) ? req.query.status : 'aberto';
+  const ids = db.prepare(`SELECT id FROM pedidos_compra WHERE status = ? ORDER BY id DESC LIMIT 50`).all(status);
+  res.json(ids.map((r) => pedidoCompleto(r.id)));
+});
+app.get('/api/pedidos/:id', (req, res) => {
+  const p = pedidoCompleto(req.params.id);
+  return p ? res.json(p) : res.status(404).json({ error: 'Pedido não encontrado.' });
+});
+
+app.post('/api/pedidos', (req, res) => {
+  const b = req.body || {};
+  let itens;
+  try { itens = lerItensPedido(b.items); } catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
+  if (!itens.length) return res.status(400).json({ error: 'Ponha ao menos uma peça no pedido.' });
+  const forn = fornecedorDe(b);
+  const ts = now();
+  const id = db.transaction(() => {
+    const code = 'PC-' + String(db.prepare('SELECT COALESCE(MAX(id),0)+1 n FROM pedidos_compra').get().n).padStart(5, '0');
+    const pid = db.prepare(`INSERT INTO pedidos_compra (code, supplier_id, supplier_name, note, created_at, updated_at)
+      VALUES (?,?,?,?,?,?)`).run(code, forn ? forn.id : null, forn ? forn.name : '', String(b.note || '').trim(), ts, ts).lastInsertRowid;
+    const ins = db.prepare('INSERT INTO pedido_itens (pedido_id, variant_id, name, qty, unit_cost) VALUES (?,?,?,?,?)');
+    for (const l of itens) ins.run(pid, l.v.id, `${l.v.product_name} ${l.v.variant_name}`, l.qty, l.custo);
+    return pid;
+  })();
+  res.json({ ok: true, pedido: pedidoCompleto(id) });
+});
+
+// Editar (quantidades, fornecedor, observação) ou cancelar um pedido aberto.
+app.patch('/api/pedidos/:id', (req, res) => {
+  const p = db.prepare('SELECT * FROM pedidos_compra WHERE id = ?').get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  if (p.status !== 'aberto') return res.status(400).json({ error: 'Esse pedido já foi fechado.' });
+  const b = req.body || {};
+  const ts = now();
+  if (b.status === 'cancelado') {
+    db.prepare("UPDATE pedidos_compra SET status = 'cancelado', updated_at = ? WHERE id = ?").run(ts, p.id);
+    return res.json({ ok: true, pedido: pedidoCompleto(p.id) });
+  }
+  let itens = null;
+  if (b.items) {
+    try { itens = lerItensPedido(b.items); } catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
+    if (!itens.length) return res.status(400).json({ error: 'Pedido sem peças: cancele em vez de esvaziar.' });
+  }
+  const forn = (b.supplier_id || b.supplier_name) ? fornecedorDe(b) : null;
+  db.transaction(() => {
+    if (forn) db.prepare('UPDATE pedidos_compra SET supplier_id = ?, supplier_name = ? WHERE id = ?').run(forn.id, forn.name, p.id);
+    if (b.note !== undefined) db.prepare('UPDATE pedidos_compra SET note = ? WHERE id = ?').run(String(b.note || '').trim(), p.id);
+    if (itens) {
+      db.prepare('DELETE FROM pedido_itens WHERE pedido_id = ?').run(p.id);
+      const ins = db.prepare('INSERT INTO pedido_itens (pedido_id, variant_id, name, qty, unit_cost) VALUES (?,?,?,?,?)');
+      for (const l of itens) ins.run(p.id, l.v.id, `${l.v.product_name} ${l.v.variant_name}`, l.qty, l.custo);
+    }
+    db.prepare('UPDATE pedidos_compra SET updated_at = ? WHERE id = ?').run(ts, p.id);
+  })();
+  res.json({ ok: true, pedido: pedidoCompleto(p.id) });
 });
 
 // ==================== CLIENTES ====================
@@ -4102,6 +4276,7 @@ app.get('/negocio', page('negocio.html'));
 app.get('/agentes', page('agentes.html'));
 app.get('/lembretes', page('index.html'));   // virou o painel do Início
 app.get('/compras', page('produtos.html'));
+app.get('/repor', page('produtos.html'));     // aba Repor: o que vendeu e acabou
 app.get('/encomenda', page('produtos.html'));   // aba Na loja × encomenda   // virou a aba Entradas
 app.get('/custos', page('custos.html'));
 app.get('/relatorios', page('financeiro.html'));   // virou a aba Lucro

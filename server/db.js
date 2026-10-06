@@ -544,6 +544,37 @@ db.exec(`CREATE TABLE IF NOT EXISTS comissoes_pagas (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS idx_comissoes_membro ON comissoes_pagas(member_id, ym)');
 
+// ---- Compra: o que repor → pedido ao fornecedor → entrada ----
+// O pedido é a lista do que foi pedido e ainda não chegou. Enquanto está
+// aberto, o que foi pedido sai da sugestão de reposição (senão o sistema
+// mandaria pedir de novo). Quando a mercadoria chega, vira uma entrada.
+db.exec(`CREATE TABLE IF NOT EXISTS pedidos_compra (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  code          TEXT UNIQUE,
+  supplier_id   INTEGER REFERENCES suppliers(id),
+  supplier_name TEXT DEFAULT '',
+  status        TEXT NOT NULL DEFAULT 'aberto',   -- aberto | chegou | cancelado
+  note          TEXT DEFAULT '',
+  purchase_id   INTEGER,                          -- a entrada que fechou o pedido
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS pedido_itens (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  pedido_id  INTEGER NOT NULL REFERENCES pedidos_compra(id),
+  variant_id INTEGER REFERENCES variants(id),
+  name       TEXT NOT NULL,
+  qty        INTEGER NOT NULL,
+  unit_cost  REAL NOT NULL DEFAULT 0      -- o custo esperado (último pago)
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_pedido_itens ON pedido_itens(pedido_id)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_pedido_itens_var ON pedido_itens(variant_id)');
+// De qual pedido a entrada veio (se veio).
+ensureColumn('purchases', 'pedido_id', 'pedido_id INTEGER');
+// Custo da peça com a parte do frete: é ele que vai para o custo do
+// produto — frete é custo de trazer a peça, não despesa à parte.
+ensureColumn('purchase_items', 'custo_final', 'custo_final REAL');
+
 // ---- CRM: o que a loja sabe sobre a pessoa ----
 // Vender de novo para quem já comprou é o que escala a operação. Para
 // isso o sistema precisa lembrar o que a pessoa veste, quando ela some
