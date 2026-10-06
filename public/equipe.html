@@ -404,9 +404,9 @@ function blocoComissao(p){
     <div class="s">Defina a % em <b>Todo mundo</b> → editar.</div></div>`;
   const pg=c.pagamentos.length?c.pagamentos.map(x=>`${BRL(x.valor)} em ${new Date(x.created_at).toLocaleDateString('pt-BR')}
     <a href="#" data-desfazer="${x.id}" style="color:var(--ink-3)">desfazer</a>`).join(' · '):'';
-  return `<div class="com"><div class="l">Comissão · ${c.pct}% de ${BRL(c.base)}</div>
+  return `<div class="com"><div class="l">Comissão · ${c.pct}% do balcão (${BRL(c.base)})</div>
     <div class="v">${BRL(c.devido)}</div>
-    <div class="s">${c.pago>0?`<b>${BRL(c.pago)}</b> já pago (${pg})<br>`:''}${c.a_pagar>0?`<b>${BRL(c.a_pagar)}</b> a pagar`
+    <div class="s">${c.internet?`${BRL(c.internet)} pela internet não entram na comissão<br>`:''}${c.pago>0?`<b>${BRL(c.pago)}</b> já pago (${pg})<br>`:''}${c.a_pagar>0?`<b>${BRL(c.a_pagar)}</b> a pagar`
       :(c.a_pagar<0?`Pago a mais: ${BRL(-c.a_pagar)} (devolução depois do pagamento) — desconte no próximo.`:(c.devido>0?'Tudo pago.':'Nada a pagar ainda.'))}</div>
     ${c.a_pagar>0?`<button class="btn sm primary" data-pagar="${p.id}" type="button" style="margin-top:8px">Pagar ${BRL(c.a_pagar)}</button>`:''}
   </div>`;

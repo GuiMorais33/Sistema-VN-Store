@@ -201,6 +201,7 @@
           <button class="pay" data-canal="whatsapp" type="button">WhatsApp</button>
           <button class="pay" data-canal="instagram" type="button">Instagram</button>
         </div>
+        <div class="hint" id="canalAviso" hidden style="margin-top:5px">Venda pela internet conta para o vendedor, mas não gera comissão.</div>
       </div>
 
       <div class="field" id="wrapAtend" hidden>
@@ -455,7 +456,8 @@ async function atendimentos(){
    WhatsApp/Instagram o gerente marca na hora. Lembrar o último faria a
    venda seguinte do balcão sair como internet. */
 S.canal='balcao';
-function pintarCanal(){document.querySelectorAll('#canais .pay').forEach(b=>b.classList.toggle('sel',b.dataset.canal===S.canal));}
+function pintarCanal(){document.querySelectorAll('#canais .pay').forEach(b=>b.classList.toggle('sel',b.dataset.canal===S.canal));
+  const av=document.getElementById('canalAviso');if(av)av.hidden=S.canal==='balcao'||!TIME.length;}
 pintarCanal();
 document.getElementById('canais').onclick=e=>{const b=e.target.closest('.pay');if(!b)return;
   S.canal=b.dataset.canal;pintarCanal();};
@@ -557,6 +559,8 @@ async function abrirVenda(id){
       ${v.payment_status==='cancelado'?`<b style="color:var(--crit)">Cancelada</b> em ${quando(v.cancelado_em)}${v.cancel_motivo?' · '+esc(v.cancel_motivo):''}`
         :pago?`Pago · ${esc(v.payment_method||'')}`:`<b style="color:var(--warn)">${v.channel==='site'?'Aguardando pagamento':'Fiado — a receber'}</b>`}
       ${v.discount?` · desconto ${BRL(v.discount)}`:''}</div>
+    ${v.channel!=='site'&&quem.papel==='dono'?`<label class="meta vvend">Onde vendeu
+      <select id="vCanal">${Object.entries(CANAL_TXT).map(([k,t])=>`<option value="${k}"${(v.canal||'balcao')===k?' selected':''}>${t}</option>`).join('')}</select></label>`:''}
     ${v.channel!=='site'&&TIME.length&&quem.papel==='dono'?`<label class="meta vvend">Quem vendeu
       <select id="vVend"><option value="">Loja (sem comissão)</option>${TIME.map(m=>`<option value="${m.id}"${m.id===v.seller_id?' selected':''}>${esc(m.name)}</option>`).join('')}
       ${v.seller_id&&!TIME.some(m=>m.id===v.seller_id)?`<option value="${v.seller_id}" selected>${esc(v.seller_name||'')}</option>`:''}</select></label>`:''}
@@ -576,6 +580,14 @@ async function abrirVenda(id){
       </div>`
     :v.channel==='site'?`<div class="aviso-site">Pedido da Nuvemshop: cancelamento e troca são feitos lá, e o sistema acompanha sozinho.</div>`:''}`;
   document.getElementById('vVoltar').onclick=mostrarLista;
+  // Marcou o canal errado? Balcão gera comissão; internet não.
+  const vc=document.getElementById('vCanal');
+  if(vc)vc.onchange=async()=>{
+    try{const r=await api(`/api/sales/${v.id}/vendedor`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({canal:vc.value})});v.canal=r.canal;
+      toast(v.code,`Agora é venda de ${CANAL_TXT[r.canal]}${r.canal==='balcao'?' (gera comissão)':' (sem comissão)'}.`);}
+    catch(e){toast('Não deu para trocar',e.message,true);vc.value=v.canal||'balcao';}
+  };
   // Lançou no nome errado? Corrige aqui — a comissão vai junto para a pessoa certa.
   const vv=document.getElementById('vVend');
   if(vv)vv.onchange=async()=>{

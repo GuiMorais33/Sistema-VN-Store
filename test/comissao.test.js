@@ -103,3 +103,18 @@ test('venda lançada no nome errado: corrigir leva a comissão junto', async () 
   // Pedido do site não tem vendedor para trocar.
   await assert.rejects(api('POST', '/api/sales/999999/vendedor', { seller_id: bruno.id }), (e) => e.status === 404);
 });
+
+test('venda pela internet conta no vendido, mas não gera comissão; corrigir o canal muda', async () => {
+  const c0 = await comissao();
+  const code = (await api('POST', '/api/sales', { items: [{ variant_id: V.cam.id, qty: 1 }], payment_method: 'Pix',
+    seller_id: ana.id, canal: 'whatsapp' })).code;
+  let c = await comissao();
+  assert.equal(c.vendido, Math.round((c0.vendido + 89.9) * 100) / 100);
+  assert.equal(c.base, c0.base);              // comissão não mexe
+  assert.equal(c.internet, Math.round((c0.internet + 89.9) * 100) / 100);
+  // Era balcão, marcaram WhatsApp por engano: corrigindo, entra na comissão.
+  await api('POST', `/api/sales/${codigoParaId(code)}/vendedor`, { canal: 'balcao' });
+  c = await comissao();
+  assert.equal(c.base, Math.round((c0.base + 89.9) * 100) / 100);
+  assert.equal(s.banco().prepare('SELECT seller_id FROM sales WHERE code = ?').get(code).seller_id, ana.id);   // o vendedor fica
+});

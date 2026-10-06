@@ -79,16 +79,17 @@ async function carregar(){
     document.getElementById('tit').textContent='Vendas de '+d.nome.split(' ')[0];
     const q=document.getElementById('quemDono');q.textContent='como '+d.nome+' vê';q.classList.add('on');
   }
-  // Comissão: sobre o que entrou no mês pelas vendas dele, já com trocas e
-  // cancelamentos descontados — fiado entra quando o cliente paga.
+  // Comissão: sobre o que entrou no mês pelas vendas de BALCÃO dele, já com
+  // trocas e cancelamentos descontados — fiado entra quando o cliente paga.
+  // Venda pela internet conta no vendido, mas não tem comissão.
   document.getElementById('kpis').innerHTML=
-    kpi({label:'Vendido no mês',ico:'subiu',tone:'brand',val:BRL(c.base),color:'var(--brand-hi)',
-      sub:`${c.vendas} ${pl(c.vendas,'venda')}${c.vendas?' · ticket '+BRL(c.ticket):''}`})
+    kpi({label:'Vendido no mês',ico:'subiu',tone:'brand',val:BRL(c.vendido),color:'var(--brand-hi)',
+      sub:`${c.vendas} ${pl(c.vendas,'venda')}${c.internet?` · ${BRL(c.internet)} pela internet`:''}`})
     +kpi({label:'Comissão',ico:'financeiro',tone:'brand',val:c.pct>0?BRL(c.devido):'—',
-      sub:c.pct>0?`${c.pct}% do vendido`:'a % ainda não foi definida'})
+      sub:c.pct>0?`${c.pct}% do balcão (${BRL(c.base)}) · internet não tem`:'a % ainda não foi definida'})
     +kpi({label:'Já recebida',ico:'recibo',val:BRL(c.pago),
       sub:c.a_pagar>0?`${BRL(c.a_pagar)} a receber`:(c.devido>0?'tudo recebido':'nada ainda')})
-    +kpi({label:'Mês passado',ico:'grafico',val:BRL(d.mes_anterior.base),
+    +kpi({label:'Mês passado',ico:'grafico',val:BRL(d.mes_anterior.vendido),
       sub:d.mes_anterior.devido>0?`comissão ${BRL(d.mes_anterior.devido)}${d.mes_anterior.a_pagar>0?' · '+BRL(d.mes_anterior.a_pagar)+' a receber':''}`:'sem comissão'});
 
   const m=document.getElementById('meta');

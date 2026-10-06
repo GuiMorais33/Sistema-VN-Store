@@ -1490,21 +1490,30 @@ app.post('/api/sales', async (req, res) => {
 });
 
 
-// Corrigir quem vendeu. Como a comissão é calculada a partir da venda,
-// trocar o dono leva junto tudo dela (a venda, o fiado recebido, as trocas).
-// Mês já pago fica com a diferença à mostra na Equipe para acertar.
+// Corrigir quem vendeu ou onde vendeu. Como a comissão é calculada a
+// partir da venda, a correção leva junto tudo dela (a venda, o fiado
+// recebido, as trocas). Mês já pago fica com a diferença à mostra na Equipe.
 app.post('/api/sales/:id/vendedor', (req, res) => {
   const s = db.prepare('SELECT * FROM sales WHERE id = ?').get(req.params.id);
   if (!s) return res.status(404).json({ error: 'Venda não encontrada.' });
   if (s.channel === 'site') return res.status(400).json({ error: 'Pedido do site não tem vendedor.' });
-  const mid = (req.body || {}).seller_id ? Number(req.body.seller_id) : null;
-  const m = mid ? db.prepare('SELECT id, name FROM team_members WHERE id = ?').get(mid) : null;
-  if (mid && !m) return res.status(400).json({ error: 'Pessoa não encontrada na equipe.' });
+  const b = req.body || {};
+  if (b.canal !== undefined && !CANAIS_PDV.includes(b.canal)) return res.status(400).json({ error: 'Canal inválido.' });
+  let m = null;
+  if ('seller_id' in b) {
+    const mid = b.seller_id ? Number(b.seller_id) : null;
+    m = mid ? db.prepare('SELECT id, name FROM team_members WHERE id = ?').get(mid) : null;
+    if (mid && !m) return res.status(400).json({ error: 'Pessoa não encontrada na equipe.' });
+  }
   db.transaction(() => {
-    db.prepare('UPDATE sales SET seller_id = ?, seller_name = ? WHERE id = ?').run(m ? m.id : null, m ? m.name : null, s.id);
-    if (s.atendimento_id) db.prepare('UPDATE atendimentos SET member_id = ? WHERE id = ?').run(m ? m.id : null, s.atendimento_id);
+    if ('seller_id' in b) {
+      db.prepare('UPDATE sales SET seller_id = ?, seller_name = ? WHERE id = ?').run(m ? m.id : null, m ? m.name : null, s.id);
+      if (s.atendimento_id) db.prepare('UPDATE atendimentos SET member_id = ? WHERE id = ?').run(m ? m.id : null, s.atendimento_id);
+    }
+    if (b.canal !== undefined) db.prepare('UPDATE sales SET canal = ? WHERE id = ?').run(b.canal, s.id);
   })();
-  res.json({ ok: true, seller_id: m ? m.id : null, seller_name: m ? m.name : null });
+  const v = db.prepare('SELECT seller_id, seller_name, canal FROM sales WHERE id = ?').get(s.id);
+  res.json({ ok: true, ...v });
 });
 
 // Baixa (marca como pago) — aí sim entra no caixa.
@@ -1857,14 +1866,23 @@ const proximoMes = (ym) => { const [a, m] = ym.split('-').map(Number);
   return m === 12 ? `${a + 1}-01` : `${a}-${String(m + 1).padStart(2, '0')}`; };
 const mesAnterior = (ym) => { const [a, m] = ym.split('-').map(Number);
   return m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}`; };
-const baseDeComissao = (memberId, desde, ate) => db.prepare(`SELECT COALESCE(SUM(fe.amount),0) v
+// Regra da loja: comissão só existe na venda de BALCÃO. A venda que o
+// vendedor fecha pelo WhatsApp/Instagram conta como venda dele (ranking,
+// meta), mas não gera comissão; pedido do site não é de ninguém.
+// Venda antiga, de antes de existir o canal, é de balcão.
+const SO_BALCAO = "COALESCE(s.canal,'balcao') = 'balcao'";
+const entrouPelasVendas = (memberId, desde, ate, soBalcao) => db.prepare(`SELECT COALESCE(SUM(fe.amount),0) v
   FROM financial_entries fe JOIN sales s ON s.code = fe.ref
-  WHERE fe.type = 'receita' AND s.channel <> 'site' AND s.seller_id = ?
+  WHERE fe.type = 'receita' AND s.channel <> 'site' AND s.seller_id = ? ${soBalcao ? 'AND ' + SO_BALCAO : ''}
     AND fe.created_at >= ? AND fe.created_at < ?`).get(memberId, desde, ate).v;
+const baseDeComissao = (memberId, desde, ate) => entrouPelasVendas(memberId, desde, ate, true);
 
 function comissaoDoMes(m, ym) {
   const ini = inicioDoMes(ym), fim = inicioDoMes(proximoMes(ym));
   const base = money(baseDeComissao(m.id, ini, fim));
+  // Vendido = tudo o que entrou pelas vendas dele (balcão + internet): é
+  // o número da meta e do ranking. A comissão sai só da parte do balcão.
+  const vendido = money(entrouPelasVendas(m.id, ini, fim, false));
   const pct = Number(m.commission_pct) || 0;
   const devido = money((base * pct) / 100);
   const pagamentos = db.prepare('SELECT id, valor, base, pct, created_at FROM comissoes_pagas WHERE member_id = ? AND ym = ? ORDER BY id')
@@ -1872,7 +1890,7 @@ function comissaoDoMes(m, ym) {
   const pago = money(pagamentos.reduce((t, p) => t + p.valor, 0));
   const v = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales WHERE seller_id = ? AND channel <> 'site'
     AND payment_status <> 'cancelado' AND created_at >= ? AND created_at < ?`).get(m.id, ini, fim);
-  return { ym, base, pct, devido, pago, a_pagar: money(devido - pago), vendas: v.n,
+  return { ym, vendido, base, internet: money(vendido - base), pct, devido, pago, a_pagar: money(devido - pago), vendas: v.n,
     ticket: v.n ? money(v.t / v.n) : 0, pagamentos, fechado: ym < mesLocal() };
 }
 
@@ -1884,7 +1902,7 @@ app.get('/api/comissoes', (req, res) => {
     ORDER BY name`).all(inicioDoMes(ym), inicioDoMes(proximoMes(ym)));
   const pessoas = ms.map((m) => ({ id: m.id, nome: m.name, ...comissaoDoMes(m, ym) }));
   const soma = (k) => money(pessoas.reduce((t, p) => t + p[k], 0));
-  res.json({ ym, pessoas, total: { base: soma('base'), devido: soma('devido'), pago: soma('pago'), a_pagar: soma('a_pagar') } });
+  res.json({ ym, pessoas, total: { vendido: soma('vendido'), base: soma('base'), devido: soma('devido'), pago: soma('pago'), a_pagar: soma('a_pagar') } });
 });
 
 // Pagar a comissão do mês: vira despesa "Comissões" no financeiro (o lucro
@@ -1940,9 +1958,9 @@ app.get('/api/minhas', (req, res) => {
   const ant = comissaoDoMes(m, mesAnterior(ym));
   res.json({
     id: m.id, nome: m.name, ym, comissao: c,
-    meta, pct_meta: meta > 0 ? Math.round((c.base / meta) * 100) : null, falta: money(Math.max(0, meta - c.base)),
-    por_dia: restam > 0 && meta > c.base ? money((meta - c.base) / restam) : 0, restam,
-    mes_anterior: { ym: ant.ym, base: ant.base, devido: ant.devido, pago: ant.pago, a_pagar: ant.a_pagar },
+    meta, pct_meta: meta > 0 ? Math.round((c.vendido / meta) * 100) : null, falta: money(Math.max(0, meta - c.vendido)),
+    por_dia: restam > 0 && meta > c.vendido ? money((meta - c.vendido) / restam) : 0, restam,
+    mes_anterior: { ym: ant.ym, vendido: ant.vendido, base: ant.base, devido: ant.devido, pago: ant.pago, a_pagar: ant.a_pagar },
     ultimas,
   });
 });
@@ -1971,15 +1989,15 @@ app.get('/api/metas', (req, res) => {
     const v = porId.get(String(m.id)) || { vendas: 0, valor: 0, margem: 0, itens: 0 };
     const g = metaDe.get(String(m.id));
     const alvo = g ? g.target : 0;
-    // Vendido = o que entrou no mês pelas vendas dele, já descontadas trocas
-    // e cancelamentos — o mesmo número da comissão, para não haver dois.
+    // Vendido = o que entrou no mês pelas vendas dele (balcão e internet),
+    // já descontadas trocas e cancelamentos. A comissão usa só o balcão.
     const c = comissaoDoMes(m, ym);
-    const pct = alvo > 0 ? Math.round((c.base / alvo) * 100) : null;
+    const pct = alvo > 0 ? Math.round((c.vendido / alvo) * 100) : null;
     return {
       id: m.id, nome: m.name, funcao: m.role, instagram: m.instagram,
-      meta: money(alvo), vendido: c.base, vendas: c.vendas,
+      meta: money(alvo), vendido: c.vendido, vendas: c.vendas,
       margem: money(v.margem), itens: v.itens,
-      pct, falta: money(Math.max(0, alvo - c.base)),
+      pct, falta: money(Math.max(0, alvo - c.vendido)),
       ticket: c.ticket, comissao: c,
     };
   }).sort((a, b) => b.vendido - a.vendido);
