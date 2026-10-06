@@ -139,7 +139,7 @@ app.use((req, res, next) => {
 // cancelar venda (estornar dinheiro) e ver lucro, custo e financeiro.
 const DO_VENDEDOR = [
   ['GET', /^\/(pdv|minhas|ajuda|como-usar)\/?$/],
-  ['GET', /^\/api\/(products|customers|eu|minhas|atendimentos)\/?$/],
+  ['GET', /^\/api\/(products|customers|eu|minhas)\/?$/],
   ['GET', /^\/api\/vendas(\/\d+)?\/?$/],
   ['POST', /^\/api\/sales\/?$/],
   ['POST', /^\/api\/sales\/\d+\/(troca|settle)\/?$/],
@@ -3137,7 +3137,7 @@ app.get('/api/financial', (req, res) => {
         WHEN channel <> 'site' THEN 'PDV'
         WHEN origem = 'balcao' THEN 'PDV Nuvemshop' ELSE 'Site' END origem,
       COUNT(*) n, COALESCE(SUM(total),0) total FROM sales
-      WHERE payment_status='pago' ${cond} GROUP BY origem ORDER BY total DESC`).all(...a);
+      WHERE payment_status='pago' ${cond} GROUP BY 1 ORDER BY total DESC`).all(...a);
   // Lucro de verdade: o que sobrou depois do custo da mercadoria vendida.
   // A margem das vendas já desconta o custo; as demais despesas saem dela.
   const margemVendas = db.prepare(`SELECT COALESCE(SUM(margin),0) n FROM sales

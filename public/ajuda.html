@@ -77,7 +77,7 @@
       <a href="#crm">Clientes</a>
       <a href="#negocio">Visão do negócio</a>
       <a href="#financeiro">Financeiro e lucro</a>
-      <a href="#equipe">Equipe, metas e sonhos</a>
+      <a href="#equipe">Equipe, comissão e metas</a>
       <a href="#automatico">O que roda sozinho</a>
       <a href="#duvidas">Dúvidas comuns</a>
     </nav>
@@ -159,7 +159,8 @@
       <!-- PDV -->
       <section id="pdv" class="card">
         <h2><span class="ico-box brand" id="i3"></span>Vender no PDV</h2>
-        <p>É onde você registra a venda do balcão. Pode lançar <b>quantas quiser, sem pagar taxa por
+        <p>É o caixa oficial da loja: toda venda passa por aqui — no balcão e também a que o vendedor
+          fecha pelo WhatsApp ou Instagram. Pode lançar <b>quantas quiser, sem pagar taxa por
           lançamento</b>.</p>
 
         <h3>Passo a passo de uma venda</h3>
@@ -168,6 +169,9 @@
             cartão. A <b>foto</b> ajuda quando vários produtos têm nome parecido.</div></li>
           <li><div><b>Toque para adicionar.</b> Cada toque soma 1. No carrinho dá para ajustar a
             quantidade no <kbd>−</kbd> e <kbd>+</kbd>, ou remover o item.</div></li>
+          <li><div><b>Onde vendeu:</b> Balcão, WhatsApp ou Instagram. O aparelho lembra o último — no
+            celular do vendedor da internet já vem marcado. É assim que o Financeiro separa o que vem do
+            balcão, da internet e do site.</div></li>
           <li><div><b>Escolha o cliente</b> (opcional). Digite o nome: se já existe, aparece na lista;
             se não, clique em <b>Criar</b> e ele nasce ali mesmo.</div></li>
           <li><div><b>Diga como foi o pagamento.</b> <b>Pago</b> (e a forma: Pix, espécie, crédito ou
@@ -194,8 +198,9 @@
             toque nos produtos que o cliente <b>leva no lugar</b>. O sistema mostra se o cliente paga a
             diferença ou se você devolve — escolha a forma e confirme. Só devolução? Marque o que voltou e
             confirme sem adicionar nada.</li>
-          <li><b>Cancelar venda</b>: as peças voltam para o estoque (aqui e no site), o valor sai do caixa
-            de hoje como estorno (na forma que você escolher) e a venda some de metas e relatórios.</li>
+          <li><b>Cancelar venda</b> (só o dono): as peças voltam para o estoque (aqui e no site), o valor
+            sai do caixa de hoje como estorno (na forma que você escolher) e a venda some de metas e
+            relatórios. O vendedor pode trocar e devolver; cancelar não — cancelar tira dinheiro do caixa.</li>
         </ul>
         <p>A peça que volta entra pelo preço que foi paga (com o desconto da venda). Pedido da Nuvemshop
           (site ou PDV de lá) se cancela e se troca na própria Nuvemshop — o sistema acompanha sozinho.</p>
@@ -642,20 +647,49 @@
           meta do mês.</p>
 
         <h3>Cadastrar a equipe</h3>
-        <p>Em <b>Adicionar pessoa</b>, informe nome e função (Vendedor, Gerente, Caixa, Estoquista…).
-          Duas chaves importam:</p>
+        <p>Em <b>Adicionar pessoa</b>, informe nome e função (Vendedor, Gerente, Caixa, Estoquista…) e:</p>
         <ul>
-          <li><b>Vende no balcão</b> — quem estiver marcado aparece no PDV na hora de lançar a venda e
-            entra no ranking. Desligue para quem não vende.</li>
+          <li><b>Vende</b> — quem estiver marcado entra no PDV, no ranking e na comissão. Desligue para
+            quem não vende.</li>
+          <li><b>Comissão (%)</b> — quanto a pessoa ganha sobre o que vende (ex.: 3).</li>
+          <li><b>PIN para entrar</b> — 4 a 6 números que <b>você</b> cria e passa para a pessoa. Para
+            trocar, digite outro (o antigo para na hora); para tirar o acesso, marque <b>Tirar o acesso</b>.</li>
           <li><b>Está na equipe</b> — quando alguém sair, <b>desligue em vez de apagar</b>: o histórico
-            de vendas continua no lugar. Aliás, quem já vendeu nem pode ser apagado — o sistema
-            marca como "saiu" sozinho.</li>
+            de vendas e de comissão continua no lugar.</li>
         </ul>
 
-        <h3>Marcar quem vendeu</h3>
-        <p>Depois de cadastrar alguém que vende, aparece no PDV o campo <b>Quem vendeu</b>. Ele
-          <b>lembra da última pessoa escolhida naquele aparelho</b>, então no balcão você escolhe uma
-          vez e segue vendendo.</p>
+        <h3>Cada vendedor entra com o próprio PIN</h3>
+        <ol class="passos">
+          <li><div>Na tela de entrar, o vendedor toca em <b>Sou vendedor</b>, toca no nome dele e digita o PIN.</div></li>
+          <li><div>Ele vê só o <b>PDV</b>, <b>Minhas vendas</b> (o mês dele: vendido, comissão, meta) e o
+            <b>Como usar</b>. Financeiro, custo, estoque, clientes e configuração ficam só com você.</div></li>
+          <li><div>A venda que ele lança <b>fica com ele</b> — ninguém precisa marcar quem vendeu, e não
+            dá para lançar no nome de outro.</div></li>
+          <li><div>No balcão, quando troca a pessoa: <b>Trocar</b> (no celular, na barra de cima; no
+            computador, no rodapé do menu) e o próximo entra com o PIN dele.</div></li>
+        </ol>
+        <div class="aviso atencao"><span class="ico" id="a9"></span>
+          <div>No aparelho do balcão, <b>não deixe entrado com a senha do dono</b>: quando um vendedor
+          entra, a sua sessão sai daquele aparelho — é de propósito, para o financeiro não ficar aberto.
+          Cinco PINs errados seguidos travam aquela pessoa por 5 minutos.</div></div>
+        <p>Você (dono) também pode lançar venda: no PDV aparece <b>Quem vendeu</b> para escolher a
+          pessoa, ou <b>Loja (sem comissão)</b>.</p>
+
+        <h3>Comissão: segue o dinheiro</h3>
+        <p>A comissão do mês é a % da pessoa sobre <b>o que entrou no caixa pelas vendas dela naquele
+          mês</b>. Na prática:</p>
+        <ul>
+          <li><b>Fiado</b> só vira comissão quando o cliente paga.</li>
+          <li><b>Troca e devolução</b> descontam no mês em que acontecem — mesmo que a comissão daquela
+            venda já tenha sido paga. Se isso acontecer depois de pagar, o cartão mostra "pago a mais"
+            para você descontar no próximo acerto.</li>
+          <li><b>Cancelamento</b> desconta igual.</li>
+          <li>O mês que passou <b>não muda mais</b>: o que você pagou continua certo.</li>
+        </ul>
+        <p>No cartão de cada vendedor, em <b>Vendas e comissão do mês</b>: quanto vendeu, a comissão,
+          quanto já foi pago e o botão <b>Pagar</b>. Pagar vira uma despesa <b>Comissões</b> no
+          Financeiro (o lucro já sai certo). Lançou errado? <b>desfazer</b> ao lado do pagamento. O
+          botão <b>Ver vendas</b> mostra o mês daquela pessoa como ela vê.</p>
 
         <h3>Metas do mês</h3>
         <ol class="passos">
@@ -669,11 +703,11 @@
           vender por dia nos dias que restam.</p>
 
         <div class="aviso dica"><span class="ico" id="d7"></span>
-          <div><b>Só conta o que foi pago.</b> Venda fiado em aberto não entra na meta — ela entra
-          quando você registrar o recebimento. Assim ninguém bate meta com dinheiro que não entrou.</div></div>
+          <div><b>Meta e comissão usam o mesmo número.</b> O "vendido" de cada pessoa é o que entrou
+          pelas vendas dela no mês, já com trocas e devoluções descontadas — fiado entra quando o
+          cliente paga. Assim ninguém bate meta com dinheiro que não entrou.</div></div>
 
-        <p>Vendas sem vendedor marcado aparecem à parte, no topo do ranking, para você saber quanto
-          ficou sem dono.</p>
+        <p>Vendas sem vendedor (da loja) aparecem à parte, no topo do ranking.</p>
 
         <h3>O sonho de cada um</h3>
         <p>Meta que a pessoa não escolheu, a pessoa abandona no meio. Então a meta não começa pelo
@@ -681,17 +715,17 @@
           essa, e é para você fazer, não adivinhar:</p>
         <p style="font-size:16px"><b>“O que você quer conquistar em 12 meses que hoje parece
           impossível?”</b></p>
-        <p>Ele responde o que é e quanto custa. Daí a conta desce sozinha até virar tarefa de hoje:</p>
+        <p>Ele responde o que é e quanto custa. Daí a conta desce sozinha até virar tarefa de hoje —
+          <b>só com as vendas</b>, que o sistema já conta:</p>
         <ul>
           <li><b>Sonho ÷ comissão dele</b> = quanto precisa vender</li>
           <li><b>÷ ticket médio dele</b> = quantas vendas</li>
-          <li><b>÷ quanto ele fecha</b> = quantas propostas</li>
-          <li><b>÷ quanto vira proposta</b> = quantos atendimentos</li>
-          <li><b>÷ atendimentos por dia</b> = em quantos dias úteis o sonho sai</li>
+          <li><b>÷ meses que ele quer</b> = vendas por mês</li>
+          <li><b>÷ dias úteis</b> = vendas por dia</li>
         </ul>
-        <p>A conta é de baixo para cima; a execução é ao contrário — ele atende, manda proposta,
-          fecha. O cartão mostra <b>quanto de comissão ele já juntou</b> desde que escreveu o sonho, e
-          um contador de <b>quantos atendimentos ele fez hoje</b> contra o ritmo que ele escolheu.</p>
+        <p>O cartão mostra <b>quanto de comissão ele já juntou</b> desde que escreveu o sonho e um
+          contador de <b>vendas de hoje</b> contra o ritmo. Se vocês anotarem os atendimentos no funil
+          (opcional), a conta desce mais um degrau: quantas conversas por dia.</p>
 
         <div class="aviso dica"><span class="ico" id="d10"></span>
           <div><b>Não existe prazo, existe ritmo.</b> Quem faz 10 atendimentos por dia chega em metade
@@ -802,7 +836,7 @@ const icones={i1:'conectar',i2:'inicio',i3:'pdv',i4:'estoque',i5:'clientes',i6:'
   i7:'financeiro',i8:'sync',i9:'agentes',i10:'conversa',i12:'caixa_vazia',i13:'grafico',i14:'clientes',i15:'conversa',i16:'grafico'};
 Object.entries(icones).forEach(([id,n])=>{const e=document.getElementById(id);if(e)e.innerHTML=ICO(n,17);});
 ['d1','d2','d3','d4','d5','d6','d7','d8','d9','d10','d11','d12'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('ok',17).replace('class="ico"','class="ico" id="'+id+'"');});
-['a1','a2','a4','a5','a6'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
+['a1','a2','a4','a5','a6','a9'].forEach(id=>{const e=document.getElementById(id);if(e)e.outerHTML=ICO('alerta',17).replace('class="ico"','class="ico" id="'+id+'"');});
 
 // Marca a seção visível no índice
 const links=[...document.querySelectorAll('.indice a')];

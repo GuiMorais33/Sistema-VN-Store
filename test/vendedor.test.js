@@ -56,9 +56,12 @@ test('a venda é de quem está logado, com o canal escolhido', async () => {
   venda = s.banco().prepare('SELECT * FROM sales WHERE code = ?').get(r.json.code);
   assert.equal(venda.seller_id, ana.id);
   assert.equal(venda.canal, 'whatsapp');
-  // O Financeiro separa a venda pela internet do balcão e do site.
+  // O Financeiro separa a venda pela internet do balcão e do site —
+  // com uma de cada, para não somar as duas no mesmo lugar.
+  await comoDono('POST', '/api/sales', { items: [{ variant_id: v.id, qty: 1 }], payment_method: 'Pix', canal: 'balcao' });
   const fin = (await comoDono('GET', '/api/financial?period=month')).json;
-  assert.ok(fin.por_origem.some((o) => o.origem === 'Internet' && o.n === 1));
+  const por = Object.fromEntries(fin.por_origem.map((o) => [o.origem, o.n]));
+  assert.deepEqual(por, { Internet: 1, PDV: 1 });
 });
 
 test('o vendedor troca, mas cancelar é só do dono', async () => {
