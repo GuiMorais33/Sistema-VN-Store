@@ -69,16 +69,43 @@ function headers() {
   };
 }
 
+// Leitura (GET) que falha por rede ou por loja ocupada (429/5xx) tenta de
+// novo sozinha, com espera — a internet do servidor oscila e a Nuvemshop
+// às vezes derruba conexão. Gravação (PUT/POST) não repete aqui: quem grava
+// estoque tem a própria fila de novas tentativas (server/estoque.js).
+const ESPERAS_MS = (process.env.NUVEMSHOP_ESPERAS_MS || '1500,5000').split(',').map(Number);
+const espera = (ms) => new Promise((ok) => setTimeout(ok, ms));
 async function request(method, path, body) {
   if (!isConfigured()) {
     throw new Error('Nuvemshop não conectada. Abra a tela "Conectar loja".');
   }
   const apiBase = process.env.NUVEMSHOP_API_BASE || 'https://api.tiendanube.com/v1';
-  const res = await fetch(`${apiBase}/${cfg().storeId}${path}`, {
-    method,
-    headers: headers(),
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const tentativas = method === 'GET' ? ESPERAS_MS.length + 1 : 1;
+  for (let t = 1; ; t++) {
+    try {
+      return await chamar(apiBase, method, path, body);
+    } catch (err) {
+      const passageiro = !err.status || err.status === 429 || err.status >= 500;
+      if (!passageiro || t >= tentativas) throw err;
+      await espera(ESPERAS_MS[t - 1]);
+    }
+  }
+}
+async function chamar(apiBase, method, path, body) {
+  let res;
+  try {
+    res = await fetch(`${apiBase}/${cfg().storeId}${path}`, {
+      method,
+      headers: headers(),
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(45000),   // pedido que trava não segura o motor
+    });
+  } catch (err) {
+    // "fetch failed" sozinho não diz nada: o motivo de verdade vem em cause.
+    const motivo = err.name === 'TimeoutError' ? 'a loja demorou mais de 45 s para responder'
+      : (err.cause && (err.cause.code || err.cause.message)) || err.message;
+    throw new Error(`Falha de rede com a Nuvemshop (${motivo})`);
+  }
   const text = await res.text();
   let data;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
@@ -90,6 +117,31 @@ async function request(method, path, body) {
     throw err;
   }
   return { data, res };
+}
+
+// Uma página de uma lista. Pedir a página depois da última dá 404 ("Last
+// page is…") quando o total é múltiplo exato do tamanho da página: isso é
+// o fim da lista, não erro.
+async function pagina(path, page) {
+  try {
+    const { data } = await request('GET', path);
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    if (err.status === 404 && page > 1) return [];
+    throw err;
+  }
+}
+
+// Percorre os produtos página por página, entregando cada uma assim que
+// chega — para ler o catálogo inteiro sem guardar tudo na memória (o
+// servidor é pequeno). Página menor também falha menos.
+export async function percorrerProdutos({ perPage = 50, maxPages = 400 } = {}, porPagina) {
+  for (let page = 1; page <= maxPages; page++) {
+    const data = await pagina(`/products?per_page=${perPage}&page=${page}`, page);
+    if (data.length === 0) break;
+    await porPagina(data);
+    if (data.length < perPage) break;
+  }
 }
 
 // Busca TODOS os produtos, paginando (per_page máx. 200).
@@ -104,7 +156,7 @@ export async function listAllProducts(opts = {}) {
   const maxPages = opts.maxPages || 200; // trava de segurança
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const { data } = await request('GET', `/products?per_page=${perPage}&page=${page}${pub}`);
+    const data = await pagina(`/products?per_page=${perPage}&page=${page}${pub}`, page);
     if (!Array.isArray(data) || data.length === 0) break;
     all.push(...data);
     if (data.length < perPage) break;
@@ -124,7 +176,7 @@ export async function listOrders(opts = {}) {
   const maxPages = opts.maxPages || 40;
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const { data } = await request('GET', `/orders?per_page=${per}&page=${page}${since}${status}`);
+    const data = await pagina(`/orders?per_page=${per}&page=${page}${since}${status}`, page);
     if (!Array.isArray(data) || data.length === 0) break;
     all.push(...data);
     if (data.length < per) break;
@@ -145,7 +197,7 @@ export async function listAbandonedCheckouts(opts = {}) {
   const maxPages = opts.maxPages || 20;
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const { data } = await request('GET', `/checkouts?per_page=${per}&page=${page}${since}`);
+    const data = await pagina(`/checkouts?per_page=${per}&page=${page}${since}`, page);
     if (!Array.isArray(data) || data.length === 0) break;
     all.push(...data);
     if (data.length < per) break;
@@ -161,7 +213,7 @@ export async function listAllCategories() {
   let page = 1;
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const { data } = await request('GET', `/categories?per_page=200&page=${page}`);
+    const data = await pagina(`/categories?per_page=200&page=${page}`, page);
     if (!Array.isArray(data) || data.length === 0) break;
     all.push(...data);
     if (data.length < 200) break;
@@ -252,7 +304,7 @@ export async function listAllCustomers(opts = {}) {
   const maxPages = opts.maxPages || 100;
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const { data } = await request('GET', `/customers?per_page=${per}&page=${page}`);
+    const data = await pagina(`/customers?per_page=${per}&page=${page}`, page);
     if (!Array.isArray(data) || data.length === 0) break;
     all.push(...data);
     if (data.length < per) break;

@@ -676,11 +676,15 @@ async function lerCategoriasDaLoja() {
   return { catById, isBrandCat: (id) => brandIds.has(id), isMarcasRoot: (id) => rootMarcasIds.has(id) };
 }
 
+// Em produto de estoque próprio "em mãos" é o próprio estoque.
+const acertarEmMaosProprio = () => db.exec(`UPDATE variants SET on_hand = stock WHERE product_id IN
+  (SELECT id FROM products WHERE on_demand = 0)`);
+
 // Cria ou atualiza aqui os produtos que vieram da loja.
 // "desde": quando a leitura da loja começou. Variação que mudou aqui depois
 // disso (venda, entrada, envio para a loja) fica como está nesta rodada — o
 // número lido já estaria velho para ela — e é acertada na próxima.
-function gravarProdutosDaLoja(products, { catById, isBrandCat, isMarcasRoot }, desde = null) {
+function gravarProdutosDaLoja(products, { catById, isBrandCat, isMarcasRoot }, desde = null, { acertarEmMaos = true } = {}) {
   const upP = db.prepare(`INSERT INTO products (nuvemshop_product_id, name, brand, category, categories_all, description, image_url, published, synced_nuvemshop, created_at, updated_at)
     VALUES (@pid,@name,@brand,@category,@cats,@description,@image,@published,1,@now,@now)
     ON CONFLICT(nuvemshop_product_id) DO UPDATE SET
@@ -748,8 +752,7 @@ function gravarProdutosDaLoja(products, { catById, isBrandCat, isMarcasRoot }, d
     }
     // O estoque veio da loja; em produto de estoque próprio "em mãos" é
     // o mesmo número. (Sob encomenda é nosso, e não se toca nele.)
-    db.exec(`UPDATE variants SET on_hand = stock WHERE product_id IN
-      (SELECT id FROM products WHERE on_demand = 0)`);
+    if (acertarEmMaos) acertarEmMaosProprio();
   })();
 
   return { variants: variantCount, brands: brands.size, categories: cats.size };
@@ -775,19 +778,27 @@ const unidadesDe = (p) => (p.variants || []).reduce((s, v) => {
 async function relerEstoqueDaLoja({ novosSoComEstoque = true, novosSoNoAr = true } = {}) {
   const desde = now();
   const cats = await lerCategoriasDaLoja();
-  const raw = await nuvem.listAllProducts({});   // todos: no ar ou não, com ou sem estoque
   const jaAqui = new Set(db.prepare('SELECT nuvemshop_product_id id FROM products WHERE nuvemshop_product_id IS NOT NULL').all().map((r) => String(r.id)));
-  const products = raw.filter((p) => jaAqui.has(String(p.id))
-    || ((!novosSoComEstoque || unidadesDe(p) > 0) && (!novosSoNoAr || p.published !== false)));
-  // Grava na fila do estoque: nenhum envio para a loja acontece no meio.
+  const vistos = new Set();
+  let lidos = 0, gravados = 0, variants = 0;
+  // Página por página (50 produtos): grava cada uma assim que chega, na
+  // fila do estoque — nenhum envio de venda para a loja acontece no meio.
+  await nuvem.percorrerProdutos({ perPage: 50 }, async (pagina) => {
+    lidos += pagina.length;
+    for (const p of pagina) for (const v of (p.variants || [])) vistos.add(String(v.id));
+    const escolhidos = pagina.filter((p) => jaAqui.has(String(p.id))
+      || ((!novosSoComEstoque || unidadesDe(p) > 0) && (!novosSoNoAr || p.published !== false)));
+    if (!escolhidos.length) return;
+    const r = await naFila(() => gravarProdutosDaLoja(escolhidos, cats, desde, { acertarEmMaos: false }));
+    gravados += escolhidos.length; variants += r.variants;
+  });
   return naFila(() => {
-    const r = gravarProdutosDaLoja(products, cats, desde);
+    acertarEmMaosProprio();
     let zeradas = 0;
-    const vistos = new Set(raw.flatMap((p) => (p.variants || []).map((v) => String(v.id))));
     const ligados = db.prepare(`SELECT COUNT(*) n FROM products WHERE nuvemshop_product_id IS NOT NULL`).get().n;
     // Trava de segurança: se a loja devolveu bem menos produtos do que
     // existem aqui, a leitura veio incompleta — não zera nada.
-    if (raw.length >= ligados * 0.8) {
+    if (lidos >= ligados * 0.8) {
       const cands = db.prepare(`SELECT v.id, v.nuvemshop_variant_id vid, COALESCE(p.on_demand,0) enc FROM variants v
         JOIN products p ON p.id = v.product_id
         WHERE v.nuvemshop_variant_id IS NOT NULL AND v.stock > 0 AND v.ns_delta = 0 AND v.ns_fixar = 0
@@ -796,7 +807,7 @@ async function relerEstoqueDaLoja({ novosSoComEstoque = true, novosSoNoAr = true
       db.transaction(() => { for (const c of cands) if (!vistos.has(String(c.vid))) { zerar.run(c.enc, now(), c.id); zeradas += 1; } })();
     }
     setSetting('estoque_relido_em', now());
-    return { ...r, products: products.length, scanned: raw.length, skipped: raw.length - products.length, zeradas };
+    return { variants, products: gravados, scanned: lidos, skipped: lidos - gravados, zeradas, brands: 0, categories: 0 };
   });
 }
 
@@ -3983,55 +3994,74 @@ async function tickAutomatico(motivo = 'automático') {
 
   if (sincronizando || !isLive()) return;
   sincronizando = true;
+  // Cada tarefa por conta própria: se uma falhar (a loja derrubou a
+  // conexão, por exemplo), as outras rodam mesmo assim, e o erro fica
+  // guardado na tarefa certa — é o que a tela Conectar mostra.
+  const tarefa = async (chaveErro, fn) => {
+    try { await fn(); if (chaveErro) setSetting(chaveErro, ''); }
+    catch (err) {
+      console.error(`${chaveErro || 'tarefa'}:`, err.message);
+      if (chaveErro) setSetting(chaveErro, err.message);
+    }
+  };
   try {
-    // Estoque que não subiu na hora da venda (loja fora do ar) vai agora.
-    const e = await enviarPendentes();
-    if (e.enviados) console.log(`› Estoque: ${e.enviados} variação(ões) acertada(s) na loja.`);
-    if (e.falhas) console.error(`Estoque: ${e.falhas} variação(ões) ainda na fila — ${e.erro}`);
-    const r = await sincronizarPedidos();
-    if (r && !r.skipped && (r.novos || r.lancados)) {
-      console.log(`› Pedidos do site (${motivo}): ${r.novos} novo(s), ${r.lancados} lançado(s) no caixa.`);
-    }
-    if (r && r.grade && r.grade.repostos) console.log(`› Sob encomenda: ${r.grade.repostos} número(s) de volta no site.`);
-    if (r && r.grade && r.grade.falhas) console.error(`Sob encomenda: ${r.grade.falhas} número(s) não voltaram ao site; tenta de novo.`);
-    // Uma vez só: relê dois anos de pedidos para trazer as peças dos
-    // antigos (antes o sistema guardava só o total) e os produtos que já
-    // esgotaram. (v2: a primeira leitura não buscava os esgotados;
-    // v3: guarda de onde veio cada pedido — balcão ou site.)
-    if (!getSetting('itens_site_historico_v3')) {
-      const h = await sincronizarPedidos(730);
-      setSetting('itens_site_historico_v3', now());
-      console.log(`› Histórico do site: ${h.analisados} pedido(s) relidos com as peças.`);
-    }
+    await tarefa('last_orders_error', async () => {
+      // Estoque que não subiu na hora da venda (loja fora do ar) vai agora.
+      const e = await enviarPendentes();
+      if (e.enviados) console.log(`› Estoque: ${e.enviados} variação(ões) acertada(s) na loja.`);
+      if (e.falhas) console.error(`Estoque: ${e.falhas} variação(ões) ainda na fila — ${e.erro}`);
+      const r = await sincronizarPedidos();
+      if (r && !r.skipped && (r.novos || r.lancados)) {
+        console.log(`› Pedidos do site (${motivo}): ${r.novos} novo(s), ${r.lancados} lançado(s) no caixa.`);
+      }
+      if (r && r.grade && r.grade.repostos) console.log(`› Sob encomenda: ${r.grade.repostos} número(s) de volta no site.`);
+      if (r && r.grade && r.grade.falhas) console.error(`Sob encomenda: ${r.grade.falhas} número(s) não voltaram ao site; tenta de novo.`);
+      // Uma vez só: relê dois anos de pedidos para trazer as peças dos
+      // antigos (antes o sistema guardava só o total) e os produtos que já
+      // esgotaram. (v2: a primeira leitura não buscava os esgotados;
+      // v3: guarda de onde veio cada pedido — balcão ou site.)
+      if (!getSetting('itens_site_historico_v3')) {
+        const h = await sincronizarPedidos(730);
+        setSetting('itens_site_historico_v3', now());
+        console.log(`› Histórico do site: ${h.analisados} pedido(s) relidos com as peças.`);
+      }
+    });
     // O estoque inteiro da loja, de tempos em tempos (mudanças feitas direto
-    // no painel da Nuvemshop).
+    // no painel da Nuvemshop). Falhou? Tenta de novo na próxima volta.
     const ultima = getSetting('estoque_relido_em');
     if (!ultima || Date.now() - new Date(ultima).getTime() >= RELER_ESTOQUE_MIN * 60e3) {
-      const e2 = await relerEstoqueDaLoja();
-      console.log(`› Estoque relido da loja: ${e2.variants} variação(ões)${e2.zeradas ? `, ${e2.zeradas} zerada(s) (sumiram da loja)` : ''}.`);
+      await tarefa('estoque_erro', async () => {
+        const e2 = await relerEstoqueDaLoja();
+        console.log(`› Estoque relido da loja: ${e2.variants} variação(ões)${e2.zeradas ? `, ${e2.zeradas} zerada(s) (sumiram da loja)` : ''}.`);
+      });
     }
     // Clientes cadastrados na loja (conta no site, mesmo sem compra).
     const ultClientes = getSetting('clientes_relidos_em');
     if (!ultClientes || Date.now() - new Date(ultClientes).getTime() >= RELER_CLIENTES_MIN * 60e3) {
-      const cli = await importarClientes();
-      vincularPedidos(); limparClientesGenericos(); detectarInstagram();
-      setSetting('clientes_relidos_em', now());
-      if (cli && cli.novos) console.log(`› Clientes da loja: ${cli.novos} novo(s).`);
+      await tarefa('clientes_erro', async () => {
+        const cli = await importarClientes();
+        vincularPedidos(); limparClientesGenericos(); detectarInstagram();
+        setSetting('clientes_relidos_em', now());
+        if (cli && cli.novos) console.log(`› Clientes da loja: ${cli.novos} novo(s).`);
+      });
     }
-    // A permissão de gravar estoque na loja, conferida uma vez por dia.
+    // A permissão de gravar estoque na loja: conferida uma vez por dia; se
+    // está com problema, a cada volta — arrumou, fica verde sozinho.
     let escr = null; try { escr = JSON.parse(getSetting('nuvemshop_escrita') || 'null'); } catch (_) { /* valor antigo */ }
-    if (!escr || !escr.quando || Date.now() - new Date(escr.quando).getTime() >= TESTAR_ESCRITA_MIN * 60e3) {
-      const t = await testarEscrita();
-      if (!t.ok) console.error('Gravar estoque na loja:', t.erro);
+    if (!escr || !escr.ok || !escr.quando || Date.now() - new Date(escr.quando).getTime() >= TESTAR_ESCRITA_MIN * 60e3) {
+      await tarefa(null, async () => {
+        const t = await testarEscrita();
+        if (!t.ok) console.error('Gravar estoque na loja:', t.erro);
+      });
     }
-    const c = await sincronizarCarrinhos();
-    if (c && c.novos) console.log(`› Carrinhos abandonados: ${c.novos} novo(s).`);
-    const msgs = gerarMensagens();
-    if (msgs) console.log(`› ${msgs} mensagem(ns) esperando envio.`);
-    setSetting('last_orders_error', '');   // rodou inteiro: some o aviso de erro antigo
-  } catch (err) {
-    console.error('Sincronização de pedidos falhou:', err.message);
-    setSetting('last_orders_error', err.message);
+    await tarefa(null, async () => {
+      const c = await sincronizarCarrinhos();
+      if (c && c.novos) console.log(`› Carrinhos abandonados: ${c.novos} novo(s).`);
+    });
+    await tarefa(null, async () => {
+      const msgs = gerarMensagens();
+      if (msgs) console.log(`› ${msgs} mensagem(ns) esperando envio.`);
+    });
   } finally { sincronizando = false; }
 }
 setInterval(() => tickAutomatico(), INTERVALO_MIN * 60 * 1000);
@@ -4278,35 +4308,45 @@ app.get('/api/connection', (req, res) => res.json({
   ...nuvem.connectionInfo(),
   automatico: {
     pedidos: { a_cada_min: INTERVALO_MIN, ultima: getSetting('last_orders_import') || null, erro: getSetting('last_orders_error') || null },
-    estoque: { a_cada_min: RELER_ESTOQUE_MIN, ultima: getSetting('estoque_relido_em') || null },
-    clientes: { a_cada_min: RELER_CLIENTES_MIN, ultima: getSetting('clientes_relidos_em') || null },
+    estoque: { a_cada_min: RELER_ESTOQUE_MIN, ultima: getSetting('estoque_relido_em') || null, erro: getSetting('estoque_erro') || null },
+    clientes: { a_cada_min: RELER_CLIENTES_MIN, ultima: getSetting('clientes_relidos_em') || null, erro: getSetting('clientes_erro') || null },
     escrita_a_cada_min: TESTAR_ESCRITA_MIN,
   },
 }));
 
 // O sistema consegue mudar o estoque na loja? Regrava numa variação o MESMO
 // número que ela já tem (nada muda na loja) e vê se a Nuvemshop aceita.
-// Roda na fila do estoque (nenhum envio de venda no meio) e numa peça
-// parada — a que mudou há mais tempo —, para não regravar um número que
-// uma venda acabou de mexer.
+// Roda na fila do estoque (nenhum envio de venda no meio) e numa peça que
+// existe na loja AGORA — veio na última releitura — e está parada desde
+// então (sem venda no meio). Produto apagado na loja dá 404: isso não diz
+// nada sobre permissão, então tenta outra peça. Só 401/403 é "sem permissão";
+// erro de rede não muda o que se sabe (tenta de novo na próxima volta).
 function testarEscrita() {
-  const v = db.prepare(`SELECT v.nuvemshop_product_id pid, v.nuvemshop_variant_id vid FROM variants v
+  const relido = getSetting('estoque_relido_em');
+  const desde = relido ? new Date(new Date(relido).getTime() - 30 * 60e3).toISOString() : '0000';
+  const candidatas = db.prepare(`SELECT v.nuvemshop_product_id pid, v.nuvemshop_variant_id vid FROM variants v
     JOIN products p ON p.id = v.product_id
     WHERE v.nuvemshop_variant_id IS NOT NULL AND v.stock_management = 1 AND COALESCE(p.on_demand,0) = 0
-      AND v.ns_delta = 0 AND v.ns_fixar = 0
-    ORDER BY v.updated_at ASC LIMIT 1`).get();
-  if (!v) return Promise.resolve({ ok: false, erro: 'Ainda não há produtos da loja aqui.' });
+      AND v.ns_delta = 0 AND v.ns_fixar = 0 AND v.updated_at >= ?
+    ORDER BY v.updated_at ${relido ? 'ASC' : 'DESC'} LIMIT 3`).all(desde);
+  if (!candidatas.length) return Promise.resolve({ ok: false, erro: 'Ainda não há produtos da loja aqui.' });
   return naFila(async () => {
-    try {
-      const atual = await nuvem.getVariant(v.pid, v.vid);
-      await nuvem.setVariantStock(v.pid, v.vid, parseInt(atual.stock, 10) || 0);
-      nuvem.anotarEscrita(true);
-      return { ok: true };
-    } catch (err) {
-      const semPermissao = err.status === 401 || err.status === 403;
-      if (!semPermissao) nuvem.anotarEscrita(false, err.message);
-      return { ok: false, sem_permissao: semPermissao, erro: err.message };
+    let ultimoErro = null;
+    for (const v of candidatas) {
+      try {
+        const atual = await nuvem.getVariant(v.pid, v.vid);
+        await nuvem.setVariantStock(v.pid, v.vid, parseInt(atual.stock, 10) || 0);
+        nuvem.anotarEscrita(true);
+        return { ok: true };
+      } catch (err) {
+        if (err.status === 401 || err.status === 403) {
+          return { ok: false, sem_permissao: true, erro: err.message };   // setVariantStock já anotou
+        }
+        ultimoErro = err;
+        if (err.status !== 404) break;   // rede/loja fora: não adianta tentar outra agora
+      }
     }
+    return { ok: false, inconclusivo: true, erro: ultimoErro ? ultimoErro.message : 'sem resposta da loja' };
   });
 }
 app.post('/api/connection/testar-escrita', async (req, res) => {

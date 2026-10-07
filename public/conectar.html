@@ -191,10 +191,11 @@ function automatico(c){
     {t:'Pedidos do site e do PDV da Nuvemshop',d:'Vendas, pagamentos, envios e retiradas. O pago entra sozinho no caixa.',
       ultima:p.ultima,cadaMin:p.a_cada_min,erro:p.erro},
     {t:'Estoque e produtos',d:'Inclusive o que você muda direto no painel da Nuvemshop: repôs, corrigiu, esgotou, cadastrou produto novo.',
-      ultima:es.ultima,cadaMin:es.a_cada_min},
-    {t:'Clientes da loja',d:'Quem criou conta no site, mesmo sem ter comprado ainda.',ultima:cl.ultima,cadaMin:cl.a_cada_min},
+      ultima:es.ultima,cadaMin:es.a_cada_min,erro:es.erro?es.erro+' — tenta de novo sozinho na próxima volta.':null},
+    {t:'Clientes da loja',d:'Quem criou conta no site, mesmo sem ter comprado ainda.',ultima:cl.ultima,cadaMin:cl.a_cada_min,
+      erro:cl.erro?cl.erro+' — tenta de novo sozinho na próxima volta.':null},
     {t:'Gravar estoque na Nuvemshop',d:e&&!e.ok?'Como arrumar: no Portal de Parceiros, abra o app → Permissões → marque <b>produtos: escrita</b>, salve e autorize de novo (passo 3 desta tela).'
-      :'A venda daqui baixa o estoque do site. A permissão é conferida sozinha todo dia.',
+      :'A venda daqui baixa o estoque do site. A permissão é conferida sozinha todo dia (e a cada 10 min enquanto der problema).',
       ultima:e?e.quando:null,cadaMin:a.escrita_a_cada_min,erro:e&&!e.ok?(e.erro||'A loja recusou a gravação.'):null},
   ].map(linha).join('');
   // O botão só aparece quando precisa: depois de arrumar a permissão.
