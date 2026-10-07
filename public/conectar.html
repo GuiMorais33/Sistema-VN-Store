@@ -30,6 +30,17 @@
   .ro{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--brand-hi);background:rgba(47,210,79,.08);border:1px solid rgba(47,210,79,.3);padding:5px 10px;border-radius:999px}
   .hidden{display:none}
   .msg{font-size:13px;margin-top:10px}
+  /* Tudo automático: o que roda sozinho, quando rodou e se atrasou */
+  .auto{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+  .au{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px 12px;
+    background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:11px}
+  .au .i{font-weight:900;font-size:14px;line-height:1.3;color:var(--brand-hi)}
+  .au.atencao{border-color:rgba(232,163,23,.45)} .au.atencao .i{color:var(--warn)}
+  .au.erro{border-color:rgba(255,81,66,.45)} .au.erro .i{color:#ff8377}
+  .au .t{font-size:13.5px;font-weight:600}
+  .au .d{font-size:11.5px;color:var(--ink-3);margin-top:2px;line-height:1.45}
+  .au .q{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-2);text-align:right;white-space:nowrap}
+  .au .q small{display:block;color:var(--ink-3)}
   .opts{display:flex;flex-direction:column;gap:8px;margin-top:14px;padding:12px;background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:11px}
   .opt{display:flex;align-items:center;gap:9px;font-size:13.5px;cursor:pointer}
   .opt input{width:17px;height:17px;accent-color:var(--brand);cursor:pointer}
@@ -53,31 +64,18 @@
   <div class="card" id="connectedCard" style="display:none">
     <div class="status"><span class="ico-box brand" style="width:40px;height:40px" id="okIco"></span><div><div class="big">Conectada</div><div class="note" id="storeInfo"></div></div></div>
 
-    <div class="opts">
-      <label class="opt"><input type="checkbox" id="optAvail" checked> <span>Produto novo: só se tiver <b>unidades em estoque</b></span></label>
-      <label class="opt"><input type="checkbox" id="optPub" checked> <span>Produto novo: só se estiver <b>publicado na loja</b></span></label>
-    </div>
-    <div class="note">O estoque dos produtos que já estão aqui é relido sozinho a cada 20 minutos — inclusive o que
-      você muda direto no painel da Nuvemshop. Este botão faz a mesma leitura agora.</div>
-
-    <div class="row" style="margin-top:14px">
-      <button class="btn primary" id="syncBtn" type="button">Ler produtos da loja</button>
-      <button class="btn" id="cliBtn" type="button">Ler clientes e histórico</button>
-      <button class="btn ghost" id="disconnectBtn" type="button">Desconectar</button>
-    </div>
-    <div class="msg" id="syncMsg"></div>
-    <div class="msg" id="cliMsg"></div>
-    <div class="note">A leitura só <b>traz</b> os dados da sua loja pra cá. Nada é criado ou alterado na Nuvemshop.</div>
-  </div>
-
-  <div class="card" id="escritaCard" style="display:none">
-    <h3>Atualizar o estoque na loja</h3>
-    <p class="note" style="margin-top:0">Quando você vende no PDV daqui, lança uma entrada ou o número de um tênis de
-      encomenda volta para o site, o sistema <b>muda o estoque na Nuvemshop</b>. Para isso o app precisa da permissão
-      <b>produtos: leitura e escrita</b>.</p>
+    <h3 style="margin-top:18px">Tudo automático</h3>
+    <p class="note" style="margin-top:0">Ninguém precisa clicar para ler a loja: o sistema faz sozinho, o tempo todo.
+      Se algo atrasar ou der erro, aparece aqui em amarelo ou vermelho.</p>
+    <div class="auto" id="auto"></div>
     <div class="msg" id="escritaMsg"></div>
-    <button class="btn" id="escritaBtn" type="button">Testar agora</button>
-    <div class="note">O teste regrava numa peça o mesmo número de estoque que ela já tem — nada muda na loja.</div>
+    <button class="btn" id="escritaBtn" type="button" hidden>Testar de novo</button>
+
+    <div class="row" style="margin-top:16px">
+      <button class="btn ghost sm" id="disconnectBtn" type="button">Desconectar a loja</button>
+    </div>
+    <div class="note">Na Nuvemshop o sistema só mexe no <b>estoque</b> (venda no PDV, entrada de mercadoria, número
+      de encomenda que volta para o site). Produto, preço e pedido ele só lê.</div>
   </div>
 
   <div class="card" id="backupCard">
@@ -87,14 +85,6 @@
     <div class="note">O sistema tira uma cópia sozinho todo dia e guarda as últimas 14 no servidor.
       Uma vez por semana, <b>baixe uma e guarde fora do servidor</b> (no computador ou no Google Drive):
       se o servidor sumir, as cópias dele somem junto. O arquivo tem todos os dados da loja — guarde como guarda uma senha.</div>
-  </div>
-
-  <div class="card" id="cleanCard" style="display:none">
-    <h3>Começar limpo</h3>
-    <p class="note" style="margin-top:0">Apaga <b>tudo que está aqui no sistema</b> — catálogo, vendas, clientes e financeiro —
-      pra você recomeçar só com os dados reais. <b>Não altera nada na sua Nuvemshop.</b></p>
-    <button class="btn ghost" id="resetBtn" type="button" style="border-color:rgba(255,81,66,.4);color:#ff8377">Limpar dados do sistema</button>
-    <div class="msg" id="resetMsg"></div>
   </div>
 
   <!-- Não conectado: passo a passo -->
@@ -153,14 +143,11 @@ async function load(){
   const c = await api('/api/connection');
   if(c.connected){
     document.getElementById('connectedCard').style.display='block';
-    document.getElementById('cleanCard').style.display='block';
     document.getElementById('setup').style.display='none';
     document.getElementById('storeInfo').textContent = 'Loja Nuvemshop #' + (c.store_id||'—');
-    document.getElementById('escritaCard').style.display='block';
-    mostrarEscrita(c);
+    automatico(c);
   } else {
     document.getElementById('connectedCard').style.display='none';
-    document.getElementById('cleanCard').style.display='none';
     document.getElementById('setup').style.display='block';
   }
 }
@@ -178,77 +165,46 @@ document.getElementById('saveBtn').addEventListener('click', async ()=>{
   }catch(e){ msg.innerHTML='<span style="color:#ff8377">'+e.message+'</span>'; }
 });
 
-document.getElementById('syncBtn').addEventListener('click', async (e)=>{
-  const msg=document.getElementById('syncMsg'); e.target.disabled=true; e.target.textContent='Lendo…';
-  msg.innerHTML='<span class="note">Lendo sua loja… com muitos produtos isso pode levar um tempinho.</span>';
-  try{
-    const r=await api('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      only_available: document.getElementById('optAvail').checked,
-      published_only: document.getElementById('optPub').checked })});
-    if(r.mode!=='live'){ msg.innerHTML='<span>Modo demonstração.</span>'; return; }
-    msg.innerHTML='<span style="color:var(--brand-hi)">✔ Importado com sucesso!</span>'
-      +'<div class="stats">'
-      +'<div class="stat"><div class="l">Produtos</div><div class="v">'+r.products+'</div></div>'
-      +'<div class="stat"><div class="l">Variações</div><div class="v">'+r.variants+'</div></div>'
-      +'<div class="stat"><div class="l">Marcas</div><div class="v">'+r.brands+'</div></div>'
-      +'<div class="stat"><div class="l">Categorias</div><div class="v">'+r.categories+'</div></div>'
-      +'</div>'
-      +'<div class="note">Li '+r.scanned+' '+pl(r.scanned,'produto')+' da loja: o estoque de todos os que já estavam aqui foi conferido'
-      +(r.skipped_no_stock?' e '+r.skipped_no_stock+' '+pl(r.skipped_no_stock,'produto novo ficou','produtos novos ficaram')+' de fora (sem estoque ou fora do ar)':'')
-      +(r.zeradas?'. '+r.zeradas+' '+pl(r.zeradas,'variação sumiu','variações sumiram')+' da loja e '+pl(r.zeradas,'foi zerada','foram zeradas')+' aqui':'')+'.</div>';
-  }catch(err){ msg.innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
-  finally{ e.target.disabled=false; e.target.textContent='Ler produtos da loja'; }
-});
-
-document.getElementById('cliBtn').addEventListener('click', async (e)=>{
-  const b=e.target, msg=document.getElementById('cliMsg');
-  b.disabled=true; b.textContent='Lendo…';
-  msg.innerHTML='<span class="note">Trazendo clientes e o histórico de vendas… em lojas grandes isso leva alguns minutos.</span>';
-  try{
-    const r=await api('/api/import-customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({days:730})});
-    msg.innerHTML='<span style="color:var(--brand-hi)">✔ Pronto!</span>'
-      +'<div class="stats">'
-      +'<div class="stat"><div class="l">Clientes novos</div><div class="v">'+r.clientes.novos+'</div></div>'
-      +'<div class="stat"><div class="l">Já existiam</div><div class="v">'+r.clientes.vinculados+'</div></div>'
-      +'<div class="stat"><div class="l">Vendas lidas</div><div class="v">'+r.pedidos.novos+'</div></div>'
-      +'<div class="stat"><div class="l">No ranking</div><div class="v">'+r.clientes_com_historico+'</div></div>'
-      +'</div>'
-      +'<div class="note">Analisei '+r.pedidos.analisados+' '+pl(r.pedidos.analisados,'pedido')+' desde '+(r.pedidos.desde||'—')+'. '
-      +'Abra <b>Clientes</b> para ver o ranking com o histórico real.</div>';
-  }catch(err){ msg.innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
-  finally{ b.disabled=false; b.textContent='Ler clientes e histórico'; }
-});
-
-document.getElementById('resetBtn').addEventListener('click', async (e)=>{
-  if(!confirm('Isso apaga TODOS os dados do sistema (catálogo, vendas, clientes e financeiro).\n\nSua loja na Nuvemshop NÃO é alterada.\n\nConfirma?')) return;
-  const msg=document.getElementById('resetMsg'); e.target.disabled=true; e.target.textContent='Limpando…';
-  try{ await api('/api/reset',{method:'POST'});
-    msg.innerHTML='<span style="color:var(--brand-hi)">✔ Sistema limpo. Agora clique em “Ler produtos da loja” pra trazer só os disponíveis.</span>';
-  }catch(err){ msg.innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
-  finally{ e.target.disabled=false; e.target.textContent='Limpar dados do sistema'; }
-});
-
 document.getElementById('disconnectBtn').addEventListener('click', async ()=>{
   if(!confirm('Desconectar a loja? (não altera nada na Nuvemshop)')) return;
   await api('/api/disconnect',{method:'POST'}); location.href='/conectar';
 });
 
 // Gravar na loja: o que se sabe (último resultado) e o teste na hora.
-function mostrarEscrita(c){
-  const el=document.getElementById('escritaMsg'), e=c.escrita;
-  const quando=(iso)=>new Date(iso).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
-  const perm=c.scope?`<br><span class="note">Permissões do app: ${c.scope.replace(/,/g,', ')}</span>`:'';
-  el.innerHTML=!e?`<span class="note">Ainda não testado.</span>${perm}`
-    :e.ok?`<span style="color:var(--brand-hi)">✔ Funcionando</span> <span class="note">(${quando(e.quando)})</span>${perm}`
-    :`<span style="color:#ff8377">✖ ${e.erro||'A loja recusou a gravação.'}</span><br>
-       <span class="note">No Portal de Parceiros, abra o app → Permissões → marque <b>produtos: escrita</b>, salve,
-       e autorize de novo (passo 3 desta tela, ou reinstale o app na loja).</span>${perm}`;
+// O que roda sozinho. Atrasou mais que 3 voltas? Amarelo: o servidor pode
+// ter ficado fora do ar (a máquina da Oracle parou, por exemplo).
+function automatico(c){
+  const a=c.automatico||{},e=c.escrita;
+  const hora=(iso)=>new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const haMin=(iso)=>iso?(Date.now()-new Date(iso))/60000:Infinity;
+  const cada=(m)=>m>=1440?'todo dia':m>=60?`a cada ${m/60} h`:`a cada ${m} min`;
+  const linha=(o)=>{
+    const atraso=o.cadaMin&&haMin(o.ultima)>o.cadaMin*3;
+    const cls=o.erro?'erro':(!o.ultima||atraso?'atencao':'');
+    return `<div class="au ${cls}"><span class="i">${o.erro?'✖':(!o.ultima||atraso?'!':'✔')}</span>
+      <div><div class="t">${o.t}</div><div class="d">${o.erro?`<span style="color:#ff8377">${o.erro}</span><br>`:''}${o.d}${
+        atraso&&!o.erro?'<br><b style="color:var(--warn)">Atrasado</b> — o servidor pode ter ficado fora do ar.':''}</div></div>
+      <div class="q">${o.ultima?hora(o.ultima):'ainda não'}<small>${o.cadaMin?cada(o.cadaMin):''}</small></div></div>`;
+  };
+  const p=a.pedidos||{},es=a.estoque||{},cl=a.clientes||{};
+  document.getElementById('auto').innerHTML=[
+    {t:'Pedidos do site e do PDV da Nuvemshop',d:'Vendas, pagamentos, envios e retiradas. O pago entra sozinho no caixa.',
+      ultima:p.ultima,cadaMin:p.a_cada_min,erro:p.erro},
+    {t:'Estoque e produtos',d:'Inclusive o que você muda direto no painel da Nuvemshop: repôs, corrigiu, esgotou, cadastrou produto novo.',
+      ultima:es.ultima,cadaMin:es.a_cada_min},
+    {t:'Clientes da loja',d:'Quem criou conta no site, mesmo sem ter comprado ainda.',ultima:cl.ultima,cadaMin:cl.a_cada_min},
+    {t:'Gravar estoque na Nuvemshop',d:e&&!e.ok?'Como arrumar: no Portal de Parceiros, abra o app → Permissões → marque <b>produtos: escrita</b>, salve e autorize de novo (passo 3 desta tela).'
+      :'A venda daqui baixa o estoque do site. A permissão é conferida sozinha todo dia.',
+      ultima:e?e.quando:null,cadaMin:a.escrita_a_cada_min,erro:e&&!e.ok?(e.erro||'A loja recusou a gravação.'):null},
+  ].map(linha).join('');
+  // O botão só aparece quando precisa: depois de arrumar a permissão.
+  document.getElementById('escritaBtn').hidden=!(e&&!e.ok);
 }
-document.getElementById('escritaBtn').addEventListener('click', async (e)=>{
-  e.target.disabled=true;e.target.textContent='Testando…';
-  try{ await api('/api/connection/testar-escrita',{method:'POST'}); mostrarEscrita(await api('/api/connection')); }
+document.getElementById('escritaBtn').addEventListener('click', async (ev)=>{
+  ev.target.disabled=true;ev.target.textContent='Testando…';
+  try{ await api('/api/connection/testar-escrita',{method:'POST'}); automatico(await api('/api/connection')); }
   catch(err){ document.getElementById('escritaMsg').innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
-  finally{ e.target.disabled=false;e.target.textContent='Testar agora'; }
+  finally{ ev.target.disabled=false;ev.target.textContent='Testar de novo'; }
 });
 
 const oi=document.getElementById('okIco'); if(oi) oi.innerHTML=ICO('ok',20);

@@ -45,10 +45,23 @@ before(async () => {
   });
   await new Promise((ok) => nuvem.listen(0, '127.0.0.1', ok));
   s = await subirServidor({ NUVEMSHOP_STORE_ID: LOJA, NUVEMSHOP_ACCESS_TOKEN: 'token-de-teste',
-    NUVEMSHOP_API_BASE: `http://127.0.0.1:${nuvem.address().port}` });
-  await reler();
+    NUVEMSHOP_API_BASE: `http://127.0.0.1:${nuvem.address().port}`, PRIMEIRA_RODADA_MS: '200' });
+  // Sem ninguém clicar em nada: a primeira volta do motor lê tudo sozinha.
+  for (let i = 0; i < 50 && !(await s.pedir('GET', '/api/connection')).json.automatico.clientes.ultima; i++) {
+    await new Promise((ok) => setTimeout(ok, 100));
+  }
 });
 after(() => { s?.parar(); nuvem?.close(); });
+
+test('ligou: estoque, pedidos, clientes e a permissão de gravar rodam sozinhos', async () => {
+  const a = (await s.pedir('GET', '/api/connection')).json;
+  assert.ok(a.automatico.estoque.ultima);
+  assert.ok(a.automatico.pedidos.ultima);
+  assert.ok(a.automatico.clientes.ultima);
+  assert.equal(a.automatico.pedidos.erro, null);
+  assert.equal(a.escrita.ok, true);
+  assert.equal(estoque('Conjunto Adidas'), 2);   // o produto chegou sem o botão
+});
 
 test('repôs peça pelo painel da loja: o número daqui sobe', async () => {
   assert.equal(estoque('Conjunto Adidas'), 2);

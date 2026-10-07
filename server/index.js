@@ -760,7 +760,7 @@ function gravarProdutosDaLoja(products, { catById, isBrandCat, isMarcasRoot }, d
 // O estoque daqui é o da Nuvemshop mais o que daqui ainda não subiu. Venda
 // do site é relida na hora; mas mudança feita DIRETO no painel da loja
 // (repôs peça, corrigiu número, cadastrou produto) só chega relendo o
-// catálogo inteiro — antes isso dependia de alguém clicar em "Ler produtos"
+// catálogo inteiro — antes isso dependia de alguém clicar num botão
 // e o estoque daqui ficava dias atrasado. Agora roda sozinho.
 //   - Produto que já está aqui: sempre atualiza (estoque, preço, nome),
 //     inclusive quando esgotou ou saiu do ar — senão ficaria o número velho.
@@ -823,19 +823,6 @@ app.post('/api/sync', async (req, res) => {
     console.error('Sync falhou:', err.message);
     res.status(502).json({ error: err.message });
   }
-});
-
-// Limpa os dados LOCAIS (catálogo, vendas, clientes, financeiro).
-// Não toca em nada na Nuvemshop — serve para começar do zero, limpo.
-app.post('/api/reset', (req, res) => {
-  const keepConnection = db.prepare('SELECT key, value FROM settings').all();
-  db.transaction(() => {
-    db.exec(`DELETE FROM sale_items; DELETE FROM sales; DELETE FROM stock_movements;
-             DELETE FROM financial_entries; DELETE FROM customers;
-             DELETE FROM variants; DELETE FROM products;`);
-  })();
-  // (settings preservado: a conexão com a loja continua ativa)
-  res.json({ ok: true, kept_settings: keepConnection.length });
 });
 
 // ==================== CUSTOS EM MASSA ====================
@@ -3981,8 +3968,13 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
   return { novos, atualizados, lancados, analisados: orders.length, desde, grade };
 }
 
-// Motor automático: verifica a loja de tempos em tempos, sozinho.
+// Motor automático: verifica a loja de tempos em tempos, sozinho. Nada
+// disso depende de botão — o dono não precisa lembrar de "ler" nada.
+//   pedidos e status: a cada 10 min · estoque e produtos: a cada 20 min
+//   clientes da loja: a cada 6 h · permissão de gravar estoque: 1x por dia
 const INTERVALO_MIN = Math.max(2, parseInt(process.env.SYNC_MINUTES, 10) || 10);
+const RELER_CLIENTES_MIN = 6 * 60;
+const TESTAR_ESCRITA_MIN = 24 * 60;
 let sincronizando = false;
 async function tickAutomatico(motivo = 'automático') {
   // As fixas não dependem da loja: rodam mesmo sem conexão.
@@ -4018,17 +4010,33 @@ async function tickAutomatico(motivo = 'automático') {
       const e2 = await relerEstoqueDaLoja();
       console.log(`› Estoque relido da loja: ${e2.variants} variação(ões)${e2.zeradas ? `, ${e2.zeradas} zerada(s) (sumiram da loja)` : ''}.`);
     }
+    // Clientes cadastrados na loja (conta no site, mesmo sem compra).
+    const ultClientes = getSetting('clientes_relidos_em');
+    if (!ultClientes || Date.now() - new Date(ultClientes).getTime() >= RELER_CLIENTES_MIN * 60e3) {
+      const cli = await importarClientes();
+      vincularPedidos(); limparClientesGenericos(); detectarInstagram();
+      setSetting('clientes_relidos_em', now());
+      if (cli && cli.novos) console.log(`› Clientes da loja: ${cli.novos} novo(s).`);
+    }
+    // A permissão de gravar estoque na loja, conferida uma vez por dia.
+    let escr = null; try { escr = JSON.parse(getSetting('nuvemshop_escrita') || 'null'); } catch (_) { /* valor antigo */ }
+    if (!escr || !escr.quando || Date.now() - new Date(escr.quando).getTime() >= TESTAR_ESCRITA_MIN * 60e3) {
+      const t = await testarEscrita();
+      if (!t.ok) console.error('Gravar estoque na loja:', t.erro);
+    }
     const c = await sincronizarCarrinhos();
     if (c && c.novos) console.log(`› Carrinhos abandonados: ${c.novos} novo(s).`);
     const msgs = gerarMensagens();
     if (msgs) console.log(`› ${msgs} mensagem(ns) esperando envio.`);
+    setSetting('last_orders_error', '');   // rodou inteiro: some o aviso de erro antigo
   } catch (err) {
     console.error('Sincronização de pedidos falhou:', err.message);
     setSetting('last_orders_error', err.message);
   } finally { sincronizando = false; }
 }
 setInterval(() => tickAutomatico(), INTERVALO_MIN * 60 * 1000);
-setTimeout(() => tickAutomatico('início'), 8000);
+// A primeira volta sai logo depois de ligar (o teste encurta a espera).
+setTimeout(() => tickAutomatico('início'), parseInt(process.env.PRIMEIRA_RODADA_MS, 10) || 8000);
 backup.agendarBackups();
 
 // Traz clientes + histórico de vendas da loja e monta o ranking real.
@@ -4265,26 +4273,46 @@ app.delete('/api/agente/chave', (req, res) => {
 });
 
 // ==================== CONEXÃO NUVEMSHOP ====================
-app.get('/api/connection', (req, res) => res.json(nuvem.connectionInfo()));
+// A conexão e o que roda sozinho: quando rodou pela última vez e se deu erro.
+app.get('/api/connection', (req, res) => res.json({
+  ...nuvem.connectionInfo(),
+  automatico: {
+    pedidos: { a_cada_min: INTERVALO_MIN, ultima: getSetting('last_orders_import') || null, erro: getSetting('last_orders_error') || null },
+    estoque: { a_cada_min: RELER_ESTOQUE_MIN, ultima: getSetting('estoque_relido_em') || null },
+    clientes: { a_cada_min: RELER_CLIENTES_MIN, ultima: getSetting('clientes_relidos_em') || null },
+    escrita_a_cada_min: TESTAR_ESCRITA_MIN,
+  },
+}));
 
 // O sistema consegue mudar o estoque na loja? Regrava numa variação o MESMO
 // número que ela já tem (nada muda na loja) e vê se a Nuvemshop aceita.
+// Roda na fila do estoque (nenhum envio de venda no meio) e numa peça
+// parada — a que mudou há mais tempo —, para não regravar um número que
+// uma venda acabou de mexer.
+function testarEscrita() {
+  const v = db.prepare(`SELECT v.nuvemshop_product_id pid, v.nuvemshop_variant_id vid FROM variants v
+    JOIN products p ON p.id = v.product_id
+    WHERE v.nuvemshop_variant_id IS NOT NULL AND v.stock_management = 1 AND COALESCE(p.on_demand,0) = 0
+      AND v.ns_delta = 0 AND v.ns_fixar = 0
+    ORDER BY v.updated_at ASC LIMIT 1`).get();
+  if (!v) return Promise.resolve({ ok: false, erro: 'Ainda não há produtos da loja aqui.' });
+  return naFila(async () => {
+    try {
+      const atual = await nuvem.getVariant(v.pid, v.vid);
+      await nuvem.setVariantStock(v.pid, v.vid, parseInt(atual.stock, 10) || 0);
+      nuvem.anotarEscrita(true);
+      return { ok: true };
+    } catch (err) {
+      const semPermissao = err.status === 401 || err.status === 403;
+      if (!semPermissao) nuvem.anotarEscrita(false, err.message);
+      return { ok: false, sem_permissao: semPermissao, erro: err.message };
+    }
+  });
+}
 app.post('/api/connection/testar-escrita', async (req, res) => {
   if (req.agente) return res.status(403).json({ error: 'Só o dono testa.' });
   if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
-  const v = db.prepare(`SELECT nuvemshop_product_id pid, nuvemshop_variant_id vid FROM variants
-    WHERE nuvemshop_variant_id IS NOT NULL AND stock_management = 1 ORDER BY updated_at DESC LIMIT 1`).get();
-  if (!v) return res.status(400).json({ error: 'Leia os produtos da loja primeiro.' });
-  try {
-    const atual = await nuvem.getVariant(v.pid, v.vid);
-    await nuvem.setVariantStock(v.pid, v.vid, parseInt(atual.stock, 10) || 0);
-    nuvem.anotarEscrita(true);
-    res.json({ ok: true });
-  } catch (err) {
-    const semPermissao = err.status === 401 || err.status === 403;
-    if (!semPermissao) nuvem.anotarEscrita(false, err.message);
-    res.json({ ok: false, sem_permissao: semPermissao, erro: err.message });
-  }
+  res.json(await testarEscrita());
 });
 
 // Salva App ID + Secret (informados na tela Conectar). NÃO conecta ainda.
@@ -4310,6 +4338,9 @@ app.get('/oauth/callback', async (req, res) => {
     setSetting('nuvemshop_store_id', String(data.user_id));
     setSetting('nuvemshop_scope', data.scope || '');   // o que o app pode fazer na loja
     setSetting('nuvemshop_escrita', null);              // testa de novo com a autorização nova
+    // Acabou de conectar: traz produtos, pedidos e clientes agora, sem
+    // esperar a próxima volta do motor.
+    setTimeout(() => tickAutomatico('conectou'), 1500);
     res.redirect('/conectar?ok=1');
   } catch (err) {
     res.redirect('/conectar?erro=' + encodeURIComponent(err.message));
