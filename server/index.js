@@ -11,7 +11,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import db, { seedDemoIfEmpty, getSetting, setSetting, seedCategories, categoryId, migrateOldCategories } from './db.js';
+import db, { seedDemoIfEmpty, getSetting, setSetting, seedCategories, categoryId, migrateOldCategories, semAcento } from './db.js';
 import * as nuvem from './nuvemshop.js';
 import { naFila, enviarEstoque, enviarPendentes, gravarEnviado, contagemAMao, lerDaLoja, reporGrade } from './estoque.js';
 import * as backup from './backup.js';
@@ -163,6 +163,8 @@ app.use(express.static(PUBLIC));
 const isLive = () => nuvem.isConfigured();
 const now = () => new Date().toISOString();
 const money = (n) => Math.round((Number(n) || 0) * 100) / 100;
+// Termo de busca sem acento e em minúscula, para comparar com busca(coluna).
+const termo = (q) => `%${semAcento(q)}%`;
 // "1 peça", "3 peças" nos textos que o dono lê (lembretes, avisos).
 const pl = (n, um, varios = um + 's') => (Number(n) === 1 ? um : varios);
 
@@ -281,8 +283,8 @@ app.get('/api/products', (req, res) => {
   const vende = `(COALESCE(p.on_demand,0) = 1 OR v.stock_management = 0 OR v.stock > 0)`;
   let rows;
   if (q) {
-    const like = `%${q}%`;
-    rows = db.prepare(`${base} WHERE (v.product_name LIKE ? OR v.variant_name LIKE ? OR v.sku LIKE ? OR p.brand LIKE ? OR p.category LIKE ?)
+    const like = termo(q);
+    rows = db.prepare(`${base} WHERE (busca(v.product_name) LIKE ? OR busca(v.variant_name) LIKE ? OR busca(v.sku) LIKE ? OR busca(p.brand) LIKE ? OR busca(p.category) LIKE ?)
       ORDER BY ${vende} DESC, v.product_name, v.variant_name LIMIT 120`).all(like, like, like, like, like);
   } else {
     rows = db.prepare(`${base} WHERE ${vende} ORDER BY v.updated_at DESC, v.product_name LIMIT 120`).all();
@@ -298,7 +300,8 @@ app.get('/api/catalog', (req, res) => {
   const brand = (req.query.brand || '').trim();
   const where = [];
   const args = [];
-  if (q) { where.push('(p.name LIKE ? OR p.brand LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
+  // Buscando "tênis" acha pelo nome, pela marca e pela categoria.
+  if (q) { where.push('(busca(p.name) LIKE ? OR busca(p.brand) LIKE ? OR busca(p.category) LIKE ? OR busca(p.categories_all) LIKE ?)'); args.push(termo(q), termo(q), termo(q), termo(q)); }
   // Categoria: o produto pode estar em várias (como no site) — busca em todas.
   if (cat) { where.push('(p.category = ? OR p.categories_all LIKE ?)'); args.push(cat, `%${cat}%`); }
   if (brand) { where.push('p.brand = ?'); args.push(brand); }
@@ -845,7 +848,7 @@ app.get('/api/custos', (req, res) => {
   const cat = (req.query.category || '').trim();
   const soFalta = req.query.falta === '1';
   const where = [], args = [];
-  if (q) { where.push('(v.product_name LIKE ? OR v.variant_name LIKE ? OR v.sku LIKE ?)'); args.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+  if (q) { where.push('(busca(v.product_name) LIKE ? OR busca(v.variant_name) LIKE ? OR busca(v.sku) LIKE ?)'); args.push(termo(q), termo(q), termo(q)); }
   if (brand) { where.push('p.brand = ?'); args.push(brand); }
   if (cat) { where.push('(p.category = ? OR p.categories_all LIKE ?)'); args.push(cat, `%${cat}%`); }
   if (soFalta) where.push('COALESCE(v.cost,0) <= 0');
@@ -935,7 +938,7 @@ app.get('/api/encomenda', (req, res) => {
   const where = ['p.on_demand = 1'], args = [];
   const cat = (req.query.category || '').trim(), q = (req.query.q || '').trim();
   if (cat) { where.push('(p.category = ? OR p.categories_all LIKE ?)'); args.push(cat, `%${cat}%`); }
-  if (q) { where.push('(p.name LIKE ? OR p.brand LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
+  if (q) { where.push('(busca(p.name) LIKE ? OR busca(p.brand) LIKE ?)'); args.push(termo(q), termo(q)); }
   const produtos = db.prepare(`SELECT p.id, p.name, p.brand, p.category, p.image_url FROM products p
     WHERE ${where.join(' AND ')} ORDER BY p.name`).all(...args);
   const grade = db.prepare(`SELECT id, variant_name, stock, COALESCE(on_hand,0) on_hand, cost, price
@@ -1318,9 +1321,9 @@ app.get('/api/customers', (req, res) => {
       MAX(CASE WHEN ${VENDA('s.')} THEN s.created_at END) AS last_purchase,
       CASE WHEN c.nuvemshop_customer_id IS NOT NULL THEN 1 ELSE 0 END AS da_loja
     FROM customers c LEFT JOIN sales s ON s.customer_id = c.id
-    WHERE ${SEM_NOME} ${q ? 'AND (c.name LIKE ? OR c.instagram LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)' : ''}
+    WHERE ${SEM_NOME} ${q ? 'AND (busca(c.name) LIKE ? OR busca(c.instagram) LIKE ? OR c.phone LIKE ? OR busca(c.email) LIKE ?)' : ''}
     GROUP BY c.id ORDER BY total_spent DESC, c.name
-  `).all(...(q ? [like, like, like, like] : []));
+  `).all(...(q ? [termo(q), termo(q), like, termo(q)] : []));
   res.json(rows);
 });
 
@@ -1727,7 +1730,7 @@ app.get('/api/vendas', (req, res) => {
   const dias = Math.min(366, Math.max(1, parseInt(req.query.dias, 10) || 30));
   const q = (req.query.q || '').trim();
   const where = ['created_at >= ?'], args = [inicioDoDia(diaLocal(new Date(Date.now() - (dias - 1) * 864e5)))];
-  if (q) { where.push('(code LIKE ? OR customer_name LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
+  if (q) { where.push('(busca(code) LIKE ? OR busca(customer_name) LIKE ?)'); args.push(termo(q), termo(q)); }
   if (req.query.canal === 'pdv') where.push("channel = 'pdv'");
   res.json(db.prepare(`SELECT id, code, channel, origem, canal, created_at, customer_name, seller_name, payment_method,
       payment_status, total, items_count, cancelado_em,

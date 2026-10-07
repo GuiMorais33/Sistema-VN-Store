@@ -15,6 +15,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const db = new Database(process.env.DB_FILE || join(__dirname, '..', 'vnstore.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+// Busca do jeito que as pessoas digitam: "TENIS", "tenis" e "Tênis" acham
+// o mesmo produto. O LIKE do SQLite só ignora maiúscula em letra sem acento
+// (com "TÊNIS" não achava nada), então a comparação passa por aqui.
+export const semAcento = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+db.function('busca', { deterministic: true }, (s) => semAcento(s));
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS products (
