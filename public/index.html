@@ -378,8 +378,11 @@ async function load(){
     OP=await api('/api/operacao');
     renderFilas(); renderKpis();
     const a=document.getElementById('auto');
+    // Quando o estoque foi conferido com a Nuvemshop pela última vez: se
+    // o número parecer estranho, dá para saber se é recente.
+    const hora=(iso)=>new Date(iso).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     a.innerHTML=OP.conectado
-      ? `<span class="dot"></span>lendo a loja a cada ${OP.intervalo_min} min`
+      ? `<span class="dot"></span>lendo a loja a cada ${OP.intervalo_min} min${OP.estoque_relido_em?` · estoque conferido às ${hora(OP.estoque_relido_em)}`:''}`
       : `loja não conectada`;
   }catch(e){}
 

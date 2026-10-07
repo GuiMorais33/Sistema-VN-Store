@@ -54,9 +54,11 @@
     <div class="status"><span class="ico-box brand" style="width:40px;height:40px" id="okIco"></span><div><div class="big">Conectada</div><div class="note" id="storeInfo"></div></div></div>
 
     <div class="opts">
-      <label class="opt"><input type="checkbox" id="optAvail" checked> <span>Só produtos <b>com unidades em estoque</b></span></label>
-      <label class="opt"><input type="checkbox" id="optPub" checked> <span>Só produtos <b>publicados na loja</b></span></label>
+      <label class="opt"><input type="checkbox" id="optAvail" checked> <span>Produto novo: só se tiver <b>unidades em estoque</b></span></label>
+      <label class="opt"><input type="checkbox" id="optPub" checked> <span>Produto novo: só se estiver <b>publicado na loja</b></span></label>
     </div>
+    <div class="note">O estoque dos produtos que já estão aqui é relido sozinho a cada 20 minutos — inclusive o que
+      você muda direto no painel da Nuvemshop. Este botão faz a mesma leitura agora.</div>
 
     <div class="row" style="margin-top:14px">
       <button class="btn primary" id="syncBtn" type="button">Ler produtos da loja</button>
@@ -191,7 +193,9 @@ document.getElementById('syncBtn').addEventListener('click', async (e)=>{
       +'<div class="stat"><div class="l">Marcas</div><div class="v">'+r.brands+'</div></div>'
       +'<div class="stat"><div class="l">Categorias</div><div class="v">'+r.categories+'</div></div>'
       +'</div>'
-      +'<div class="note">Analisei '+r.scanned+' '+pl(r.scanned,'produto')+' da loja e deixei de fora '+r.skipped_no_stock+' sem unidades em estoque.</div>';
+      +'<div class="note">Li '+r.scanned+' '+pl(r.scanned,'produto')+' da loja: o estoque de todos os que já estavam aqui foi conferido'
+      +(r.skipped_no_stock?' e '+r.skipped_no_stock+' '+pl(r.skipped_no_stock,'produto novo ficou','produtos novos ficaram')+' de fora (sem estoque ou fora do ar)':'')
+      +(r.zeradas?'. '+r.zeradas+' '+pl(r.zeradas,'variação sumiu','variações sumiram')+' da loja e '+pl(r.zeradas,'foi zerada','foram zeradas')+' aqui':'')+'.</div>';
   }catch(err){ msg.innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
   finally{ e.target.disabled=false; e.target.textContent='Ler produtos da loja'; }
 });

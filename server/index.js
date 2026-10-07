@@ -677,7 +677,10 @@ async function lerCategoriasDaLoja() {
 }
 
 // Cria ou atualiza aqui os produtos que vieram da loja.
-function gravarProdutosDaLoja(products, { catById, isBrandCat, isMarcasRoot }) {
+// "desde": quando a leitura da loja começou. Variação que mudou aqui depois
+// disso (venda, entrada, envio para a loja) fica como está nesta rodada — o
+// número lido já estaria velho para ela — e é acertada na próxima.
+function gravarProdutosDaLoja(products, { catById, isBrandCat, isMarcasRoot }, desde = null) {
   const upP = db.prepare(`INSERT INTO products (nuvemshop_product_id, name, brand, category, categories_all, description, image_url, published, synced_nuvemshop, created_at, updated_at)
     VALUES (@pid,@name,@brand,@category,@cats,@description,@image,@published,1,@now,@now)
     ON CONFLICT(nuvemshop_product_id) DO UPDATE SET
@@ -695,7 +698,8 @@ function gravarProdutosDaLoja(products, { catById, isBrandCat, isMarcasRoot }) {
       product_id=excluded.product_id, product_name=excluded.product_name,
       variant_name=excluded.variant_name, sku=excluded.sku, price=excluded.price,
       stock=CASE WHEN ns_fixar = 1 THEN stock ELSE MAX(0, excluded.stock + ns_delta) END,
-      stock_management=excluded.stock_management, updated_at=excluded.updated_at`);
+      stock_management=excluded.stock_management, updated_at=excluded.updated_at
+    WHERE @desde IS NULL OR variants.updated_at IS NULL OR variants.updated_at <= @desde`);
 
   let variantCount = 0;
   const brands = new Set(), cats = new Set();
@@ -737,7 +741,7 @@ function gravarProdutosDaLoja(products, { catById, isBrandCat, isMarcasRoot }) {
           product_id: productId, pid: String(p.id), vid: String(v.id), pname: name, vname,
           sku: v.sku || '', price: parseFloat(v.price) || 0,
           stock: v.stock == null ? 0 : parseInt(v.stock, 10),
-          sm: v.stock_management === false ? 0 : 1, now: now(),
+          sm: v.stock_management === false ? 0 : 1, now: now(), desde,
         });
         variantCount += 1;
       }
@@ -747,35 +751,70 @@ function gravarProdutosDaLoja(products, { catById, isBrandCat, isMarcasRoot }) {
     db.exec(`UPDATE variants SET on_hand = stock WHERE product_id IN
       (SELECT id FROM products WHERE on_demand = 0)`);
   })();
+
   return { variants: variantCount, brands: brands.size, categories: cats.size };
 }
 
 // ==================== SINCRONIZAR (puxar da Nuvemshop) ====================
+// ==================== RELER O ESTOQUE DA LOJA ====================
+// O estoque daqui é o da Nuvemshop mais o que daqui ainda não subiu. Venda
+// do site é relida na hora; mas mudança feita DIRETO no painel da loja
+// (repôs peça, corrigiu número, cadastrou produto) só chega relendo o
+// catálogo inteiro — antes isso dependia de alguém clicar em "Ler produtos"
+// e o estoque daqui ficava dias atrasado. Agora roda sozinho.
+//   - Produto que já está aqui: sempre atualiza (estoque, preço, nome),
+//     inclusive quando esgotou ou saiu do ar — senão ficaria o número velho.
+//   - Produto novo na loja: entra se tem unidade e está no ar (ou conforme
+//     os filtros do botão manual).
+//   - Variação que sumiu da loja: vai a zero aqui (só com a leitura inteira).
+const RELER_ESTOQUE_MIN = Math.max(5, parseInt(process.env.RELER_ESTOQUE_MINUTES, 10) || 20);
+const unidadesDe = (p) => (p.variants || []).reduce((s, v) => {
+  if (v.stock_management === false) return s + 1;
+  return s + (parseInt(v.stock, 10) || 0);
+}, 0);
+async function relerEstoqueDaLoja({ novosSoComEstoque = true, novosSoNoAr = true } = {}) {
+  const desde = now();
+  const cats = await lerCategoriasDaLoja();
+  const raw = await nuvem.listAllProducts({});   // todos: no ar ou não, com ou sem estoque
+  const jaAqui = new Set(db.prepare('SELECT nuvemshop_product_id id FROM products WHERE nuvemshop_product_id IS NOT NULL').all().map((r) => String(r.id)));
+  const products = raw.filter((p) => jaAqui.has(String(p.id))
+    || ((!novosSoComEstoque || unidadesDe(p) > 0) && (!novosSoNoAr || p.published !== false)));
+  // Grava na fila do estoque: nenhum envio para a loja acontece no meio.
+  return naFila(() => {
+    const r = gravarProdutosDaLoja(products, cats, desde);
+    let zeradas = 0;
+    const vistos = new Set(raw.flatMap((p) => (p.variants || []).map((v) => String(v.id))));
+    const ligados = db.prepare(`SELECT COUNT(*) n FROM products WHERE nuvemshop_product_id IS NOT NULL`).get().n;
+    // Trava de segurança: se a loja devolveu bem menos produtos do que
+    // existem aqui, a leitura veio incompleta — não zera nada.
+    if (raw.length >= ligados * 0.8) {
+      const cands = db.prepare(`SELECT v.id, v.nuvemshop_variant_id vid, COALESCE(p.on_demand,0) enc FROM variants v
+        JOIN products p ON p.id = v.product_id
+        WHERE v.nuvemshop_variant_id IS NOT NULL AND v.stock > 0 AND v.ns_delta = 0 AND v.ns_fixar = 0
+          AND (v.updated_at IS NULL OR v.updated_at <= ?)`).all(desde);
+      const zerar = db.prepare(`UPDATE variants SET stock = 0, on_hand = CASE WHEN ? = 1 THEN on_hand ELSE 0 END, updated_at = ? WHERE id = ?`);
+      db.transaction(() => { for (const c of cands) if (!vistos.has(String(c.vid))) { zerar.run(c.enc, now(), c.id); zeradas += 1; } })();
+    }
+    setSetting('estoque_relido_em', now());
+    return { ...r, products: products.length, scanned: raw.length, skipped: raw.length - products.length, zeradas };
+  });
+}
+
 app.post('/api/sync', async (req, res) => {
   if (!isLive()) { const seeded = seedDemoIfEmpty(); return res.json({ mode: 'demo', seeded, message: 'Modo demonstração — sem loja conectada.' }); }
   const b = req.body || {};
-  const onlyAvailable = b.only_available !== false;   // padrão: só o que tem unidade
-  const publishedOnly = b.published_only !== false;   // padrão: só o que está no ar
+  // Os filtros valem só para produto NOVO; o que já está aqui é sempre
+  // atualizado (é isso que mantém o estoque daqui igual ao da loja).
+  const onlyAvailable = b.only_available !== false;
+  const publishedOnly = b.published_only !== false;
   try {
     // Primeiro sobe o que ficou na fila daqui (venda feita com a loja fora
     // do ar, etc.); só depois puxa o número da loja.
     const fila = await enviarPendentes();
-    const cats = await lerCategoriasDaLoja();
-    const raw = await nuvem.listAllProducts({ publishedOnly });
-
-    // Estoque total do produto (variação sem controle de estoque conta como disponível).
-    const unitsOf = (p) => (p.variants || []).reduce((s, v) => {
-      if (v.stock_management === false) return s + 1;
-      return s + (parseInt(v.stock, 10) || 0);
-    }, 0);
-
-    const products = onlyAvailable ? raw.filter((p) => unitsOf(p) > 0) : raw;
-    const skipped = raw.length - products.length;
-    const r = gravarProdutosDaLoja(products, cats);
-
+    const r = await relerEstoqueDaLoja({ novosSoComEstoque: onlyAvailable, novosSoNoAr: publishedOnly });
     res.json({
-      mode: 'live', products: products.length, variants: r.variants,
-      skipped_no_stock: skipped, scanned: raw.length,
+      mode: 'live', products: r.products, variants: r.variants,
+      skipped_no_stock: r.skipped, scanned: r.scanned, zeradas: r.zeradas,
       brands: r.brands, categories: r.categories,
       only_available: onlyAvailable, published_only: publishedOnly,
       estoque_enviado: fila.enviados, estoque_na_fila: fila.falhas,
@@ -785,9 +824,6 @@ app.post('/api/sync', async (req, res) => {
     res.status(502).json({ error: err.message });
   }
 });
-
-
-
 
 // Limpa os dados LOCAIS (catálogo, vendas, clientes, financeiro).
 // Não toca em nada na Nuvemshop — serve para começar do zero, limpo.
@@ -3975,6 +4011,13 @@ async function tickAutomatico(motivo = 'automático') {
       setSetting('itens_site_historico_v3', now());
       console.log(`› Histórico do site: ${h.analisados} pedido(s) relidos com as peças.`);
     }
+    // O estoque inteiro da loja, de tempos em tempos (mudanças feitas direto
+    // no painel da Nuvemshop).
+    const ultima = getSetting('estoque_relido_em');
+    if (!ultima || Date.now() - new Date(ultima).getTime() >= RELER_ESTOQUE_MIN * 60e3) {
+      const e2 = await relerEstoqueDaLoja();
+      console.log(`› Estoque relido da loja: ${e2.variants} variação(ões)${e2.zeradas ? `, ${e2.zeradas} zerada(s) (sumiram da loja)` : ''}.`);
+    }
     const c = await sincronizarCarrinhos();
     if (c && c.novos) console.log(`› Carrinhos abandonados: ${c.novos} novo(s).`);
     const msgs = gerarMensagens();
@@ -4088,6 +4131,8 @@ app.get('/api/operacao', (req, res) => {
     conectado: isLive(),
     ultima_leitura: getSetting('last_orders_import'),
     intervalo_min: INTERVALO_MIN,
+    estoque_relido_em: getSetting('estoque_relido_em'),
+    reler_estoque_min: RELER_ESTOQUE_MIN,
   });
 });
 
