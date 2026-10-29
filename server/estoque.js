@@ -19,9 +19,20 @@ import * as nuvem from './nuvemshop.js';
 
 // Um envio por vez. Dois envios da mesma peça ao mesmo tempo leriam o
 // mesmo número da loja, e o segundo apagaria o primeiro.
+// Trava de segurança: uma tarefa que passe do limite (a conversa com a loja
+// travou) é abandonada e a fila anda — senão a baixa de TODAS as vendas
+// seguintes ficaria parada atrás dela. Cada pedido à loja já corta em 45 s,
+// então o limite só pega o que não deveria acontecer.
+const LIMITE_FILA_MS = parseInt(process.env.LIMITE_FILA_MS, 10) || 10 * 60e3;
 let fila = Promise.resolve();
 export function naFila(fn) {
-  const vez = fila.then(() => fn());
+  const vez = fila.then(() => {
+    let relogio;
+    const limite = new Promise((_, nao) => {
+      relogio = setTimeout(() => nao(new Error('A conversa com a loja travou; a fila seguiu sem ela.')), LIMITE_FILA_MS);
+    });
+    return Promise.race([Promise.resolve().then(fn), limite]).finally(() => clearTimeout(relogio));
+  });
   fila = vez.catch(() => {});
   return vez;
 }
@@ -36,12 +47,13 @@ const ler = db.prepare(`SELECT v.*, COALESCE(p.on_demand,0) AS on_demand
 const gravar = db.prepare(`UPDATE variants SET
     stock    = MAX(0, @valor + ns_delta - @delta),
     on_hand  = CASE WHEN @proprio = 1 THEN MAX(0, @valor + ns_delta - @delta) ELSE on_hand END,
-    ns_delta = ns_delta - @delta, ns_fixar = 0, updated_at = @ts
+    ns_delta = ns_delta - @delta, ns_fixar = 0, ns_tentado = NULL, updated_at = @ts
   WHERE id = @id AND ns_versao = @versao`);
 
 // Tira da fila sem enviar: não há o que fazer na loja.
-const descartar = db.prepare(`UPDATE variants SET ns_delta = ns_delta - @delta, ns_fixar = 0
+const descartar = db.prepare(`UPDATE variants SET ns_delta = ns_delta - @delta, ns_fixar = 0, ns_tentado = NULL
   WHERE id = @id AND ns_versao = @versao`);
+const anotarTentado = db.prepare('UPDATE variants SET ns_tentado = ?, ns_tentado_delta = ? WHERE id = ?');
 
 const marcarContagem = db.prepare(`UPDATE variants SET ns_fixar = 1, ns_delta = 0,
   ns_versao = ns_versao + 1 WHERE id = ?`);
@@ -76,12 +88,27 @@ async function enviarUma(id) {
       const naLoja = await nuvem.getVariant(v.nuvemshop_product_id, v.nuvemshop_variant_id);
       // A loja não controla o estoque dessa peça: não há número a acertar.
       if (!naLoja || naLoja.stock == null) { descartar.run(marca); return { enviado: false }; }
-      valor = Math.max(0, (parseInt(naLoja.stock, 10) || 0) + v.ns_delta);
+      const remoto = parseInt(naLoja.stock, 10) || 0;
+      // A última tentativa ficou sem resposta, mas a loja já tem o número
+      // que foi mandado: ela chegou. Mandar de novo baixaria duas vezes.
+      // Sai da fila só o que ia naquela tentativa; venda que veio depois
+      // continua e sobe agora.
+      if (v.ns_tentado != null && remoto === v.ns_tentado) {
+        gravar.run({ id: v.id, valor: remoto, delta: v.ns_tentado_delta || 0, versao: v.ns_versao || 0,
+          proprio: v.on_demand ? 0 : 1, ts: new Date().toISOString() });
+        const resto = ler.get(id);
+        if (resto && (resto.ns_delta || resto.ns_fixar)) return enviarUma(id);
+        return { enviado: true, valor: remoto, ja_estava: true };
+      }
+      valor = Math.max(0, remoto + v.ns_delta);
     }
+    anotarTentado.run(valor, v.ns_fixar ? null : v.ns_delta, v.id);
     await nuvem.setVariantStock(v.nuvemshop_product_id, v.nuvemshop_variant_id, valor);
   } catch (err) {
     // A peça não existe mais na loja: não há onde aplicar.
     if (err.status === 404) { descartar.run(marca); return { enviado: false, erro: 'não existe mais na loja' }; }
+    // A loja respondeu com erro: a gravação não aconteceu, nada a conferir.
+    if (err.status) anotarTentado.run(null, null, v.id);
     throw err;
   }
   gravarEnviado(v, valor, v.on_demand);
@@ -91,12 +118,23 @@ async function enviarUma(id) {
 // Envia agora o que estas variações têm na fila. Para cada uma diz se
 // subiu; quando não sobe por falha da loja, "naFila" avisa que ela vai
 // de novo depois.
+// Falha de rede (sem resposta da loja): a loja está fora do ar ou a internet
+// caiu. Não adianta seguir peça por peça esperando o tempo-limite de cada
+// uma — o resto fica na fila e vai inteiro na próxima volta.
+const semResposta = (err) => !err.status;
 export function enviarEstoque(ids) {
   return naFila(async () => {
     const out = [];
-    for (const id of ids) {
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
       try { out.push({ id, ...(await enviarUma(id)) }); }
-      catch (err) { out.push({ id, enviado: false, erro: err.message, naFila: true }); }
+      catch (err) {
+        out.push({ id, enviado: false, erro: err.message, naFila: true });
+        if (semResposta(err)) {
+          for (const resto of ids.slice(i + 1)) out.push({ id: resto, enviado: false, erro: err.message, naFila: true });
+          break;
+        }
+      }
     }
     return out;
   });
@@ -122,7 +160,10 @@ export function lerDaLoja(ids) {
         if (!naLoja || naLoja.stock == null) continue;
         atualizar.run({ id: v.id, remoto: parseInt(naLoja.stock, 10) || 0, proprio: v.on_demand ? 0 : 1, ts: new Date().toISOString() });
         lidas += 1;
-      } catch (_) { /* fica para a próxima leitura do catálogo */ }
+      } catch (err) {
+        // Fica para a próxima leitura; sem resposta da loja, nem tenta o resto.
+        if (semResposta(err)) break;
+      }
     }
     return lidas;
   });
@@ -154,6 +195,7 @@ export function reporGrade() {
         repostos += agora < alvo ? 1 : 0;
       } catch (err) {
         if (err.status === 404) largar.run(id); else falhas += 1;   // 404: o número não existe mais na loja
+        if (semResposta(err)) break;   // loja fora do ar: o resto vai na próxima volta
       }
     }
     return { repostos, falhas };

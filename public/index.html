@@ -137,6 +137,10 @@
   .dlgr .g2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
   @media (max-width:520px){.dlgr .g2{grid-template-columns:1fr}}
   .dlgr .foot{display:flex;gap:var(--s2);justify-content:flex-end}
+  /* Alarme do sistema: vermelho, no topo, impossível de não ver. */
+  .alerta-sis{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;margin-bottom:var(--s3);border-radius:var(--r);
+    border:1px solid rgba(255,81,66,.55);background:rgba(255,81,66,.10);color:#ffb3ab;font-size:13px;line-height:1.5}
+  .alerta-sis b{color:#ff8377} .alerta-sis .ai{color:#ff8377;flex:none;margin-top:1px}
 </style>
 </head>
 <body>
@@ -149,6 +153,9 @@
     </div>
     <div class="ph-actions"><a class="btn primary" href="/pdv" id="pdvLink">Abrir PDV</a></div>
   </div>
+  <!-- Alarmes: o que faz o sistema mentir sem ninguém ver (motor parado,
+       venda que não baixou na loja, loja recusando gravar estoque). -->
+  <div id="alertas"></div>
 
   <div class="card maestro" style="margin-bottom:var(--s4)">
     <div class="m-fx" id="mFx"></div>
@@ -247,6 +254,7 @@ try {
 </script>
 <script>
 const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const DATA=(s)=>new Date(s).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
 async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
 const vazio=(ico,t,d)=>`<div class="empty">${ICO(ico,30)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
@@ -376,6 +384,10 @@ async function load(){
   DASH=d;
   try{
     OP=await api('/api/operacao');
+    window.ALERTAS=OP.alertas||[];
+    if(ALERTAS.length)document.querySelectorAll('#maestroTags .m-tag.ok').forEach(x=>x.remove());
+    document.getElementById('alertas').innerHTML=(OP.alertas||[]).map(a=>`<div class="alerta-sis">
+      <span class="ai">${ICO('alerta',18)}</span><div><b>${esc(a.texto)}</b><br><span>${esc(a.acao||'')}</span></div></div>`).join('');
     renderFilas(); renderKpis();
     const a=document.getElementById('auto');
     // Quando o estoque foi conferido com a Nuvemshop pela última vez: se
@@ -419,7 +431,8 @@ async function load(){
   if(R.hoje>0) tags.push(`<a class="m-tag warn" href="#painelLem">${ICO('calendario',13)}${R.hoje} pra hoje</a>`);
   if(d.receivable_count>0) tags.push(`<a class="m-tag warn" href="/clientes">${ICO('recibo',13)}${BRL(d.receivable_total)} a receber</a>`);
   if(d.low_stock>0) tags.push(`<a class="m-tag warn" href="/repor">${ICO('estoque',13)}${d.low_stock} acabando</a>`);
-  if(!tags.length) tags.push(`<span class="m-tag ok">${ICO('ok',13)}Tudo em dia</span>`);
+  // "Tudo em dia" só quando não há alarme do sistema (motor parado, venda sem baixar na loja).
+  if(!tags.length&&!(window.ALERTAS||[]).length) tags.push(`<span class="m-tag ok">${ICO('ok',13)}Tudo em dia</span>`);
   document.getElementById('maestroTags').innerHTML=tags.join('');
 }
 // Força do pulso no Maestro: hoje comparado com a média dos dias anteriores.

@@ -822,6 +822,17 @@
           ainda <b>não foi pago</b>, ele aparece em <b>Por cobrar</b>, mas ainda não entra no caixa
           (é assim mesmo).</p>
 
+        <h3>Apareceu uma faixa vermelha no Início</h3>
+        <p>É o sistema avisando algo que, se ficar assim, faz os números mentirem:</p>
+        <ul>
+          <li><b>"A leitura da loja está parada"</b> — pedidos do site e estoque não estão atualizando. Entre no
+            servidor e rode <code>sudo systemctl restart vnstore</code>. Se a faixa voltar, me chame.</li>
+          <li><b>"Peças vendidas aqui ainda não baixaram na Nuvemshop"</b> — a loja não respondeu. O sistema segue
+            tentando sozinho e a faixa some quando subir. Se durar mais de uma hora, confira a internet do servidor.</li>
+          <li><b>"A Nuvemshop está recusando gravar estoque"</b> — falta permissão no app. Abra
+            <span class="rota">Conectar</span>: lá diz como arrumar.</li>
+        </ul>
+
         <h3>O estoque daqui está diferente da loja</h3>
         <p>O sistema confere o estoque com a Nuvemshop sozinho a cada 20 minutos — o número da loja é a
           referência (seu custo e sua marca não se perdem). Espere a próxima conferência; a hora da última

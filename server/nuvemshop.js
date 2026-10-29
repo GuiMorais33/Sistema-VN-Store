@@ -75,6 +75,7 @@ function headers() {
 // estoque tem a própria fila de novas tentativas (server/estoque.js).
 const ESPERAS_MS = (process.env.NUVEMSHOP_ESPERAS_MS || '1500,5000').split(',').map(Number);
 const espera = (ms) => new Promise((ok) => setTimeout(ok, ms));
+const TEMPO_LIMITE_MS = parseInt(process.env.NUVEMSHOP_TIMEOUT_MS, 10) || 45000;
 async function request(method, path, body) {
   if (!isConfigured()) {
     throw new Error('Nuvemshop não conectada. Abra a tela "Conectar loja".');
@@ -98,11 +99,11 @@ async function chamar(apiBase, method, path, body) {
       method,
       headers: headers(),
       body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(45000),   // pedido que trava não segura o motor
+      signal: AbortSignal.timeout(TEMPO_LIMITE_MS),   // pedido que trava não segura o motor
     });
   } catch (err) {
     // "fetch failed" sozinho não diz nada: o motivo de verdade vem em cause.
-    const motivo = err.name === 'TimeoutError' ? 'a loja demorou mais de 45 s para responder'
+    const motivo = err.name === 'TimeoutError' ? `a loja demorou mais de ${Math.round(TEMPO_LIMITE_MS / 1000)} s para responder`
       : (err.cause && (err.cause.code || err.cause.message)) || err.message;
     throw new Error(`Falha de rede com a Nuvemshop (${motivo})`);
   }

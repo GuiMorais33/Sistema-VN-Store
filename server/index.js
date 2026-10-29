@@ -287,7 +287,13 @@ app.get('/api/products', (req, res) => {
     rows = db.prepare(`${base} WHERE (busca(v.product_name) LIKE ? OR busca(v.variant_name) LIKE ? OR busca(v.sku) LIKE ? OR busca(p.brand) LIKE ? OR busca(p.category) LIKE ?)
       ORDER BY ${vende} DESC, v.product_name, v.variant_name LIMIT 120`).all(like, like, like, like, like);
   } else {
-    rows = db.prepare(`${base} WHERE ${vende} ORDER BY v.updated_at DESC, v.product_name LIMIT 120`).all();
+    // Sem busca: o que mais vendeu nos últimos 30 dias primeiro (é o que o
+    // balcão mais toca), com os tamanhos de cada produto juntos.
+    rows = db.prepare(`WITH vend AS (SELECT vv.product_id pid, SUM(i.qty) n FROM sale_items i
+        JOIN sales s ON s.id = i.sale_id JOIN variants vv ON vv.id = i.variant_id
+        WHERE s.created_at >= ? AND ${VENDA('s.')} GROUP BY vv.product_id)
+      ${base} LEFT JOIN vend ON vend.pid = v.product_id
+      WHERE ${vende} ORDER BY COALESCE(vend.n,0) DESC, v.product_name, v.id LIMIT 120`).all(desdeDias(30));
   }
   res.json(rows);
 });
@@ -3987,6 +3993,8 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
 //   pedidos e status: a cada 10 min · estoque e produtos: a cada 20 min
 //   clientes da loja: a cada 6 h · permissão de gravar estoque: 1x por dia
 const INTERVALO_MIN = Math.max(2, parseInt(process.env.SYNC_MINUTES, 10) || 10);
+const INTERVALO_MS = parseInt(process.env.SYNC_INTERVALO_MS, 10) || INTERVALO_MIN * 60e3;   // o teste encurta
+const LIMITE_VOLTA_MS = parseInt(process.env.LIMITE_VOLTA_MS, 10) || 20 * 60e3;
 const RELER_CLIENTES_MIN = 6 * 60;
 const TESTAR_ESCRITA_MIN = 24 * 60;
 let sincronizando = false;
@@ -3997,6 +4005,20 @@ async function tickAutomatico(motivo = 'automático') {
 
   if (sincronizando || !isLive()) return;
   sincronizando = true;
+  // Vigia: uma volta que passe do limite é abandonada e o motor segue.
+  // Em outubro uma conversa com a loja travou e o motor ficou 3 semanas
+  // parado esperando por ela — sem pedidos do site, sem estoque relido.
+  let relogio;
+  const travou = new Promise((ok) => { relogio = setTimeout(() => ok(true), LIMITE_VOLTA_MS); });
+  try {
+    const parou = await Promise.race([voltaDoMotor(motivo).then(() => false, () => false), travou]);
+    if (parou) {
+      console.error(`Motor: a volta passou de ${Math.round(LIMITE_VOLTA_MS / 60e3)} min e foi abandonada.`);
+      setSetting('motor_travou_em', now());
+    }
+  } finally { clearTimeout(relogio); sincronizando = false; }
+}
+async function voltaDoMotor(motivo) {
   // Cada tarefa por conta própria: se uma falhar (a loja derrubou a
   // conexão, por exemplo), as outras rodam mesmo assim, e o erro fica
   // guardado na tarefa certa — é o que a tela Conectar mostra.
@@ -4013,6 +4035,9 @@ async function tickAutomatico(motivo = 'automático') {
       const e = await enviarPendentes();
       if (e.enviados) console.log(`› Estoque: ${e.enviados} variação(ões) acertada(s) na loja.`);
       if (e.falhas) console.error(`Estoque: ${e.falhas} variação(ões) ainda na fila — ${e.erro}`);
+      // Desde quando tem venda daqui sem baixar na loja (o Início avisa).
+      if (e.falhas) { if (!getSetting('estoque_pendente_desde')) setSetting('estoque_pendente_desde', now()); setSetting('estoque_pendente_erro', e.erro || ''); }
+      else setSetting('estoque_pendente_desde', '');
       const r = await sincronizarPedidos();
       if (r && !r.skipped && (r.novos || r.lancados)) {
         console.log(`› Pedidos do site (${motivo}): ${r.novos} novo(s), ${r.lancados} lançado(s) no caixa.`);
@@ -4065,9 +4090,9 @@ async function tickAutomatico(motivo = 'automático') {
       const msgs = gerarMensagens();
       if (msgs) console.log(`› ${msgs} mensagem(ns) esperando envio.`);
     });
-  } finally { sincronizando = false; }
+  } finally { setSetting('motor_volta_fim', now()); }
 }
-setInterval(() => tickAutomatico(), INTERVALO_MIN * 60 * 1000);
+setInterval(() => tickAutomatico(), INTERVALO_MS);
 // A primeira volta sai logo depois de ligar (o teste encurta a espera).
 setTimeout(() => tickAutomatico('início'), parseInt(process.env.PRIMEIRA_RODADA_MS, 10) || 8000);
 backup.agendarBackups();
@@ -4101,6 +4126,42 @@ app.post('/api/import-customers', async (req, res) => {
   }
 });
 
+
+// ==================== ALARMES ====================
+// O que, se der errado, faz o sistema mentir sem ninguém perceber: o motor
+// parado (pedidos do site e estoque sem atualizar), venda daqui que não
+// baixou na loja, a loja recusando gravar estoque. Aparece em vermelho no
+// Início — foi assim que o motor ficou 3 semanas parado sem ninguém ver.
+const LIGOU_EM = Date.now();
+const CARENCIA_MS = parseInt(process.env.ALERTA_CARENCIA_MS, 10) || 15 * 60e3;    // o teste encurta
+const PENDENTE_MS = parseInt(process.env.ALERTA_PENDENTE_MS, 10) || 15 * 60e3;
+function alertasDoSistema() {
+  if (!isLive()) return [];
+  const out = [];
+  const quando = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: process.env.TZ || 'America/Sao_Paulo' });
+  const ha = (iso) => (iso ? Date.now() - new Date(iso).getTime() : Infinity);
+  const ultima = getSetting('last_orders_import');
+  // Dá 15 min depois de ligar para a primeira volta terminar.
+  if (Date.now() - LIGOU_EM > CARENCIA_MS && ha(ultima) > 3 * INTERVALO_MS) {
+    out.push({ nivel: 'crit', tipo: 'motor',
+      texto: ultima ? `A leitura da loja está parada desde ${quando(ultima)}: pedidos do site e estoque não estão atualizando.`
+        : 'A leitura da loja ainda não rodou: pedidos do site e estoque não estão atualizando.',
+      acao: 'Reinicie o sistema no servidor (sudo systemctl restart vnstore) e veja Conectar.' });
+  }
+  const pend = db.prepare('SELECT COUNT(*) n FROM variants WHERE (ns_delta <> 0 OR ns_fixar = 1) AND nuvemshop_variant_id IS NOT NULL').get().n;
+  const desde = getSetting('estoque_pendente_desde');
+  if (pend > 0 && desde && ha(desde) > PENDENTE_MS) {
+    out.push({ nivel: 'crit', tipo: 'estoque',
+      texto: `${pend === 1 ? '1 peça vendida ou mexida aqui ainda não baixou' : `${pend} peças vendidas ou mexidas aqui ainda não baixaram`} na Nuvemshop (desde ${quando(desde)}).`,
+      acao: `O sistema segue tentando sozinho. Motivo: ${getSetting('estoque_pendente_erro') || 'sem resposta da loja'}.` });
+  }
+  let escr = null; try { escr = JSON.parse(getSetting('nuvemshop_escrita') || 'null'); } catch (_) { /* valor antigo */ }
+  if (escr && escr.ok === false) {
+    out.push({ nivel: 'crit', tipo: 'escrita', texto: 'A Nuvemshop está recusando gravar estoque: as vendas daqui não baixam no site.',
+      acao: 'Abra Conectar para ver como arrumar.' });
+  }
+  return out;
+}
 
 // ==================== VISÃO OPERACIONAL ====================
 // O que precisa de ação agora, juntando site e balcão, e os números
@@ -4174,6 +4235,7 @@ app.get('/api/operacao', (req, res) => {
     intervalo_min: INTERVALO_MIN,
     estoque_relido_em: getSetting('estoque_relido_em'),
     reler_estoque_min: RELER_ESTOQUE_MIN,
+    alertas: alertasDoSistema(),
   });
 });
 
@@ -4314,7 +4376,9 @@ app.get('/api/connection', (req, res) => res.json({
     estoque: { a_cada_min: RELER_ESTOQUE_MIN, ultima: getSetting('estoque_relido_em') || null, erro: getSetting('estoque_erro') || null },
     clientes: { a_cada_min: RELER_CLIENTES_MIN, ultima: getSetting('clientes_relidos_em') || null, erro: getSetting('clientes_erro') || null },
     escrita_a_cada_min: TESTAR_ESCRITA_MIN,
+    travou_em: getSetting('motor_travou_em') || null,
   },
+  alertas: alertasDoSistema(),
 }));
 
 // O sistema consegue mudar o estoque na loja? Regrava numa variação o MESMO
