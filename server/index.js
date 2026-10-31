@@ -27,16 +27,19 @@ app.set('trust proxy', true); // atrás do Caddy (HTTPS): usa X-Forwarded-Proto/
 app.use(express.json({ limit: '10mb' }));
 
 // ---- Agente (Claude): entra com chave própria, nunca com a senha ----
-// Só passa o que está na lista de leituras (server/agente.js); todo
-// pedido dele fica registrado, inclusive os recusados.
+// O nível é o que o dono escolheu na tela Agentes (server/agente.js): só
+// consultar, ou acesso total. Todo pedido dele fica registrado, inclusive
+// os recusados; o que ele altera, com o que mandou.
 app.use((req, res, next) => {
   const chave = agente.chaveDoPedido(req);
   if (!chave) return next();
   if (!agente.chaveValida(chave)) return res.status(401).json({ error: 'Chave do agente inválida ou revogada.' });
   req.agente = true;
-  res.on('finish', () => agente.registrar(req.method, req.originalUrl, res.statusCode));
-  if (!agente.podeLer(req.method, req.path)) {
-    return res.status(403).json({ error: 'O agente só tem acesso de leitura. Veja o que ele pode consultar em GET /api/agente.' });
+  res.on('finish', () => agente.registrar(req.method, req.originalUrl, res.statusCode, req.body));
+  if (!agente.pode(req.method, req.path)) {
+    return res.status(403).json({ error: agente.nivel() === 'total'
+      ? 'Isto é só do dono, mesmo com acesso total. Veja a lista em GET /api/agente.'
+      : 'O agente só tem acesso de leitura. Veja o que ele pode consultar em GET /api/agente.' });
   }
   next();
 });
@@ -153,7 +156,7 @@ app.use((req, res, next) => {
   if (p.startsWith('/api/')) return res.status(403).json({ error: 'Só o dono pode fazer isto.' });
   return res.redirect('/pdv');
 });
-app.get('/api/eu', (req, res) => res.json(req.quem || { papel: 'agente' }));
+app.get('/api/eu', (req, res) => res.json(req.quem || { papel: 'agente', nivel: agente.nivel() }));
 
 // Fontes e o Three.js quase nunca mudam: o navegador guarda por uma semana.
 app.use('/fonts', express.static(join(PUBLIC, 'fonts'), { maxAge: '7d' }));
@@ -1698,7 +1701,7 @@ app.post('/api/sales/:id/troca', async (req, res) => {
   const trocaId = db.transaction(() => {
     const tid = db.prepare(`INSERT INTO trocas (sale_id, devolvido, levado, diferenca, forma, nota, created_at)
       VALUES (?,?,?,?,?,?,?)`).run(s.id, devolvido, levado, diferenca, forma || null, nota, ts).lastInsertRowid;
-    db.prepare('UPDATE trocas SET feito_por = ? WHERE id = ?').run(req.quem && req.quem.papel === 'vendedor' ? req.quem.nome : 'dono', tid);
+    db.prepare('UPDATE trocas SET feito_por = ? WHERE id = ?').run(req.quem && req.quem.papel === 'vendedor' ? req.quem.nome : (req.agente ? 'Claude' : 'dono'), tid);
     const ins = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, name, qty, unit_price, unit_cost, line_total, encomenda, troca_id, ref_item_id)
       VALUES (?,?,?,?,?,?,?,?,?,?)`);
     for (const x of volta) {
@@ -4325,10 +4328,15 @@ app.get('/api/backup/baixar', async (req, res) => {
 // O que o agente precisa para se achar: o que pode consultar e as regras
 // que dão sentido aos números.
 app.get('/api/agente', (req, res) => {
+  const total = agente.nivel() === 'total';
   res.json({
-    loja: 'VN Store', modo: isLive() ? 'live' : 'demo', acesso: 'somente leitura',
+    loja: 'VN Store', modo: isLive() ? 'live' : 'demo', acesso: total ? 'total' : 'somente leitura',
     agora: now(), dia_local: diaLocal(), fuso: process.env.TZ,
     leituras: agente.LEITURAS.map(([caminho, o_que]) => ({ caminho, o_que })),
+    // Com acesso total, vale toda rota que as telas usam (as mesmas de
+    // server/index.js), menos estas.
+    so_do_dono: agente.SO_DO_DONO.map(([caminho, o_que]) => ({ caminho, o_que })),
+    ...(total ? { escrita: 'Acesso total: tudo o que é gravado vale na loja de verdade (estoque sobe para a Nuvemshop, dinheiro entra no caixa). Fica registrado na tela Agentes com o que foi mandado.' } : {}),
     regras: {
       venda: 'Conta como venda: no balcão, toda venda não cancelada (fiado incluso); no site, só pedido pago.',
       fiado: 'Fiado é venda do balcão não paga. Pix/boleto pendente do site não é fiado: o cliente ainda não levou nada.',
@@ -4365,6 +4373,14 @@ app.delete('/api/agente/chave', (req, res) => {
   if (req.agente) return res.status(403).json({ error: 'O agente não revoga chave.' });
   agente.revogarChave();
   res.json({ ok: true });
+});
+// Só consultar × acesso total. Só o dono, logado com a senha: a chave do
+// agente não sobe o próprio nível.
+app.post('/api/agente/nivel', (req, res) => {
+  if (req.agente) return res.status(403).json({ error: 'O agente não muda o próprio acesso.' });
+  if (!getSetting('agent_token_hash')) return res.status(400).json({ error: 'Gere a chave do agente primeiro.' });
+  try { agente.definirNivel((req.body || {}).nivel); } catch (err) { return res.status(400).json({ error: err.message }); }
+  res.json({ ok: true, nivel: agente.nivel() });
 });
 
 // ==================== CONEXÃO NUVEMSHOP ====================
@@ -4417,7 +4433,6 @@ function testarEscrita() {
   });
 }
 app.post('/api/connection/testar-escrita', async (req, res) => {
-  if (req.agente) return res.status(403).json({ error: 'Só o dono testa.' });
   if (!isLive()) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
   res.json(await testarEscrita());
 });

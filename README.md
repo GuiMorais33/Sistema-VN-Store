@@ -59,8 +59,10 @@ Baixar na hora e voltar uma cópia: `deploy/DEPLOY-ORACLE.md`.
 
 ### Agente (Claude)
 O agente entra com uma **chave própria** (gerada na tela **Agentes**, revogável), nunca com a
-senha. Por enquanto **só lê**, e só o que está na lista de `server/agente.js`; tudo o que ele
-pede fica registrado na tela Agentes. Índice do que ele pode consultar: `GET /api/agente`.
+senha. Toda chave começa **só consultando** (a lista `LEITURAS` de `server/agente.js`); o dono
+pode dar **acesso total** na mesma tela, e tirar quando quiser. Mesmo assim, a chave não mexe nela
+mesma, não baixa a cópia do banco e não mexe na ligação com a Nuvemshop (`SO_DO_DONO`). Tudo o que
+ele pede fica registrado na tela Agentes. Índice e nível atual: `GET /api/agente`.
 
 ## Paleta
 

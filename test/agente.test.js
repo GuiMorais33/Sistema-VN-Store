@@ -81,3 +81,79 @@ test('o dono baixa uma cópia do banco', async () => {
   assert.equal(r.status, 200);
   assert.equal(r.bytes.subarray(0, 15).toString(), 'SQLite format 3');
 });
+
+// Acesso total: o dono liga na tela Agentes e o agente passa a fazer o que
+// o dono faz nas telas. A chave continua sem poder mexer nela mesma, nem
+// levar a cópia do banco, nem mexer na ligação com a Nuvemshop.
+test('o agente não sobe o próprio nível', async () => {
+  chave = (await dono('POST', '/api/agente/chave')).json.chave;
+  assert.equal((await comoAgente('POST', '/api/agente/nivel', { nivel: 'total' })).status, 403);
+  assert.equal((await dono('GET', '/api/agente/status')).json.nivel, 'leitura');
+});
+
+test('com acesso total, o agente vende, troca e cancela — e fica tudo anotado', async () => {
+  const r = await dono('POST', '/api/agente/nivel', { nivel: 'total' });
+  assert.equal(r.status, 200);
+  assert.equal((await comoAgente('GET', '/api/agente')).json.acesso, 'total');
+  assert.equal((await comoAgente('GET', '/api/eu')).json.nivel, 'total');
+
+  const [a, b] = (await dono('GET', '/api/products')).json;
+  const venda = await comoAgente('POST', '/api/sales', { items: [{ variant_id: a.id, qty: 1 }], payment_method: 'Pix' });
+  assert.equal(venda.status, 200, String(venda.bytes));
+  const id = s.banco().prepare('SELECT id FROM sales WHERE code = ?').get(venda.json.code).id;
+  const det = (await comoAgente('GET', `/api/vendas/${id}`)).json;
+  const troca = await comoAgente('POST', `/api/sales/${id}/troca`, { devolver: [{ item_id: det.itens[0].id, qty: 1 }],
+    levar: [{ variant_id: b.id, qty: 1 }], forma: 'Pix' });
+  assert.equal(troca.status, 200, String(troca.bytes));
+  assert.equal(s.banco().prepare('SELECT feito_por FROM trocas ORDER BY id DESC LIMIT 1').get().feito_por, 'Claude');
+  const canc = await comoAgente('POST', `/api/sales/${id}/cancelar`, { motivo: 'teste do agente', forma: 'Pix' });
+  assert.equal(canc.status, 200, String(canc.bytes));
+  assert.equal(s.banco().prepare('SELECT payment_status FROM sales WHERE id = ?').get(id).payment_status, 'cancelado');
+  assert.equal((await comoAgente('POST', '/api/connection/testar-escrita')).status === 403, false);
+
+  // O dono vê o que ele alterou, com o que mandou.
+  const st = (await dono('GET', '/api/agente/status')).json;
+  const cancelou = st.alteracoes.find((l) => l.caminho === `/api/sales/${id}/cancelar`);
+  assert.ok(cancelou);
+  assert.equal(cancelou.status, 200);
+  assert.match(cancelou.detalhe, /teste do agente/);
+  assert.ok(st.alteracoes.every((l) => l.metodo !== 'GET'));
+});
+
+test('PIN e senha que o agente manda não ficam escritos no registro', async () => {
+  await comoAgente('POST', '/api/login', { password: 'senha-que-nao-pode-aparecer' });
+  const st = (await dono('GET', '/api/agente/status')).json;
+  const login = st.alteracoes.find((l) => l.caminho === '/api/login');
+  assert.ok(login);
+  assert.doesNotMatch(login.detalhe, /senha-que-nao-pode-aparecer/);
+  assert.match(login.detalhe, /\*\*\*/);
+});
+
+test('nem com acesso total: a chave, a cópia do banco e a ligação com a Nuvemshop', async () => {
+  const recusar = [
+    ['POST', '/api/agente/chave'], ['DELETE', '/api/agente/chave'], ['POST', '/api/agente/nivel'],
+    ['GET', '/api/backup/baixar'], ['GET', '/API/Backup/Baixar/'], ['GET', '/api/backup/baixar?x=1'],
+    ['POST', '/api/connect/app'], ['POST', '/api/disconnect'], ['POST', '/api/disconnect/'], ['POST', '/API/Disconnect'], ['POST', '/api/%64isconnect'], ['POST', '/api//disconnect'],
+    ['GET', '/oauth/callback'],
+  ];
+  // Um jeito diferente de escrever o caminho não pode passar: ou é recusado,
+  // ou nem chega na rota (404) — e a loja continua ligada.
+  const ligacao = () => s.banco().prepare("SELECT value FROM settings WHERE key = 'nuvemshop_store_id'").get()?.value ?? 'nunca gravado';
+  const antes = ligacao();
+  for (const [m, c] of recusar) {
+    const st = (await comoAgente(m, c, m === 'GET' ? null : {})).status;
+    assert.ok(st === 403 || st === 404, `${m} ${c} → ${st}`);
+  }
+  assert.equal(ligacao(), antes);   // "desligar" grava vazio: não gravou
+  assert.equal((await dono('GET', '/api/agente/status')).json.nivel, 'total');   // nada disso mudou o nível
+});
+
+test('chave nova volta a só consultar; o dono desliga quando quiser', async () => {
+  await dono('POST', '/api/agente/nivel', { nivel: 'leitura' });
+  assert.equal((await comoAgente('POST', '/api/sales', { items: [{ variant_id: await umaVariante(), qty: 1 }] })).status, 403);
+  await dono('POST', '/api/agente/nivel', { nivel: 'total' });
+  chave = (await dono('POST', '/api/agente/chave')).json.chave;
+  assert.equal((await dono('GET', '/api/agente/status')).json.nivel, 'leitura');
+  assert.equal((await comoAgente('POST', '/api/sales', { items: [{ variant_id: await umaVariante(), qty: 1 }] })).status, 403);
+  assert.equal((await dono('POST', '/api/agente/nivel', { nivel: 'tudo' })).status, 400);
+});

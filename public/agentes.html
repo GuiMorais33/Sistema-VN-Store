@@ -49,6 +49,18 @@
   .log td{padding:6px 8px;border-top:1px solid var(--line-soft);color:var(--ink-2);vertical-align:top;text-align:left}
   .log td.c{font-family:var(--font-mono);word-break:break-all;color:var(--ink)}
   .log td.n{font-family:var(--font-mono);white-space:nowrap}
+  .log td .det{display:block;margin-top:3px;font-size:11px;color:var(--ink-3);word-break:break-all}
+  .log tr.alt td.c{color:var(--warn)}
+  .niveis{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)}
+  @media (max-width:560px){.niveis{grid-template-columns:1fr}}
+  .nivel{display:flex;flex-direction:column;gap:6px;text-align:left;padding:12px 14px;border-radius:var(--r);cursor:pointer;
+    border:1px solid var(--line);background:var(--bg-elev);color:var(--ink-2);font:inherit;font-size:12.5px;line-height:1.5}
+  .nivel b{color:var(--ink);font-size:13.5px}
+  .nivel.on{border-color:rgba(47,210,79,.55);box-shadow:0 0 0 1px rgba(47,210,79,.25) inset;background:rgba(47,210,79,.06)}
+  .nivel.on.total{border-color:rgba(232,163,23,.6);box-shadow:0 0 0 1px rgba(232,163,23,.25) inset;background:rgba(232,163,23,.07)}
+  .nivel .tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--brand-hi)}
+  .nivel.total .tag{color:var(--warn)}
+  .nivel .det{font-size:11px;color:var(--ink-3)}
 </style>
 </head>
 <body>
@@ -72,7 +84,7 @@
   <div class="sec"><h2>Próximas fases</h2><span class="rule"></span><span class="meta">você define o quê e a autonomia</span></div>
   <div class="grid" id="futuros"></div>
 
-  <div class="sec"><h2>Acesso do Claude</h2><span class="rule"></span><span class="meta">só leitura, por enquanto</span></div>
+  <div class="sec"><h2>Acesso do Claude</h2><span class="rule"></span><span class="meta" id="acessoMeta">você escolhe o quanto ele faz</span></div>
   <div class="card acesso" id="acesso"><span class="sk">Carregando…</span></div>
 </div>
 
@@ -150,12 +162,24 @@ const esc=(t)=>String(t??'').replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>'
 const quando=(iso)=>iso?new Date(iso).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'—';
 async function chamar(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
 
+// O que ele mandou numa alteração, para ler sem abrir o banco.
+const ACAO={POST:'fez',PUT:'alterou',PATCH:'alterou',DELETE:'apagou'};
+function linhaLog(l,i,extra){
+  const alt=l.metodo!=='GET';
+  return `<tr class="${alt?'alt':''}${extra&&i>=10?' extra':''}"${extra&&i>=10?' hidden':''}><td class="n">${quando(l.quando)}</td>
+    <td class="c">${alt?`<b>${esc(ACAO[l.metodo]||l.metodo)}</b> · `:''}${esc(l.metodo)} ${esc(l.caminho)}${l.detalhe?`<span class="det">${esc(l.detalhe)}</span>`:''}</td>
+    <td class="n">${l.status<400?'ok':(l.status===403?'recusado':l.status)}</td></tr>`;
+}
+
 async function acesso(chaveNova){
   const el=document.getElementById('acesso');
   const s=await chamar('/api/agente/status');
+  const total=s.chave_ativa&&s.nivel==='total';
+  document.getElementById('acessoMeta').textContent=!s.chave_ativa?'sem acesso':(total?'acesso total':'só consulta');
   let h='';
   if(chaveNova){
-    h+=`<p><b>Chave gerada.</b> Copie agora: ela não aparece de novo (se perder, é só gerar outra).</p>
+    h+=`<p><b>Chave gerada.</b> Copie agora: ela não aparece de novo (se perder, é só gerar outra).
+      Toda chave nova começa <b>só consultando</b>.</p>
       <div class="chave"><input id="chaveTxt" readonly value="${esc(chaveNova)}"><button class="btn primary sm" id="copiar" type="button">Copiar</button></div>
       <ol class="passos">
         <li>No Claude, abra o menu do ambiente no título da sessão e clique em <b>Edit</b>.</li>
@@ -167,21 +191,36 @@ async function acesso(chaveNova){
       </ol>
       <p>Não cole a chave no chat: ela é uma senha.</p>`;
   } else if(s.chave_ativa){
-    h+=`<p><span class="pill live"><span class="dot"></span>Chave ativa</span>&nbsp; criada em <b>${quando(s.criada)}</b> ·
-      último uso: <b>${s.ultimo_uso?quando(s.ultimo_uso):'ainda não usou'}</b>.</p>
-      <p>O Claude consulta vendas, estoque, clientes, caixa e relatórios. Não altera nada.</p>`;
+    h+=`<p><span class="pill ${total?'demo':'live'}"><span class="dot"></span>${total?'Acesso total':'Só consulta'}</span>&nbsp; chave criada em <b>${quando(s.criada)}</b> ·
+      último uso: <b>${s.ultimo_uso?quando(s.ultimo_uso):'ainda não usou'}</b>.</p>`;
   } else {
-    h+=`<p>O Claude ainda não tem acesso. Com uma chave, ele passa a <b>consultar</b> vendas, estoque, clientes, caixa e
-      relatórios da loja — sem poder alterar nada. Tudo o que ele consultar aparece aqui embaixo.</p>`;
+    h+=`<p>O Claude ainda não tem acesso. Gere uma chave: ela começa <b>só consultando</b> vendas, estoque, clientes,
+      caixa e relatórios. Depois, se quiser, você dá acesso total aqui mesmo. Tudo o que ele fizer aparece aqui embaixo.</p>`;
+  }
+  if(s.chave_ativa){
+    // Os dois níveis lado a lado: o dono vê o que muda antes de escolher.
+    h+=`<div class="niveis">
+      <button type="button" class="nivel${!total?' on':''}" data-nivel="leitura">
+        <span class="tag">${!total?'Escolhido':'Mais seguro'}</span><b>Só consultar</b>
+        Vê vendas, estoque, clientes, caixa e relatórios. Não muda nada.</button>
+      <button type="button" class="nivel total${total?' on':''}" data-nivel="total">
+        <span class="tag">${total?'Escolhido':'Faz por você'}</span><b>Acesso total</b>
+        Faz tudo o que você faz nas telas: vender, cancelar, acertar estoque (vai para a Nuvemshop), preço, caixa, equipe.
+        ${total&&s.nivel_desde?`<span class="det">Ligado em ${quando(s.nivel_desde)}.</span>`:''}</button>
+    </div>
+    <p style="font-size:12.5px">Mesmo com acesso total, ficam só com você: ${s.so_do_dono.map((x)=>esc(x.o_que.charAt(0).toLowerCase()+x.o_que.slice(1))).join('; ')}.</p>`;
   }
   h+=`<div class="row">
       <button class="btn ${s.chave_ativa?'':'primary'} sm" id="gerar" type="button">${s.chave_ativa?'Gerar outra chave':'Gerar chave'}</button>
       ${s.chave_ativa?'<button class="btn danger sm" id="revogar" type="button">Revogar acesso</button>':''}
     </div>`;
+  if(s.alteracoes&&s.alteracoes.length){
+    h+=`<div><span class="label">O que ele alterou</span>
+      <table class="log">${s.alteracoes.map((l,i)=>linhaLog(l,i,false)).join('')}</table></div>`;
+  }
   if(s.log.length){
-    h+=`<div><span class="label">O que ele consultou por último</span>
-      <table class="log">${s.log.map((l,i)=>`<tr${i>=10?' class="extra" hidden':''}><td class="n">${quando(l.quando)}</td><td class="c">${esc(l.metodo)} ${esc(l.caminho)}</td>
-        <td class="n">${l.status<400?'ok':(l.status===403?'recusado':l.status)}</td></tr>`).join('')}</table>
+    h+=`<div><span class="label">Tudo o que ele pediu por último</span>
+      <table class="log">${s.log.map((l,i)=>linhaLog(l,i,true)).join('')}</table>
       ${s.log.length>10?'<button type="button" class="btn ghost sm" id="logMais" style="margin-top:6px">Ver as 30 últimas</button>':''}</div>`;
   }
   el.innerHTML=h;
@@ -191,13 +230,20 @@ async function acesso(chaveNova){
     const i=document.getElementById('chaveTxt'); i.select(); navigator.clipboard?.writeText(i.value);
     e.target.textContent='Copiado!'; setTimeout(()=>{e.target.textContent='Copiar';},1500);
   });
+  el.querySelectorAll('.nivel').forEach((b)=>b.addEventListener('click',async()=>{
+    const n=b.dataset.nivel;
+    if(n===s.nivel)return;
+    if(n==='total'&&!confirm('Dar acesso total ao Claude?\n\nEle passa a poder lançar e cancelar vendas, acertar estoque (que vai para a Nuvemshop), mudar preço, caixa, clientes e equipe — tudo o que você faz nas telas.\n\nTudo o que ele alterar aparece nesta tela, e você volta para "Só consultar" quando quiser.'))return;
+    try{ await chamar('/api/agente/nivel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nivel:n})}); acesso(); }
+    catch(err){ alert(err.message); }
+  }));
   document.getElementById('gerar').addEventListener('click',async()=>{
-    if(s.chave_ativa&&!confirm('Gerar outra chave? A atual para de funcionar na hora — você vai precisar trocar no ambiente do Claude.'))return;
+    if(s.chave_ativa&&!confirm('Gerar outra chave? A atual para de funcionar na hora — você vai precisar trocar no ambiente do Claude. A nova começa só consultando.'))return;
     try{ const r=await chamar('/api/agente/chave',{method:'POST'}); acesso(r.chave); }
     catch(err){ alert(err.message); }
   });
   document.getElementById('revogar')?.addEventListener('click',async()=>{
-    if(!confirm('Revogar o acesso do Claude? Ele para de consultar o sistema na hora.'))return;
+    if(!confirm('Revogar o acesso do Claude? Ele para de entrar no sistema na hora.'))return;
     try{ await chamar('/api/agente/chave',{method:'DELETE'}); acesso(); }
     catch(err){ alert(err.message); }
   });

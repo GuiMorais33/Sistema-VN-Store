@@ -513,6 +513,8 @@ ensureColumn('variants', 'ns_versao', 'ns_versao INTEGER NOT NULL DEFAULT 0');
 // loja já tem esse número — senão a mesma venda baixaria duas vezes.
 ensureColumn('variants', 'ns_tentado', 'ns_tentado INTEGER');
 ensureColumn('variants', 'ns_tentado_delta', 'ns_tentado_delta INTEGER');   // a diferença que ia naquela tentativa
+// O que o agente mandou quando alterou algo (com acesso total), para o dono ler.
+ensureColumn('agent_log', 'detalhe', 'detalhe TEXT');
 
 // ---- Despesa a pagar ----
 // Uma despesa pode já ter saído do caixa ou estar só agendada. Sem isso

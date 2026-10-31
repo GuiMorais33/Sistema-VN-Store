@@ -19,8 +19,14 @@ consultado:
 ```bash
 curl -s -H "Authorization: Bearer $VNSTORE_AGENT_TOKEN" "$VNSTORE_URL/api/agente"
 ```
-- O acesso é **somente leitura** e limitado à lista de `server/agente.js`; tudo fica registrado
-  na tela Agentes do sistema.
+- O dono escolhe o nível na tela Agentes: **só consultar** (padrão de toda chave nova, só a lista
+  `LEITURAS` de `server/agente.js`) ou **acesso total** (as mesmas rotas que as telas usam, menos
+  `SO_DO_DONO`). `GET /api/agente` diz qual está valendo. Tudo fica registrado na tela Agentes; o que
+  for alterado, com o que foi mandado.
+- Com acesso total, o que se grava vale na loja de verdade: venda entra no caixa e o estoque sobe para
+  a Nuvemshop. Antes de alterar algo que mexe em dinheiro, estoque ou cliente, diga ao dono no chat o
+  que vai fazer; teste de venda é sempre lançar e cancelar em seguida, numa peça com estoque.
+- A chave nunca mexe nela mesma, nem baixa a cópia do banco, nem mexe na ligação com a Nuvemshop.
 - Nunca mostre, copie ou peça a chave no chat. Se ela não funcionar (401), peça ao dono para
   gerar outra na tela Agentes.
 - Dados de clientes (nome, telefone, e-mail) são pessoais: use só para o trabalho da loja.
