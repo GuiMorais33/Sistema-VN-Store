@@ -474,6 +474,15 @@ let tt;function toast(t,d,err){const el=document.getElementById('toast');
   el.className='toast'+(err?' err':'');el.innerHTML=`<div class="t">${t}</div><div class="d">${d||''}</div>`;
   requestAnimationFrame(()=>el.classList.add('show'));clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),4600);}
 
+// A Nuvemshop já não tinha a peça quando a venda chegou lá: o site pode ter
+// vendido a última. Aviso que não some sozinho — o cliente ainda está aqui.
+function avisarConflitos(r){
+  if(!r.conflitos||!r.conflitos.length)return;
+  alert('ATENÇÃO — confira os pedidos do site agora\n\n'
+    +r.conflitos.map((c)=>`• ${c.nome}: a Nuvemshop tinha ${c.na_loja}, e saíram ${c.na_loja+c.faltou} aqui.`).join('\n')
+    +'\n\nO site pode ter vendido a última peça (ou ela foi zerada no painel da Nuvemshop). '
+    +'Veja se tem pedido do site com ela antes do cliente ir embora. Ficou um lembrete de hoje.');
+}
 async function finalizar(){
   if(S.troca)return confirmarTroca();
   if(!S.cart.size)return;
@@ -501,6 +510,7 @@ async function finalizar(){
     const enc=(r.encomendas&&r.encomendas.length)
       ? `<br><b style="color:var(--warn)">Pegar no fornecedor hoje:</b> ${r.encomendas.join(', ')}` : '';
     toast(`${r.code} · ${BRL(r.total)}`,`${r.customer_name||'Sem cliente'}${vend} · ${sit}${sinc}${enc}`);
+    avisarConflitos(r);
     S.cart.clear();S.pay='';limparCliente();
     // A próxima venda começa do zero: balcão e sem vendedor escolhido.
     if(TIME.length>1)document.getElementById('vend').value='';
@@ -681,6 +691,7 @@ async function confirmarTroca(){
       devolver:[...t.voltou].filter(([,q])=>q>0).map(([item_id,qty])=>({item_id,qty})),
       levar:[...S.cart.values()].map(i=>({variant_id:i.v.id,qty:i.qty})),forma:S.pay})});
     const enc=r.encomendas&&r.encomendas.length?`<br><b style="color:var(--warn)">Pegar no fornecedor:</b> ${r.encomendas.join(', ')}`:'';
+    avisarConflitos(r);
     toast(`Troca feita · ${r.code}`,(r.diferenca>0?`Cliente pagou ${BRL(r.diferenca)}`:r.diferenca<0?`Devolvido ${BRL(-r.diferenca)}`:'Sem diferença de valor')+enc);
     sairTroca();carregar(document.getElementById('search').value.trim());
   }catch(e){toast('Não deu para trocar',e.message,true);btn.disabled=false;btn.textContent='Confirmar troca';}

@@ -305,7 +305,8 @@ export async function listAllCustomers(opts = {}) {
   const maxPages = opts.maxPages || 100;
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const data = await pagina(`/customers?per_page=${per}&page=${page}`, page);
+    const since = opts.since ? `&created_at_min=${opts.since}T00:00:00-03:00` : '';
+    const data = await pagina(`/customers?per_page=${per}&page=${page}${since}`, page);
     if (!Array.isArray(data) || data.length === 0) break;
     all.push(...data);
     if (data.length < per) break;

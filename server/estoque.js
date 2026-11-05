@@ -81,14 +81,14 @@ async function enviarUma(id) {
   // Sob encomenda a grade do site é sua: venda não mexe nela, só a mão.
   if (!v.stock_management || (v.on_demand && !v.ns_fixar)) { descartar.run(marca); return { enviado: false }; }
 
-  let valor;
+  let valor, faltou = 0, remoto = null;
   try {
     if (v.ns_fixar) valor = Math.max(0, v.stock);
     else {
       const naLoja = await nuvem.getVariant(v.nuvemshop_product_id, v.nuvemshop_variant_id);
       // A loja não controla o estoque dessa peça: não há número a acertar.
       if (!naLoja || naLoja.stock == null) { descartar.run(marca); return { enviado: false }; }
-      const remoto = parseInt(naLoja.stock, 10) || 0;
+      remoto = parseInt(naLoja.stock, 10) || 0;
       // A última tentativa ficou sem resposta, mas a loja já tem o número
       // que foi mandado: ela chegou. Mandar de novo baixaria duas vezes.
       // Sai da fila só o que ia naquela tentativa; venda que veio depois
@@ -100,6 +100,11 @@ async function enviarUma(id) {
         if (resto && (resto.ns_delta || resto.ns_fixar)) return enviarUma(id);
         return { enviado: true, valor: remoto, ja_estava: true };
       }
+      // A loja já não tinha o que saiu aqui: o site vendeu a última peça
+      // (ou alguém zerou no painel) antes de a venda do balcão chegar lá.
+      // O número fica em 0, mas a peça pode ter sido vendida duas vezes —
+      // quem está no balcão precisa saber agora, com o cliente na frente.
+      if (v.ns_delta < 0) faltou = Math.max(0, -(remoto + v.ns_delta));
       valor = Math.max(0, remoto + v.ns_delta);
     }
     anotarTentado.run(valor, v.ns_fixar ? null : v.ns_delta, v.id);
@@ -112,7 +117,7 @@ async function enviarUma(id) {
     throw err;
   }
   gravarEnviado(v, valor, v.on_demand);
-  return { enviado: true, valor };
+  return faltou ? { enviado: true, valor, faltou, naLoja: remoto } : { enviado: true, valor };
 }
 
 // Envia agora o que estas variações têm na fila. Para cada uma diz se

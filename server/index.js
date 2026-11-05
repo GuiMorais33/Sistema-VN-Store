@@ -240,15 +240,29 @@ const REAL = `CASE WHEN p.on_demand = 1 THEN COALESCE(v.on_hand,0) ELSE v.stock 
 // Sobe para a loja o que estas linhas (de venda ou de entrada) mudaram
 // no estoque, e resume o resultado para a tela. Como o número é
 // calculado está em server/estoque.js.
-async function subirEstoque(linhas) {
-  const nome = new Map(linhas.map((l) => [l.v.id, `${l.v.product_name} ${l.v.variant_name}`]));
+async function subirEstoque(linhas, ref = '') {
+  const nome = new Map(linhas.map((l) => [l.v.id, `${l.v.product_name} ${l.v.variant_name || ''}`.trim()]));
   const r = await enviarEstoque([...nome.keys()]);
   const falhas = r.filter((x) => x.erro);
+  // Peça que a Nuvemshop já não tinha quando a venda chegou lá. Vira
+  // lembrete de hoje, além do aviso no PDV: o aviso some, o lembrete fica
+  // até alguém conferir os pedidos do site.
+  const conflitos = r.filter((x) => x.faltou).map((x) => ({ nome: nome.get(x.id), faltou: x.faltou, na_loja: x.naLoja }));
+  if (conflitos.length) {
+    const ins = db.prepare(`INSERT INTO reminders (title, notes, due_date, kind, created_at) VALUES (?,?,?, 'geral', ?)`);
+    for (const c of conflitos) {
+      ins.run(`Conferir pedidos do site: ${c.nome}`,
+        `${ref ? ref + ': ' : ''}a Nuvemshop tinha ${c.na_loja} e saíram ${c.na_loja + c.faltou} aqui. O site pode ter vendido a última peça (ou ela foi zerada no painel).`,
+        diaLocal(), now());
+    }
+  }
   return {
     ok: !falhas.length,
     enviados: r.filter((x) => x.enviado).length,
-    notas: falhas.map((x) => `${nome.get(x.id)}: ${x.erro}${x.naFila ? ' (vai de novo na próxima rodada)' : ''}`),
+    notas: falhas.map((x) => `${nome.get(x.id)}: ${x.erro}${x.naFila ? ' (vai de novo na próxima rodada)' : ''}`)
+      .concat(conflitos.map((c) => `${c.nome}: a Nuvemshop tinha ${c.na_loja} (o site pode ter vendido a última)`)),
     naFila: falhas.some((x) => x.naFila),
+    conflitos,
   };
 }
 
@@ -1517,8 +1531,8 @@ app.post('/api/sales', async (req, res) => {
   // Manda a baixa para a Nuvemshop: o estoque de lá menos o que saiu
   // aqui. Sob encomenda a grade do site fica como está.
   const live = isLive();
-  const { ok: syncedAll, enviados, notas: syncNotes, naFila: stockNaFila } = live
-    ? await subirEstoque(lines.filter((l) => l.v.stock_management && !l.v.on_demand))
+  const { ok: syncedAll, enviados, notas: syncNotes, naFila: stockNaFila, conflitos = [] } = live
+    ? await subirEstoque(lines.filter((l) => l.v.stock_management && !l.v.on_demand), `Venda ${code}`)
     : { ok: false, enviados: 0, notas: ['Modo demonstração — estoque não enviado à Nuvemshop.'], naFila: false };
   db.prepare('UPDATE sales SET synced_nuvemshop=?, sync_note=? WHERE id=?').run(syncedAll && live ? 1 : 0, syncNotes.join(' | ') || null, saleId);
 
@@ -1532,6 +1546,7 @@ app.post('/api/sales', async (req, res) => {
     stock_enviados: enviados,
     stock_na_fila: stockNaFila,   // a loja falhou agora; vai de novo sozinho
     encomendas,   // o PDV avisa na tela e o lembrete já foi criado
+    conflitos,    // a Nuvemshop já não tinha a peça: o PDV avisa e fica o lembrete
   });
 });
 
@@ -1606,9 +1621,9 @@ function mexerNoEstoque(v, qtd, ref, motivo, ts) {
 const lancarNoCaixa = (valor, descricao, ref, forma, ts) => db.prepare(`INSERT INTO financial_entries
     (type, category, category_id, description, amount, ref, forma, created_at) VALUES ('receita','Venda PDV',?,?,?,?,?,?)`)
   .run(categoryId('Venda PDV', 'receita'), descricao, money(valor), ref, forma || null, ts);
-const subirVariacoes = async (ids) => (isLive() && ids.size
-  ? subirEstoque([...ids].map((id) => ({ v: varianteDaVenda.get(id) })))
-  : { ok: true, enviados: 0, notas: [], naFila: false });
+const subirVariacoes = async (ids, ref) => (isLive() && ids.size
+  ? subirEstoque([...ids].map((id) => ({ v: varianteDaVenda.get(id) })), ref)
+  : { ok: true, enviados: 0, notas: [], naFila: false, conflitos: [] });
 const SO_DAQUI = 'Pedido da Nuvemshop: cancelamento e troca são feitos lá, e o sistema acompanha sozinho.';
 
 // Cancelar: tudo volta. Estoque (aqui e na loja), dinheiro (estorno no dia
@@ -1729,9 +1744,9 @@ app.post('/api/sales/:id/troca', async (req, res) => {
     }
     return tid;
   })();
-  const loja = await subirVariacoes(mexidas);
+  const loja = await subirVariacoes(mexidas, `Troca ${s.code}`);
   res.json({ ok: true, code: s.code, troca_id: trocaId, devolvido, levado, diferenca, encomendas,
-    stock_synced: loja.ok && isLive(), stock_na_fila: loja.naFila, notes: loja.notas });
+    stock_synced: loja.ok && isLive(), stock_na_fila: loja.naFila, notes: loja.notas, conflitos: loja.conflitos });
 });
 
 // Vendas para achar, conferir, cancelar e trocar.
@@ -3657,8 +3672,15 @@ const NOME_GENERICO = /^(\s*|-+|n[ãa]o\s+informad[oa]|sem\s+nome|cliente(\s+do\
 const nomeUtil = (n) => Boolean(n) && !NOME_GENERICO.test(String(n).trim());
 
 // Traz os clientes da loja para cá (cadastro), sem duplicar.
-async function importarClientes() {
-  const lista = await nuvem.listAllCustomers();
+// desde (AAAA-MM-DD): só quem se cadastrou a partir desse dia. Sem ele,
+// a lista inteira (a primeira vez, e quando alguém pede pela tela).
+async function importarClientes(desde = null) {
+  let lista;
+  try { lista = await nuvem.listAllCustomers(desde ? { since: desde } : {}); }
+  catch (err) {
+    if (!desde || !err.status) throw err;
+    lista = await nuvem.listAllCustomers();   // a loja recusou o filtro: lê tudo, como antes
+  }
   const porNs = db.prepare('SELECT id FROM customers WHERE nuvemshop_customer_id = ?');
   const porEmail = db.prepare("SELECT id FROM customers WHERE email <> '' AND lower(email) = lower(?)");
   const porNome = db.prepare('SELECT id FROM customers WHERE lower(name) = lower(?) AND nuvemshop_customer_id IS NULL');
@@ -3993,14 +4015,22 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
 
 // Motor automático: verifica a loja de tempos em tempos, sozinho. Nada
 // disso depende de botão — o dono não precisa lembrar de "ler" nada.
-//   pedidos e status: a cada 10 min · estoque e produtos: a cada 20 min
-//   clientes da loja: a cada 6 h · permissão de gravar estoque: 1x por dia
+//   pedidos de hoje: a cada 2 min · pedidos dos últimos 45 dias: a cada 10 min
+//   estoque e produtos: a cada 20 min · clientes da loja: a cada 6 h (por
+//   fora, sem segurar os pedidos) · permissão de gravar estoque: 1x por dia
+// Os pedidos de hoje vão a cada 2 min porque é deles que vem a peça que o
+// site acabou de vender: quanto antes chegam, antes o PDV mostra "esgotado".
 const INTERVALO_MIN = Math.max(2, parseInt(process.env.SYNC_MINUTES, 10) || 10);
 const INTERVALO_MS = parseInt(process.env.SYNC_INTERVALO_MS, 10) || INTERVALO_MIN * 60e3;   // o teste encurta
+const RAPIDO_MS = Math.min(INTERVALO_MS, parseInt(process.env.PEDIDOS_RAPIDO_MS, 10) || 2 * 60e3);
+const RAPIDO_MIN = Math.max(1, Math.round(RAPIDO_MS / 60e3));
 const LIMITE_VOLTA_MS = parseInt(process.env.LIMITE_VOLTA_MS, 10) || 20 * 60e3;
 const RELER_CLIENTES_MIN = 6 * 60;
+const RELER_CLIENTES_MS = parseInt(process.env.RELER_CLIENTES_MS, 10) || RELER_CLIENTES_MIN * 60e3;   // o teste encurta
 const TESTAR_ESCRITA_MIN = 24 * 60;
 let sincronizando = false;
+let ultimaVoltaCheia = 0;    // a última volta que releu os 45 dias de pedidos
+let relendoClientes = false;
 async function tickAutomatico(motivo = 'automático') {
   // As fixas não dependem da loja: rodam mesmo sem conexão.
   try { const n = lancarFixas(); if (n) console.log(`› ${n} despesa(s) fixa(s) lançada(s) como a pagar.`); }
@@ -4032,6 +4062,10 @@ async function voltaDoMotor(motivo) {
       if (chaveErro) setSetting(chaveErro, err.message);
     }
   };
+  // A cada 10 min, os últimos 45 dias (pagamento, envio e cancelamento de
+  // pedido antigo); entre uma e outra, só os de hoje — é rápido. Se a
+  // leitura cheia falhar, a próxima volta tenta a cheia de novo.
+  const cheia = Date.now() - ultimaVoltaCheia >= INTERVALO_MS - 5000;
   try {
     await tarefa('last_orders_error', async () => {
       // Estoque que não subiu na hora da venda (loja fora do ar) vai agora.
@@ -4041,7 +4075,8 @@ async function voltaDoMotor(motivo) {
       // Desde quando tem venda daqui sem baixar na loja (o Início avisa).
       if (e.falhas) { if (!getSetting('estoque_pendente_desde')) setSetting('estoque_pendente_desde', now()); setSetting('estoque_pendente_erro', e.erro || ''); }
       else setSetting('estoque_pendente_desde', '');
-      const r = await sincronizarPedidos();
+      const r = await sincronizarPedidos(cheia ? JANELA_PEDIDOS_DIAS : 0);
+      if (cheia) ultimaVoltaCheia = Date.now();
       if (r && !r.skipped && (r.novos || r.lancados)) {
         console.log(`› Pedidos do site (${motivo}): ${r.novos} novo(s), ${r.lancados} lançado(s) no caixa.`);
       }
@@ -4066,15 +4101,20 @@ async function voltaDoMotor(motivo) {
         console.log(`› Estoque relido da loja: ${e2.variants} variação(ões)${e2.zeradas ? `, ${e2.zeradas} zerada(s) (sumiram da loja)` : ''}.`);
       });
     }
-    // Clientes cadastrados na loja (conta no site, mesmo sem compra).
+    // Clientes cadastrados na loja (conta no site, mesmo sem compra). Só os
+    // que entraram desde a última leitura, e por fora da volta: a lista
+    // inteira (quase 2 mil pessoas) levou 20 min em novembro e segurou os
+    // pedidos do site esse tempo todo.
     const ultClientes = getSetting('clientes_relidos_em');
-    if (!ultClientes || Date.now() - new Date(ultClientes).getTime() >= RELER_CLIENTES_MIN * 60e3) {
-      await tarefa('clientes_erro', async () => {
-        const cli = await importarClientes();
+    if (!relendoClientes && (!ultClientes || Date.now() - new Date(ultClientes).getTime() >= RELER_CLIENTES_MS)) {
+      relendoClientes = true;
+      const desde = ultClientes ? diaLocal(new Date(new Date(ultClientes).getTime() - 2 * 864e5)) : null;
+      tarefa('clientes_erro', async () => {
+        const cli = await importarClientes(desde);
         vincularPedidos(); limparClientesGenericos(); detectarInstagram();
         setSetting('clientes_relidos_em', now());
         if (cli && cli.novos) console.log(`› Clientes da loja: ${cli.novos} novo(s).`);
-      });
+      }).finally(() => { relendoClientes = false; });
     }
     // A permissão de gravar estoque na loja: conferida uma vez por dia; se
     // está com problema, a cada volta — arrumou, fica verde sozinho.
@@ -4085,17 +4125,20 @@ async function voltaDoMotor(motivo) {
         if (!t.ok) console.error('Gravar estoque na loja:', t.erro);
       });
     }
-    await tarefa(null, async () => {
-      const c = await sincronizarCarrinhos();
-      if (c && c.novos) console.log(`› Carrinhos abandonados: ${c.novos} novo(s).`);
-    });
-    await tarefa(null, async () => {
-      const msgs = gerarMensagens();
-      if (msgs) console.log(`› ${msgs} mensagem(ns) esperando envio.`);
-    });
+    // Carrinhos e mensagens não têm pressa: só na volta dos 10 min.
+    if (cheia) {
+      await tarefa(null, async () => {
+        const c = await sincronizarCarrinhos();
+        if (c && c.novos) console.log(`› Carrinhos abandonados: ${c.novos} novo(s).`);
+      });
+      await tarefa(null, async () => {
+        const msgs = gerarMensagens();
+        if (msgs) console.log(`› ${msgs} mensagem(ns) esperando envio.`);
+      });
+    }
   } finally { setSetting('motor_volta_fim', now()); }
 }
-setInterval(() => tickAutomatico(), INTERVALO_MS);
+setInterval(() => tickAutomatico(), RAPIDO_MS);
 // A primeira volta sai logo depois de ligar (o teste encurta a espera).
 setTimeout(() => tickAutomatico('início'), parseInt(process.env.PRIMEIRA_RODADA_MS, 10) || 8000);
 backup.agendarBackups();
@@ -4235,7 +4278,7 @@ app.get('/api/operacao', (req, res) => {
     },
     conectado: isLive(),
     ultima_leitura: getSetting('last_orders_import'),
-    intervalo_min: INTERVALO_MIN,
+    intervalo_min: RAPIDO_MIN,
     estoque_relido_em: getSetting('estoque_relido_em'),
     reler_estoque_min: RELER_ESTOQUE_MIN,
     alertas: alertasDoSistema(),
@@ -4388,11 +4431,12 @@ app.post('/api/agente/nivel', (req, res) => {
 app.get('/api/connection', (req, res) => res.json({
   ...nuvem.connectionInfo(),
   automatico: {
-    pedidos: { a_cada_min: INTERVALO_MIN, ultima: getSetting('last_orders_import') || null, erro: getSetting('last_orders_error') || null },
+    pedidos: { a_cada_min: INTERVALO_MIN, de_hoje_a_cada_min: RAPIDO_MIN, ultima: getSetting('last_orders_import') || null, erro: getSetting('last_orders_error') || null },
     estoque: { a_cada_min: RELER_ESTOQUE_MIN, ultima: getSetting('estoque_relido_em') || null, erro: getSetting('estoque_erro') || null },
     clientes: { a_cada_min: RELER_CLIENTES_MIN, ultima: getSetting('clientes_relidos_em') || null, erro: getSetting('clientes_erro') || null },
     escrita_a_cada_min: TESTAR_ESCRITA_MIN,
     travou_em: getSetting('motor_travou_em') || null,
+    ultima_volta: getSetting('motor_volta_fim') || null,
   },
   alertas: alertasDoSistema(),
 }));

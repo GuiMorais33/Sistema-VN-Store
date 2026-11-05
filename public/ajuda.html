@@ -784,12 +784,14 @@
         <p>Estas coisas acontecem sem ninguém clicar em nada:</p>
         <div class="tw"><table>
           <tr><th>O quê</th><th>Quando</th></tr>
-          <tr><td>Lê as vendas do site</td><td>A cada 10 minutos. Pedido novo aparece aqui; quando o
-            cliente paga, a receita <b>entra no caixa</b> — sem duplicar, mesmo relendo.</td></tr>
+          <tr><td>Lê as vendas do site</td><td>Os pedidos de hoje, a cada 2 minutos; os mais antigos (pagou
+            depois, cancelou), a cada 10. Pedido novo aparece aqui; quando o cliente paga, a receita
+            <b>entra no caixa</b> — sem duplicar, mesmo relendo.</td></tr>
           <tr><td>Atualiza o status dos pedidos</td><td>Junto com a leitura: pagou, embalou, enviou —
             as filas do Início se ajustam sozinhas.</td></tr>
           <tr><td>Baixa o estoque</td><td>Na hora que você finaliza a venda no PDV — aqui e na
-            Nuvemshop.</td></tr>
+            Nuvemshop, em cerca de 1 segundo. Se o site já tinha vendido a última peça, o PDV avisa na hora
+            e cria um lembrete para conferir os pedidos do site.</td></tr>
           <tr><td>Confere o estoque com a Nuvemshop</td><td>A cada 20 minutos relê o estoque de todos os
             produtos da loja. O que você mudar direto no painel da Nuvemshop (repôs peça, corrigiu número,
             esgotou, apagou, cadastrou produto novo) aparece aqui sozinho. No Início, ao lado das abas, diz a
@@ -817,8 +819,16 @@
         <p>Falta o <b>custo</b> do produto. Vá em <span class="rota">Estoque</span>, abra o produto e
           preencha o custo de cada variação.</p>
 
+        <h3>É em tempo real com a Nuvemshop?</h3>
+        <p>Do balcão para o site, sim: ao finalizar a venda, o sistema pega o número que a Nuvemshop tem
+          <b>naquele segundo</b> e tira dele o que saiu aqui. Por isso o site nunca fica com peça que já foi
+          vendida no balcão — desde que a venda seja lançada <b>na hora</b>, com o cliente na frente.
+          Lançar depois (no fim do dia, em lote) é o que deixa o site vender peça que não existe mais.</p>
+        <p>Do site para cá, os pedidos de hoje chegam em até 2 minutos. Nesse meio-tempo o PDV pode mostrar
+          uma peça que o site acabou de vender; se for a última, o PDV avisa ao finalizar e deixa um lembrete.</p>
+
         <h3>Uma venda do site não apareceu</h3>
-        <p>A leitura acontece a cada 10 minutos — espere um pouco e atualize a página. Se o pedido
+        <p>Os pedidos de hoje são lidos a cada 2 minutos — espere um pouco e atualize a página. Se o pedido
           ainda <b>não foi pago</b>, ele aparece em <b>Por cobrar</b>, mas ainda não entra no caixa
           (é assim mesmo).</p>
 

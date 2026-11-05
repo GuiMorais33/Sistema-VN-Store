@@ -54,10 +54,10 @@ async function subir(opcoes) {
   const s = await subirServidor({ NUVEMSHOP_STORE_ID: LOJA, NUVEMSHOP_ACCESS_TOKEN: 'x',
     NUVEMSHOP_API_BASE: `http://127.0.0.1:${srv.address().port}`, PRIMEIRA_RODADA_MS: '200', NUVEMSHOP_ESPERAS_MS: '50,100' });
   servidores.push({ s, srv });
-  // Espera a primeira volta do motor terminar (clientes é a penúltima tarefa).
+  // Espera a primeira volta do motor terminar (e os clientes, que vão por fora).
   for (let i = 0; i < 80; i++) {
     const a = (await s.pedir('GET', '/api/connection')).json.automatico;
-    if (a.clientes.ultima || a.clientes.erro) break;
+    if ((a.clientes.ultima || a.clientes.erro) && a.ultima_volta) break;
     await new Promise((ok) => setTimeout(ok, 100));
   }
   return { s, estado, auto: async () => (await s.pedir('GET', '/api/connection')).json.automatico };

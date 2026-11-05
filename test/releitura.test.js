@@ -47,7 +47,8 @@ before(async () => {
   s = await subirServidor({ NUVEMSHOP_STORE_ID: LOJA, NUVEMSHOP_ACCESS_TOKEN: 'token-de-teste',
     NUVEMSHOP_API_BASE: `http://127.0.0.1:${nuvem.address().port}`, PRIMEIRA_RODADA_MS: '200' });
   // Sem ninguém clicar em nada: a primeira volta do motor lê tudo sozinha.
-  for (let i = 0; i < 50 && !(await s.pedir('GET', '/api/connection')).json.automatico.clientes.ultima; i++) {
+  const pronto = (a) => a.clientes.ultima && a.ultima_volta;
+  for (let i = 0; i < 50 && !pronto((await s.pedir('GET', '/api/connection')).json.automatico); i++) {
     await new Promise((ok) => setTimeout(ok, 100));
   }
 });
