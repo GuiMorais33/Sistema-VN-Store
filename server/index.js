@@ -16,6 +16,7 @@ import * as nuvem from './nuvemshop.js';
 import { naFila, enviarEstoque, enviarPendentes, gravarEnviado, contagemAMao, lerDaLoja, reporGrade } from './estoque.js';
 import * as backup from './backup.js';
 import * as agente from './agente.js';
+import { procurar, procurarProdutos } from './busca.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, '..', 'public');
@@ -298,11 +299,26 @@ app.get('/api/products', (req, res) => {
   // mostra só isso — a loja guarda milhares de produtos que já esgotaram.
   // Buscando, o esgotado aparece no fim (para você ver que acabou).
   const vende = `(COALESCE(p.on_demand,0) = 1 OR v.stock_management = 0 OR v.stock > 0)`;
-  let rows;
+  let rows, info = { ignoradas: [], parecidos: false };
   if (q) {
-    const like = termo(q);
-    rows = db.prepare(`${base} WHERE (busca(v.product_name) LIKE ? OR busca(v.variant_name) LIKE ? OR busca(v.sku) LIKE ? OR busca(p.brand) LIKE ? OR busca(p.category) LIKE ?)
-      ORDER BY ${vende} DESC, v.product_name, v.variant_name LIMIT 120`).all(like, like, like, like, like);
+    // Busca que entende o jeito que a loja escreve (server/busca.js). Aqui
+    // só se traz o número de agora de cada variação achada e se ordena:
+    // primeiro o que dá para vender, depois o que mais combina, e no empate
+    // o que mais vendeu nos últimos 30 dias; os tamanhos na ordem do cadastro.
+    const r = procurar(q);
+    info = { ignoradas: r.ignoradas, parecidos: r.parecidos };
+    const nota = new Map(r.variantes.map((x) => [x.id, x.nota]));
+    rows = r.variantes.length ? db.prepare(`WITH vend AS (SELECT vv.product_id pid, SUM(i.qty) n FROM sale_items i
+        JOIN sales s ON s.id = i.sale_id JOIN variants vv ON vv.id = i.variant_id
+        WHERE s.created_at >= ? AND ${VENDA('s.')} GROUP BY vv.product_id)
+      SELECT v.*, p.brand, p.category, p.image_url, p.on_demand, ${REAL} AS real_stock,
+        ${vende} AS _vende, COALESCE(vend.n,0) AS _vendidas
+      FROM variants v LEFT JOIN products p ON p.id = v.product_id LEFT JOIN vend ON vend.pid = v.product_id
+      WHERE v.id IN (SELECT value FROM json_each(?))`).all(desdeDias(30), JSON.stringify([...nota.keys()])) : [];
+    rows.sort((a, b) => (b._vende - a._vende) || (nota.get(b.id) - nota.get(a.id)) || (b._vendidas - a._vendidas)
+      || String(a.product_name).localeCompare(String(b.product_name), 'pt-BR') || (a.product_id - b.product_id) || (a.id - b.id));
+    rows = rows.slice(0, 120);
+    for (const r2 of rows) { delete r2._vende; delete r2._vendidas; }
   } else {
     // Sem busca: o que mais vendeu nos últimos 30 dias primeiro (é o que o
     // balcão mais toca), com os tamanhos de cada produto juntos.
@@ -312,6 +328,9 @@ app.get('/api/products', (req, res) => {
       ${base} LEFT JOIN vend ON vend.pid = v.product_id
       WHERE ${vende} ORDER BY COALESCE(vend.n,0) DESC, v.product_name, v.id LIMIT 120`).all(desdeDias(30));
   }
+  // O PDV pede "detalhe" para saber se alguma palavra foi deixada de lado;
+  // quem pede só a lista (o agente, telas antigas) continua recebendo a lista.
+  if (req.query.detalhe) return res.json({ itens: rows, ...info });
   res.json(rows);
 });
 
@@ -323,8 +342,14 @@ app.get('/api/catalog', (req, res) => {
   const brand = (req.query.brand || '').trim();
   const where = [];
   const args = [];
-  // Buscando "tênis" acha pelo nome, pela marca e pela categoria.
-  if (q) { where.push('(busca(p.name) LIKE ? OR busca(p.brand) LIKE ? OR busca(p.category) LIKE ? OR busca(p.categories_all) LIKE ?)'); args.push(termo(q), termo(q), termo(q), termo(q)); }
+  // A mesma busca do PDV (server/busca.js): palavras em qualquer ordem,
+  // começo de palavra, apelidos, um erro de digitação; o que mais combina
+  // vem primeiro.
+  let notas = null;
+  if (q) {
+    notas = procurarProdutos(q).notas;
+    where.push('p.id IN (SELECT value FROM json_each(?))'); args.push(JSON.stringify([...notas.keys()]));
+  }
   // Categoria: o produto pode estar em várias (como no site) — busca em todas.
   if (cat) { where.push('(p.category = ? OR p.categories_all LIKE ?)'); args.push(cat, `%${cat}%`); }
   if (brand) { where.push('p.brand = ?'); args.push(brand); }
@@ -353,6 +378,7 @@ app.get('/api/catalog', (req, res) => {
     GROUP BY p.id ORDER BY p.name
   `).all(desdeDias(ACABANDO_DIAS), ...args);
   for (const r of rows) r.acabando = acabando({ on_demand: r.on_demand, vendidas: r.vendidas_30d, pecas: r.total_stock });
+  if (notas) rows.sort((a, b) => (notas.get(b.id) || 0) - (notas.get(a.id) || 0));   // estável: no empate, por nome
   res.json(rows);
 });
 
@@ -871,7 +897,8 @@ app.get('/api/custos', (req, res) => {
   const cat = (req.query.category || '').trim();
   const soFalta = req.query.falta === '1';
   const where = [], args = [];
-  if (q) { where.push('(busca(v.product_name) LIKE ? OR busca(v.variant_name) LIKE ? OR busca(v.sku) LIKE ?)'); args.push(termo(q), termo(q), termo(q)); }
+  // A mesma busca do PDV (server/busca.js).
+  if (q) { where.push('v.id IN (SELECT value FROM json_each(?))'); args.push(JSON.stringify(procurar(q).variantes.map((x) => x.id))); }
   if (brand) { where.push('p.brand = ?'); args.push(brand); }
   if (cat) { where.push('(p.category = ? OR p.categories_all LIKE ?)'); args.push(cat, `%${cat}%`); }
   if (soFalta) where.push('COALESCE(v.cost,0) <= 0');
@@ -961,7 +988,7 @@ app.get('/api/encomenda', (req, res) => {
   const where = ['p.on_demand = 1'], args = [];
   const cat = (req.query.category || '').trim(), q = (req.query.q || '').trim();
   if (cat) { where.push('(p.category = ? OR p.categories_all LIKE ?)'); args.push(cat, `%${cat}%`); }
-  if (q) { where.push('(busca(p.name) LIKE ? OR busca(p.brand) LIKE ?)'); args.push(termo(q), termo(q)); }
+  if (q) { where.push('p.id IN (SELECT value FROM json_each(?))'); args.push(JSON.stringify([...procurarProdutos(q).notas.keys()])); }
   const produtos = db.prepare(`SELECT p.id, p.name, p.brand, p.category, p.image_url FROM products p
     WHERE ${where.join(' AND ')} ORDER BY p.name`).all(...args);
   const grade = db.prepare(`SELECT id, variant_name, stock, COALESCE(on_hand,0) on_hand, cost, price
@@ -1412,6 +1439,38 @@ function detectarInstagram() {
 }
 
 // ==================== VENDA (PDV) ====================
+// Venda lançada depois de acontecer (a do caderno, a de ontem que ficou
+// para trás): a venda, o dinheiro no caixa, a meta e a comissão ficam no
+// dia em que ela aconteceu. O estoque continua mexendo AGORA — é agora que
+// a peça sai do número da Nuvemshop (e o vigia da releitura compara a hora
+// de agora: "updated_at" nunca vai para o passado).
+// Hoje: a hora de agora. Outro dia: a mesma hora do relógio, naquele dia —
+// assim as vendas lançadas em sequência ficam na ordem em que entraram.
+// "hora" (ms desde a meia-noite) troca a hora de agora pela de outra venda.
+const DIAS_PARA_TRAS = 90;
+function quandoFoiAVenda(data, hora = null) {
+  const hoje = diaLocal();
+  if (!data || data === hoje) {
+    if (hora == null) return { ts: now(), dia: hoje };
+    data = hoje;
+  }
+  const dia = String(data).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia) || diaLocal(new Date(inicioDoDia(dia))) !== dia) {
+    throw Object.assign(new Error('Data inválida.'), { status: 400 });
+  }
+  if (dia > hoje) throw Object.assign(new Error('A venda não pode ter data no futuro.'), { status: 400 });
+  if (dia < diaLocal(new Date(Date.now() - DIAS_PARA_TRAS * 864e5))) {
+    throw Object.assign(new Error(`Dá para lançar até ${DIAS_PARA_TRAS} dias para trás.`), { status: 400 });
+  }
+  const ms = hora != null ? hora : Date.now() - new Date(inicioDoDia(hoje)).getTime();
+  // Nunca depois de agora (passar uma venda das 18h para hoje, às 10h).
+  const ts = new Date(Math.min(Date.now(), new Date(inicioDoDia(dia)).getTime() + Math.min(ms, 864e5 - 1000))).toISOString();
+  return { ts, dia };
+}
+// O caixa daquele dia já foi fechado? A venda entra nele mesmo assim (é o
+// dia em que o dinheiro entrou) — o PDV avisa para conferir o fechamento.
+const caixaFechado = (dia) => Boolean(db.prepare('SELECT 1 FROM cash_closings WHERE day = ?').get(dia));
+
 app.post('/api/sales', async (req, res) => {
   const { items = [], customer_id = null, new_customer = null, customer_name = '', payment_method = '', payment_status = 'pago', discount = 0, atendimento_id = null } = req.body || {};
   // Vendedor logado: a venda é dele, sem escolher. O dono escolhe quem
@@ -1419,6 +1478,13 @@ app.post('/api/sales', async (req, res) => {
   const seller_id = req.quem && req.quem.papel === 'vendedor' ? req.quem.id : (req.body || {}).seller_id || null;
   const canal = CANAIS_PDV.includes((req.body || {}).canal) ? req.body.canal : 'balcao';
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Adicione ao menos um item à venda.' });
+  // Data da venda: só o dono (e o gerente, que entra com a senha dele)
+  // lança venda de outro dia — mexe no caixa e na comissão de dias passados.
+  let quando;
+  try { quando = quandoFoiAVenda((req.body || {}).data); } catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
+  if (quando.dia !== diaLocal() && req.quem && req.quem.papel === 'vendedor') {
+    return res.status(403).json({ error: 'Venda de outro dia só o dono lança.' });
+  }
 
   // Cliente: usa existente, cria novo, ou anônimo.
   let custId = customer_id || null;
@@ -1473,9 +1539,9 @@ app.post('/api/sales', async (req, res) => {
   const saleId = db.transaction(() => {
     const id = db.prepare(`INSERT INTO sales (code, channel, canal, customer_id, customer_name, payment_method, payment_status, paid_at, subtotal, discount, total, cost_total, margin, seller_id, seller_name, items_count, synced_nuvemshop, created_at)
       VALUES (?, 'pdv', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`)
-      .run(code, canal, custId, custName, payment_method, status, status === 'pago' ? ts : null, subtotal, disc, total, costTotal, margin,
+      .run(code, canal, custId, custName, payment_method, status, status === 'pago' ? quando.ts : null, subtotal, disc, total, costTotal, margin,
         vendedor ? vendedor.id : null, vendedor ? vendedor.name : null,
-        lines.reduce((s, l) => s + l.qty, 0), ts).lastInsertRowid;
+        lines.reduce((s, l) => s + l.qty, 0), quando.ts).lastInsertRowid;
     const insItem = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, name, qty, unit_price, unit_cost, line_total, encomenda) VALUES (?,?,?,?,?,?,?,?)`);
     // Grade do site e par em mãos baixam separados: o site perde a
     // numeração vendida, o estoque real só perde se o par estava aqui.
@@ -1516,14 +1582,14 @@ app.post('/api/sales', async (req, res) => {
       const aid = db.prepare(`INSERT INTO atendimentos
         (member_id, customer_id, nome, canal, stage, sale_id, valor, day, created_at)
         VALUES (?,?,?, 'loja', 'vendido', ?,?,?,?)`)
-        .run(vendedor.id, custId, custName || '', id, total, diaLocal(), ts).lastInsertRowid;
+        .run(vendedor.id, custId, custName || '', id, total, quando.dia, quando.ts).lastInsertRowid;
       db.prepare('UPDATE sales SET atendimento_id = ? WHERE id = ?').run(aid, id);
     }
     // Caixa: só entra quando PAGO. Fiado vira conta a receber (a própria venda pendente).
     if (status === 'pago') {
       db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, ref, forma, created_at)
         VALUES ('receita','Venda PDV',?,?,?,?,?,?)`)
-        .run(categoryId('Venda PDV', 'receita'), `Venda PDV ${code}`, total, code, payment_method, ts);
+        .run(categoryId('Venda PDV', 'receita'), `Venda PDV ${code}`, total, code, payment_method, quando.ts);
     }
     return id;
   })();
@@ -1547,6 +1613,8 @@ app.post('/api/sales', async (req, res) => {
     stock_na_fila: stockNaFila,   // a loja falhou agora; vai de novo sozinho
     encomendas,   // o PDV avisa na tela e o lembrete já foi criado
     conflitos,    // a Nuvemshop já não tinha a peça: o PDV avisa e fica o lembrete
+    data: quando.dia,
+    caixa_fechado: quando.dia !== diaLocal() && status === 'pago' && caixaFechado(quando.dia),
   });
 });
 
@@ -1560,6 +1628,15 @@ app.post('/api/sales/:id/vendedor', (req, res) => {
   if (s.channel === 'site') return res.status(400).json({ error: 'Pedido do site não tem vendedor.' });
   const b = req.body || {};
   if (b.canal !== undefined && !CANAIS_PDV.includes(b.canal)) return res.status(400).json({ error: 'Canal inválido.' });
+  // Lançou no dia errado: a venda (com o dinheiro dela) vai para o dia certo,
+  // mantendo a hora. Troca e cancelamento ficam onde aconteceram.
+  let nova = null;
+  if (b.data !== undefined) {
+    if (s.payment_status === 'cancelado') return res.status(400).json({ error: 'Venda cancelada: lance de novo com a data certa.' });
+    const meiaNoite = new Date(inicioDoDia(diaLocal(new Date(s.created_at)))).getTime();
+    try { nova = quandoFoiAVenda(b.data, new Date(s.created_at).getTime() - meiaNoite); }
+    catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
+  }
   let m = null;
   if ('seller_id' in b) {
     const mid = b.seller_id ? Number(b.seller_id) : null;
@@ -1572,9 +1649,18 @@ app.post('/api/sales/:id/vendedor', (req, res) => {
       if (s.atendimento_id) db.prepare('UPDATE atendimentos SET member_id = ? WHERE id = ?').run(m ? m.id : null, s.atendimento_id);
     }
     if (b.canal !== undefined) db.prepare('UPDATE sales SET canal = ? WHERE id = ?').run(b.canal, s.id);
+    if (nova) {
+      db.prepare('UPDATE sales SET created_at = ?, paid_at = CASE WHEN paid_at = created_at THEN ? ELSE paid_at END WHERE id = ?')
+        .run(nova.ts, nova.ts, s.id);
+      // A entrada da venda no caixa (não a de troca nem a de recebimento de fiado).
+      db.prepare(`UPDATE financial_entries SET created_at = ? WHERE ref = ? AND description = ? AND created_at = ?`)
+        .run(nova.ts, s.code, `Venda PDV ${s.code}`, s.created_at);
+      if (s.atendimento_id) db.prepare('UPDATE atendimentos SET day = ?, created_at = ? WHERE id = ? AND sale_id = ?')
+        .run(nova.dia, nova.ts, s.atendimento_id, s.id);
+    }
   })();
-  const v = db.prepare('SELECT seller_id, seller_name, canal FROM sales WHERE id = ?').get(s.id);
-  res.json({ ok: true, ...v });
+  const v = db.prepare('SELECT seller_id, seller_name, canal, created_at FROM sales WHERE id = ?').get(s.id);
+  res.json({ ok: true, ...v, caixa_fechado: nova ? caixaFechado(nova.dia) : false });
 });
 
 // Baixa (marca como pago) — aí sim entra no caixa.

@@ -157,7 +157,21 @@
   .troca-banner b{display:block;font-size:13px}
   .sub-h{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-3);margin:2px 0 4px}
   body.modo-troca #wrapVend,body.modo-troca #wrapAtend,body.modo-troca .cust-wrap,body.modo-troca #canalWrap,
-  body.modo-troca #segWrap,body.modo-troca #discWrap{display:none!important}
+  body.modo-troca #segWrap,body.modo-troca #discWrap,body.modo-troca #dataWrap{display:none!important}
+
+  /* Data da venda: hoje, ou o dia em que a venda aconteceu (lançada depois) */
+  .data-venda{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .data-venda input{padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:var(--bg-elev);color:var(--ink);
+    font:inherit;font-size:13px;color-scheme:dark;min-width:0}
+  .data-venda .dia-txt{font-size:12.5px;color:var(--ink-3)}
+  .cart.outro-dia{border-color:rgba(232,163,23,.6);box-shadow:0 0 0 1px rgba(232,163,23,.3) inset}
+  .cart.outro-dia .data-venda input{border-color:rgba(232,163,23,.7);color:var(--warn)}
+  .outro-dia-aviso{background:rgba(232,163,23,.1);border:1px solid rgba(232,163,23,.4);color:var(--warn);border-radius:var(--r);
+    padding:8px 10px;font-size:12.5px;line-height:1.45}
+  .outro-dia-aviso[hidden]{display:none}
+  .vdata input{padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:var(--bg-elev);color:var(--ink);font:inherit;color-scheme:dark}
+  .busca-aviso{grid-column:1/-1;font-size:12.5px;color:var(--ink-3);padding:2px 2px 4px}
+  .busca-aviso b{color:var(--warn)}
 </style>
 </head>
 <body>
@@ -170,7 +184,7 @@
   <div class="layout">
     <section>
       <div class="search-wrap">
-        <input id="search" type="search" placeholder="Buscar produto, variação, marca…" autocomplete="off">
+        <input id="search" type="search" placeholder="Buscar: produto, marca, tamanho… (ex.: tênis nike 42)" autocomplete="off">
       </div>
       <div id="grid" class="grid-prod" aria-live="polite"></div>
     </section>
@@ -178,6 +192,15 @@
     <aside class="card cart">
       <div class="cart-head"><h2 id="cartTit">Venda</h2><span class="cart-count" id="count"></span></div>
       <div class="eu" id="eu" hidden></div>
+      <div class="field" id="dataWrap" hidden>
+        <label for="dataVenda">Data da venda</label>
+        <div class="data-venda">
+          <input id="dataVenda" type="date">
+          <span class="dia-txt" id="diaTxt">hoje</span>
+          <button type="button" class="btn ghost sm" id="dataHoje" hidden>Voltar para hoje</button>
+        </div>
+        <div class="outro-dia-aviso" id="outroDia" hidden></div>
+      </div>
       <div class="troca-banner" id="trocaBanner" hidden>
         <div><b id="trocaTit"></b><span id="trocaSub"></span></div>
         <button type="button" class="btn ghost sm" id="trocaSair">Sair da troca</button>
@@ -292,10 +315,19 @@ function estado(v){
 const sobEnc=(v)=>v.on_demand&&(v.real_stock||0)<=0;
 async function carregar(q=''){
   document.getElementById('grid').innerHTML='<div class="empty" style="grid-column:1/-1">'+ICO('sync',26)+'<div class="t">Carregando…</div></div>';
-  S.prods=await api('/api/products?q='+encodeURIComponent(q));
+  const r=await api('/api/products?detalhe=1&q='+encodeURIComponent(q));
+  // Resposta de uma busca antiga que chegou depois da nova: descarta.
+  if(q!==document.getElementById('search').value.trim())return;
+  S.prods=r.itens;
   const g=document.getElementById('grid');
-  if(!S.prods.length){g.innerHTML='<div style="grid-column:1/-1">'+vazio('busca','Nada encontrado','Tente outro nome, marca ou variação.')+'</div>';return;}
-  g.innerHTML='';
+  // Palavra que não está em nenhum produto (a cor, quase sempre, não está
+  // no cadastro) é deixada de lado — e a tela diz qual, para ninguém achar
+  // que a busca "não funcionou".
+  const fora=(r.ignoradas||[]).map(w=>`<b>“${esc(w)}”</b>`).join(', ');
+  const aviso=fora||r.parecidos?`<div class="busca-aviso">${fora?`Nenhum produto tem ${fora} no cadastro — mostrando o resto da busca.`:''}${
+    r.parecidos?`${fora?' ':''}Nenhum produto tem todas as palavras — mostrando os mais parecidos.`:''}</div>`:'';
+  if(!S.prods.length){g.innerHTML=aviso+'<div style="grid-column:1/-1">'+vazio('busca','Nada encontrado','Tente outro nome, marca ou tamanho — ou só o começo da palavra.')+'</div>';return;}
+  g.innerHTML=aviso;
   for(const v of S.prods){
     const [cls,txt]=estado(v), out=!v.on_demand&&v.stock_management&&v.stock<=0;
     const b=document.createElement('button');b.className='prod';b.type='button';b.disabled=out;
@@ -353,7 +385,8 @@ function barra(total){
   const bar=document.getElementById('cartBar');
   const n=[...S.cart.values()].reduce((s,i)=>s+i.qty,0);
   if(total!==undefined){
-    document.getElementById('cbN').textContent=n+(n===1?' item':' itens');
+    // Venda de outro dia: a barra do celular também diz o dia.
+    document.getElementById('cbN').textContent=n+(n===1?' item':' itens')+(S.data&&!S.troca?' · dia '+S.data.slice(8,10)+'/'+S.data.slice(5,7):'');
     document.getElementById('cbT').textContent=BRL(total);
     if(n>nAntes){bar.classList.remove('bump');void bar.offsetWidth;bar.classList.add('bump');}
     nAntes=n;
@@ -483,6 +516,40 @@ function avisarConflitos(r){
     +'\n\nO site pode ter vendido a última peça (ou ela foi zerada no painel da Nuvemshop). '
     +'Veja se tem pedido do site com ela antes do cliente ir embora. Ficou um lembrete de hoje.');
 }
+// ---- Data da venda ----
+// Hoje, a não ser que o dono escolha outro dia: a venda que ficou no
+// caderno, a de ontem lançada hoje. A escolha vale até tocar em "Voltar
+// para hoje" (ou recarregar a página) — dá para lançar o caderno de um dia
+// inteiro sem escolher toda vez. Enquanto não for hoje, o carrinho fica
+// amarelo e o botão diz o dia: ninguém lança a venda de agora no passado
+// sem ver. Só o dono: mexe no caixa e na comissão de dias que já passaram.
+const isoLocal=(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const hojeISO=()=>isoLocal(new Date());
+const diaMes=(iso)=>iso.slice(8,10)+'/'+iso.slice(5,7);
+const SEMANA=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+const diaSemana=(iso)=>SEMANA[new Date(iso+'T12:00:00').getDay()];
+S.data='';   // '' = hoje
+function textoFinalizar(){return S.data?`Finalizar venda de ${diaMes(S.data)}`:'Finalizar venda';}
+function pintarData(){
+  const inp=document.getElementById('dataVenda'),hoje=hojeISO();
+  if(S.data&&S.data>=hoje)S.data='';            // virou o dia com a tela aberta
+  inp.max=hoje;inp.min=isoLocal(new Date(Date.now()-90*864e5));inp.value=S.data||hoje;
+  document.getElementById('diaTxt').textContent=S.data?diaSemana(S.data):'hoje';
+  document.getElementById('dataHoje').hidden=!S.data;
+  const av=document.getElementById('outroDia');av.hidden=!S.data;
+  if(S.data)av.innerHTML=`Lançando venda de <b>${diaSemana(S.data)}, ${diaMes(S.data)}</b>. Ela entra no caixa, na meta e na comissão desse dia; o estoque baixa agora.`;
+  document.querySelector('.cart').classList.toggle('outro-dia',Boolean(S.data));
+  if(!S.troca)document.getElementById('finish').textContent=textoFinalizar();
+}
+if(quem.papel!=='vendedor'){document.getElementById('dataWrap').hidden=false;}
+document.getElementById('dataVenda').onchange=(e)=>{
+  const v=e.target.value,hoje=hojeISO();
+  if(v&&v>hoje){toast('Data no futuro','A venda não pode ter data depois de hoje.',true);}
+  S.data=v&&v<hoje?v:'';pintarData();
+};
+document.getElementById('dataHoje').onclick=()=>{S.data='';pintarData();};
+pintarData();
+
 async function finalizar(){
   if(S.troca)return confirmarTroca();
   if(!S.cart.size)return;
@@ -501,6 +568,7 @@ async function finalizar(){
       items,customer_id:S.cliente?S.cliente.id:null,payment_method:S.pay,payment_status:S.status,
       seller_id:(v=>v&&v!=='loja'?v:null)(document.getElementById('vend').value),canal:S.canal,
       atendimento_id:document.getElementById('atend').value||null,
+      data:S.data||undefined,
       discount:parseFloat(document.getElementById('disc').value)||0})});
     const vend=r.vendedor?' · '+r.vendedor:'';
     const sit=r.payment_status==='pendente'?'Fiado — foi para Contas a receber':'Pago';
@@ -509,7 +577,9 @@ async function finalizar(){
       :(r.stock_enviados>0?' · estoque atualizado na loja':' · grade do site mantida'));
     const enc=(r.encomendas&&r.encomendas.length)
       ? `<br><b style="color:var(--warn)">Pegar no fornecedor hoje:</b> ${r.encomendas.join(', ')}` : '';
-    toast(`${r.code} · ${BRL(r.total)}`,`${r.customer_name||'Sem cliente'}${vend} · ${sit}${sinc}${enc}`);
+    const dia=S.data?` · <b style="color:var(--warn)">venda de ${diaMes(S.data)}</b>`:'';
+    const fechado=r.caixa_fechado?`<br><b style="color:var(--warn)">O caixa de ${diaMes(r.data)} já estava fechado:</b> a venda entrou nele — confira o fechamento.`:'';
+    toast(`${r.code} · ${BRL(r.total)}`,`${r.customer_name||'Sem cliente'}${vend} · ${sit}${dia}${sinc}${enc}${fechado}`);
     avisarConflitos(r);
     S.cart.clear();S.pay='';limparCliente();
     // A próxima venda começa do zero: balcão e sem vendedor escolhido.
@@ -520,7 +590,7 @@ async function finalizar(){
     atendimentos();
     await carregar(document.getElementById('search').value.trim());
   }catch(e){toast('Não deu pra lançar',e.message,true);}
-  finally{btn.textContent='Finalizar venda';btn.disabled=!S.cart.size;}
+  finally{btn.textContent=textoFinalizar();btn.disabled=!S.cart.size;pintarData();}
 }
 /* ---------- Vendas: achar, trocar, cancelar ---------- */
 const dlgV=document.getElementById('dlgVendas');
@@ -569,6 +639,8 @@ async function abrirVenda(id){
       ${v.payment_status==='cancelado'?`<b style="color:var(--crit)">Cancelada</b> em ${quando(v.cancelado_em)}${v.cancel_motivo?' · '+esc(v.cancel_motivo):''}`
         :pago?`Pago · ${esc(v.payment_method||'')}`:`<b style="color:var(--warn)">${v.channel==='site'?'Aguardando pagamento':'Fiado — a receber'}</b>`}
       ${v.discount?` · desconto ${BRL(v.discount)}`:''}</div>
+    ${v.channel!=='site'&&quem.papel==='dono'&&v.payment_status!=='cancelado'?`<label class="meta vvend vdata">Data da venda
+      <input type="date" id="vData" value="${isoLocal(new Date(v.created_at))}" max="${hojeISO()}" min="${isoLocal(new Date(Date.now()-90*864e5))}"></label>`:''}
     ${v.channel!=='site'&&quem.papel==='dono'?`<label class="meta vvend">Onde vendeu
       <select id="vCanal">${Object.entries(CANAL_TXT).map(([k,t])=>`<option value="${k}"${(v.canal||'balcao')===k?' selected':''}>${t}</option>`).join('')}</select></label>`:''}
     ${v.channel!=='site'&&TIME.length&&quem.papel==='dono'?`<label class="meta vvend">Quem vendeu
@@ -590,6 +662,19 @@ async function abrirVenda(id){
       </div>`
     :v.channel==='site'?`<div class="aviso-site">Pedido da Nuvemshop: cancelamento e troca são feitos lá, e o sistema acompanha sozinho.</div>`:''}`;
   document.getElementById('vVoltar').onclick=mostrarLista;
+  // Lançou no dia errado? A venda e o dinheiro dela vão para o dia certo
+  // (mesma hora); troca e cancelamento ficam no dia em que aconteceram.
+  const vd=document.getElementById('vData');
+  if(vd)vd.onchange=async()=>{
+    const antes=isoLocal(new Date(v.created_at)),novo=vd.value;
+    if(!novo||novo===antes)return;
+    if(!confirm(`Passar ${v.code} para ${diaSemana(novo)}, ${diaMes(novo)}?\n\nA venda, o dinheiro dela no caixa, a meta e a comissão vão para esse dia. O estoque não muda.`)){vd.value=antes;return;}
+    try{const r=await api(`/api/sales/${v.id}/vendedor`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({data:novo})});v.created_at=r.created_at;
+      toast(v.code,`Agora é venda de ${diaMes(novo)}.`+(r.caixa_fechado?' O caixa desse dia já estava fechado: confira o fechamento.':''));
+      abrirVenda(v.id);}
+    catch(e){toast('Não deu para mudar a data',e.message,true);vd.value=antes;}
+  };
   // Marcou o canal errado? Balcão gera comissão; internet não.
   const vc=document.getElementById('vCanal');
   if(vc)vc.onchange=async()=>{
@@ -647,7 +732,7 @@ function sairTroca(){
   document.getElementById('cartTit').textContent='Venda';document.getElementById('payLab').textContent='Forma';
   document.getElementById('subLab').textContent='Subtotal';document.getElementById('dscLab').textContent='Desconto';
   document.getElementById('totLab').textContent='Total';document.getElementById('payWrap').style.opacity='1';
-  document.getElementById('finish').textContent='Finalizar venda';
+  document.getElementById('finish').textContent=textoFinalizar();
   renderCart();
 }
 document.getElementById('trocaSair').onclick=sairTroca;
@@ -699,7 +784,7 @@ async function confirmarTroca(){
 
 let st;document.getElementById('search').oninput=e=>{clearTimeout(st);st=setTimeout(()=>carregar(e.target.value.trim()),200);};
 document.getElementById('finish').onclick=finalizar;
-renderCart();carregar();
+renderCart();carregar(document.getElementById('search').value.trim());
 </script>
 </body>
 </html>
