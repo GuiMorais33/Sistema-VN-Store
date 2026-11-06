@@ -52,7 +52,11 @@ before(async () => {
         if (req.method === 'PUT') {
           const b = JSON.parse(corpo);
           loja.puts.push({ id: p.id, corpo: b });
-          if (Array.isArray(b.categories)) p.cats = b.categories;
+          // Como a Nuvemshop de verdade: a resposta da gravação vem com as
+          // categorias de antes; quem lê de novo vê as novas.
+          const velho = comoLoja(p);
+          if (Array.isArray(b.categories) && !loja.ignorarCategorias) p.cats = b.categories;
+          return json(velho);
         }
         return json(comoLoja(p));
       }
@@ -102,6 +106,16 @@ test('já está certo: não mexe na loja', async () => {
   const r = await trocar(700, 'Nike');
   assert.equal(r.json.ja_estava, true);
   assert.equal(loja.puts.length, 0);
+});
+
+test('a loja não gravou: avisa e não muda nada aqui', async () => {
+  loja.ignorarCategorias = true;
+  const antes = local(700).brand;
+  const r = await trocar(700, 'Adidas');
+  loja.ignorarCategorias = false;
+  assert.equal(r.status, 502);
+  assert.match(r.json.error, /marcas no produto agora: Nike/);
+  assert.equal(local(700).brand, antes);
 });
 
 test('marca que não existe na loja: não cria, diz quais existem', async () => {

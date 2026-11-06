@@ -770,11 +770,20 @@ async function trocarMarca(productId, marca) {
   const jaEstava = !tirar.length && ids.includes(alvo.id) && ids.includes(raiz.id);
   if (!jaEstava) {
     const novas = [...new Set([...ids.filter((id) => !deMarca.has(id)), alvo.id, raiz.id])];
-    const r = await nuvem.updateProduct(p.nuvemshop_product_id, { categories: novas });
-    // A loja devolve o produto: confere que ficou como pedido.
-    const ficou = ((r && r.categories) || []).map((c) => (c && typeof c === 'object' ? c.id : c));
-    if (r && Array.isArray(r.categories) && (!ficou.includes(alvo.id) || ficou.some((id) => tirar.includes(id)))) {
-      throw Object.assign(new Error('A loja não aceitou a troca de marca.'), { status: 502 });
+    await nuvem.updateProduct(p.nuvemshop_product_id, { categories: novas });
+    // Confere lendo o produto de novo na loja: a resposta da gravação vem
+    // com as categorias de ANTES (visto na loja de verdade em novembro), e
+    // conferir por ela dizia "não aceitou" quando a troca tinha ido.
+    const conferir = async () => {
+      const d = await nuvem.getProduct(p.nuvemshop_product_id);
+      const f = ((d && d.categories) || []).map((c) => (c && typeof c === 'object' ? c.id : c));
+      return { ok: f.includes(alvo.id) && !f.some((id) => tirar.includes(id)), f };
+    };
+    let c = await conferir();
+    if (!c.ok) { await new Promise((ok) => setTimeout(ok, 1500)); c = await conferir(); }
+    if (!c.ok) {
+      const nomes = c.f.filter((id) => deMarca.has(id)).map((id) => nomeDe.get(id) || id).join(', ') || 'nenhuma';
+      throw Object.assign(new Error(`A loja não ficou com a marca certa (marcas no produto agora: ${nomes}).`), { status: 502 });
     }
   }
   const nome = nameOf(alvo.name).trim();
