@@ -547,7 +547,7 @@ app.put('/api/catalog/:id', async (req, res) => {
       WHERE id = ? AND (SELECT on_demand FROM products WHERE id = variants.product_id) = 1`);
     for (const id of novoAlvo) alvo.run(id);
   }
-  const sync = await pushProduct(p.id);
+  const sync = await pushProduct(p.id, { categoriaAntes: p.category });
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(p.id);
   product.variants = db.prepare('SELECT * FROM variants WHERE product_id = ?').all(p.id);
   res.json({ ok: true, product, sync });
@@ -585,7 +585,9 @@ app.post('/api/catalog/:id/push', async (req, res) => {
 });
 
 // Cria/atualiza o produto na Nuvemshop, no formato deles. Live-only.
-async function pushProduct(productId) {
+// categoriaAntes: a categoria principal antes da edição (se mudou, a antiga
+// sai do produto na loja; as outras categorias dele ficam).
+async function pushProduct(productId, { categoriaAntes = null } = {}) {
   const p = db.prepare('SELECT * FROM products WHERE id = ?').get(productId);
   const variants = db.prepare('SELECT * FROM variants WHERE product_id = ?').all(productId);
   if (!isLive()) {
@@ -612,6 +614,7 @@ async function pushProduct(productId) {
       return o;
     };
     if (hasSizes) payload.attributes = [{ pt: 'Tamanho' }]; // 1 eixo de variação (ex.: P/M/G)
+    let lojaCats = null, marcasDaLoja = new Set();
     // Categorias na loja. A loja organiza assim:
     //   MARCAS > Lacoste        (a marca)
     //   Camisetas               (a categoria do produto)
@@ -620,6 +623,7 @@ async function pushProduct(productId) {
     if (p.category || p.brand) {
       try {
         const cats = await nuvem.listAllCategories();
+        lojaCats = cats;
         const acha = (nome, paiId) => cats.find((c) => nameOf(c.name).trim().toLowerCase() === String(nome).trim().toLowerCase()
           && (paiId === undefined || c.parent === paiId));
         const ids = [];
@@ -631,6 +635,7 @@ async function pushProduct(productId) {
         }
         if (p.brand) {
           const raizMarcas = cats.find((c) => /^marcas?$/i.test(nameOf(c.name).trim()));
+          if (raizMarcas) marcasDaLoja = new Set(cats.filter((c) => c.parent === raizMarcas.id).map((c) => c.id));
           // procura a marca dentro de MARCAS; se não houver, em qualquer lugar
           let m = raizMarcas ? acha(p.brand, raizMarcas.id) : null;
           if (!m) m = acha(p.brand);
@@ -656,6 +661,19 @@ async function pushProduct(productId) {
       if (p.nuvemshop_product_id) {
         const atual = await nuvem.getProduct(p.nuvemshop_product_id);
         for (const rv of (atual && atual.variants) || []) naLoja.set(String(rv.id), rv.stock);
+        // As categorias mandadas SUBSTITUEM as da loja. O produto costuma
+        // estar em várias (a mãe e a filha do menu, "Coleção Verão"…), e
+        // mandar só a principal e a marca tirava ele desses menus do site.
+        // Fica tudo o que ele já tinha, menos as outras marcas (marca é uma
+        // só) e a categoria principal antiga, se você trocou.
+        if (payload.categories && atual && Array.isArray(atual.categories)) {
+          const antiga = categoriaAntes && categoriaAntes !== p.category && lojaCats
+            ? lojaCats.filter((c) => nameOf(c.name).trim().toLowerCase() === String(categoriaAntes).trim().toLowerCase()).map((c) => c.id) : [];
+          const marcaNova = payload.categories.filter((id) => marcasDaLoja.has(id));
+          const manter = atual.categories.map((c) => (c && typeof c === 'object' ? c.id : c))
+            .filter((id) => id != null && !antiga.includes(id) && !(marcaNova.length && marcasDaLoja.has(id)));
+          payload.categories = [...new Set([...manter, ...payload.categories])];
+        }
       }
       const alvos = vs.map((v) => {
         const r = v.nuvemshop_variant_id ? naLoja.get(String(v.nuvemshop_variant_id)) : null;
@@ -717,6 +735,57 @@ async function pushProduct(productId) {
   }
 }
 
+// ==================== MARCA ====================
+// Trocar só a marca de um produto que está na loja. Na Nuvemshop a marca é
+// uma categoria filha de "MARCAS", e o site mostra o produto no menu de
+// cada marca em que ele está — um boné Adidas marcado como Lacoste aparece
+// para quem procura Lacoste. Aqui só se mexe nisso: tira o produto das
+// marcas erradas e põe na certa. Foto, preço, estoque, descrição e as
+// outras categorias ficam como estão (salvar o produto inteiro regrava
+// tudo, e não é preciso para trocar a marca). Só marca que já existe na
+// loja: um nome digitado errado não vira marca nova no site.
+async function trocarMarca(productId, marca) {
+  const p = db.prepare('SELECT * FROM products WHERE id = ?').get(productId);
+  if (!p) throw Object.assign(new Error('Produto não encontrado.'), { status: 404 });
+  const pedida = String(marca || '').trim();
+  if (!pedida) throw Object.assign(new Error('Diga qual é a marca certa.'), { status: 400 });
+  if (!isLive() || !p.nuvemshop_product_id) {   // produto só daqui: a marca é só daqui
+    db.prepare('UPDATE products SET brand = ?, updated_at = ? WHERE id = ?').run(pedida, now(), p.id);
+    return { ok: true, marca: pedida, antes: p.brand ? [p.brand] : [], so_aqui: true };
+  }
+  const cats = await nuvem.listAllCategories();
+  const raiz = cats.find((c) => /^marcas?$/i.test(nameOf(c.name).trim()));
+  if (!raiz) throw Object.assign(new Error('A loja não tem a categoria MARCAS.'), { status: 400 });
+  const marcas = cats.filter((c) => c.parent === raiz.id);
+  const igual = (a, b) => semAcento(a).trim() === semAcento(b).trim();
+  const alvo = marcas.find((c) => igual(nameOf(c.name), pedida));
+  if (!alvo) {
+    throw Object.assign(new Error(`A marca "${pedida}" não existe na loja. Marcas que existem: ${marcas.map((c) => nameOf(c.name).trim()).sort().join(', ')}.`), { status: 400 });
+  }
+  const nomeDe = new Map(cats.map((c) => [c.id, nameOf(c.name).trim()]));
+  const deMarca = new Set(marcas.map((c) => c.id));
+  const atual = await nuvem.getProduct(p.nuvemshop_product_id);
+  const ids = ((atual && atual.categories) || []).map((c) => (c && typeof c === 'object' ? c.id : c)).filter((id) => id != null);
+  const tirar = ids.filter((id) => deMarca.has(id) && id !== alvo.id);
+  const jaEstava = !tirar.length && ids.includes(alvo.id) && ids.includes(raiz.id);
+  if (!jaEstava) {
+    const novas = [...new Set([...ids.filter((id) => !deMarca.has(id)), alvo.id, raiz.id])];
+    const r = await nuvem.updateProduct(p.nuvemshop_product_id, { categories: novas });
+    // A loja devolve o produto: confere que ficou como pedido.
+    const ficou = ((r && r.categories) || []).map((c) => (c && typeof c === 'object' ? c.id : c));
+    if (r && Array.isArray(r.categories) && (!ficou.includes(alvo.id) || ficou.some((id) => tirar.includes(id)))) {
+      throw Object.assign(new Error('A loja não aceitou a troca de marca.'), { status: 502 });
+    }
+  }
+  const nome = nameOf(alvo.name).trim();
+  db.prepare('UPDATE products SET brand = ?, updated_at = ? WHERE id = ?').run(nome, now(), p.id);
+  return { ok: true, marca: nome, antes: tirar.map((id) => nomeDe.get(id) || String(id)), ja_estava: jaEstava };
+}
+app.post('/api/catalog/:id/marca', async (req, res) => {
+  try { res.json(await trocarMarca(req.params.id, (req.body || {}).marca)); }
+  catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
 // ==================== PRODUTOS DA LOJA → AQUI ====================
 // A loja organiza a MARCA como subcategoria de "MARCAS" (o campo brand da
 // API não é usado). O índice sai das categorias reais, para espelhar o site.
@@ -737,12 +806,15 @@ const acertarEmMaosProprio = () => db.exec(`UPDATE variants SET on_hand = stock 
 // disso (venda, entrada, envio para a loja) fica como está nesta rodada — o
 // número lido já estaria velho para ela — e é acertada na próxima.
 function gravarProdutosDaLoja(products, { catById, isBrandCat, isMarcasRoot }, desde = null, { acertarEmMaos = true } = {}) {
-  const upP = db.prepare(`INSERT INTO products (nuvemshop_product_id, name, brand, category, categories_all, description, image_url, published, synced_nuvemshop, created_at, updated_at)
-    VALUES (@pid,@name,@brand,@category,@cats,@description,@image,@published,1,@now,@now)
+  // A foto que veio da loja JÁ ESTÁ na loja (image_sent): sem isso, salvar
+  // o produto pela tela mandava a mesma foto de novo, e o site ficava com
+  // ela duas vezes.
+  const upP = db.prepare(`INSERT INTO products (nuvemshop_product_id, name, brand, category, categories_all, description, image_url, image_sent, published, synced_nuvemshop, created_at, updated_at)
+    VALUES (@pid,@name,@brand,@category,@cats,@description,@image,@image,@published,1,@now,@now)
     ON CONFLICT(nuvemshop_product_id) DO UPDATE SET
       name=excluded.name, brand=excluded.brand, category=excluded.category,
       categories_all=excluded.categories_all, description=excluded.description,
-      image_url=excluded.image_url, published=excluded.published,
+      image_url=excluded.image_url, image_sent=excluded.image_url, published=excluded.published,
       synced_nuvemshop=1, updated_at=excluded.updated_at`);
   const getP = db.prepare('SELECT id FROM products WHERE nuvemshop_product_id = ?');
   // O custo é NOSSO: nunca sobrescrever no sync.
