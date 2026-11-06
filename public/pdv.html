@@ -170,6 +170,34 @@
     padding:8px 10px;font-size:12.5px;line-height:1.45}
   .outro-dia-aviso[hidden]{display:none}
   .vdata input{padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:var(--bg-elev);color:var(--ink);font:inherit;color-scheme:dark}
+  /* Vendas lançadas: à vista. O botão do topo passava despercebido e o
+     vendedor não achava as vendas que acabou de lançar. */
+  .btn-vendas{display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:var(--r);text-align:left;
+    border:1px solid rgba(47,210,79,.55);background:rgba(47,210,79,.08);color:var(--ink)}
+  .btn-vendas:hover{background:rgba(47,210,79,.14);border-color:rgba(47,210,79,.8)}
+  .btn-vendas .bv-ico{display:grid;place-items:center;color:var(--brand-hi)}
+  .btn-vendas .bv-txt{display:flex;flex-direction:column;line-height:1.2}
+  .btn-vendas .bv-txt b{font-size:14px}
+  .btn-vendas .bv-txt small{font-size:11px;color:var(--ink-3);font-weight:600}
+  .btn-vendas .bv-n{margin-left:4px;font-family:var(--font-mono);font-size:12px;font-weight:700;padding:3px 8px;border-radius:999px;
+    background:var(--brand);color:#04120A;white-space:nowrap}
+  .btn-vendas .bv-n[hidden]{display:none}
+  @media (max-width:720px){.pagehead .ph-actions{width:100%}.btn-vendas{width:100%}.btn-vendas .bv-n{margin-left:auto}}
+  .ultimas{border-top:1px solid var(--line-soft);padding-top:10px;display:flex;flex-direction:column;gap:6px}
+  .ultimas[hidden]{display:none}
+  .ult-h{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10.5px;font-weight:800;
+    text-transform:uppercase;letter-spacing:.7px;color:var(--ink-3)}
+  .ult-h button{background:none;border:0;color:var(--brand-hi);font:inherit;font-size:11.5px;text-transform:none;letter-spacing:0;
+    font-weight:700;cursor:pointer;padding:4px 0}
+  .ult-row{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;text-align:left;width:100%;cursor:pointer;
+    padding:8px 10px;border-radius:9px;border:1px solid var(--line-soft);background:var(--bg-elev);color:var(--ink);font:inherit}
+  .ult-row:hover{border-color:rgba(47,210,79,.4)}
+  .ult-row .c{font-family:var(--font-mono);font-size:12px;font-weight:700}
+  .ult-row .t{font-family:var(--font-mono);font-size:12.5px;text-align:right}
+  .ult-row small{grid-column:1/-1;font-size:11px;color:var(--ink-3)}
+  .ult-row.canc .c,.ult-row.canc .t{text-decoration:line-through;color:var(--ink-3)}
+  .ult-row.nova{border-color:rgba(47,210,79,.8);box-shadow:0 0 0 2px rgba(47,210,79,.25);animation:ultNova 1.2s ease 2}
+  @keyframes ultNova{50%{background:rgba(47,210,79,.16)}}
   .busca-aviso{grid-column:1/-1;font-size:12.5px;color:var(--ink-3);padding:2px 2px 4px}
   .busca-aviso b{color:var(--warn)}
 </style>
@@ -178,7 +206,10 @@
 <div class="app">
   <div class="pagehead">
     <div><h1>PDV</h1><div class="ph-sub">Lançamento de vendas · sem taxa</div></div>
-    <div class="ph-actions"><button class="btn ghost" id="abrirVendas" type="button">Vendas · trocar ou cancelar</button></div>
+    <div class="ph-actions"><button class="btn btn-vendas" id="abrirVendas" type="button">
+      <span class="bv-ico" id="bvIco"></span>
+      <span class="bv-txt"><b>Vendas lançadas</b><small id="bvSub">conferir · trocar · cancelar</small></span>
+      <span class="bv-n" id="bvN" hidden></span></button></div>
   </div>
 
   <div class="layout">
@@ -268,6 +299,11 @@
         <div class="r big"><span id="totLab">Total</span><span class="v" id="tot">R$ 0,00</span></div>
       </div>
       <button id="finish" class="btn primary" type="button" disabled>Finalizar venda</button>
+
+      <div class="ultimas" id="ultimas" hidden>
+        <div class="ult-h"><span>Últimas vendas lançadas</span><button type="button" id="ultTodas">Ver todas →</button></div>
+        <div id="ultLista" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
     </aside>
   </div>
 </div>
@@ -438,7 +474,7 @@ document.addEventListener('click',e=>{if(!e.target.closest('#cust')&&!e.target.c
   if(quem.papel==='vendedor'){
     const eu=document.getElementById('eu');
     eu.innerHTML=`Vendendo como <b>${esc(quem.nome)}</b> · a venda e a comissão são suas`;eu.hidden=false;
-    document.getElementById('abrirVendas').textContent='Vendas · trocar';
+    document.getElementById('bvSub').textContent='conferir · trocar';
     return;
   }
   try{
@@ -579,8 +615,9 @@ async function finalizar(){
       ? `<br><b style="color:var(--warn)">Pegar no fornecedor hoje:</b> ${r.encomendas.join(', ')}` : '';
     const dia=S.data?` · <b style="color:var(--warn)">venda de ${diaMes(S.data)}</b>`:'';
     const fechado=r.caixa_fechado?`<br><b style="color:var(--warn)">O caixa de ${diaMes(r.data)} já estava fechado:</b> a venda entrou nele — confira o fechamento.`:'';
-    toast(`${r.code} · ${BRL(r.total)}`,`${r.customer_name||'Sem cliente'}${vend} · ${sit}${dia}${sinc}${enc}${fechado}`);
+    toast(`${r.code} · ${BRL(r.total)}`,`${r.customer_name||'Sem cliente'}${vend} · ${sit}${dia}${sinc}${enc}${fechado}<br>Está em <b>Últimas vendas lançadas</b>, embaixo do botão.`);
     avisarConflitos(r);
+    ultimasVendas(r.code);
     S.cart.clear();S.pay='';limparCliente();
     // A próxima venda começa do zero: balcão e sem vendedor escolhido.
     if(TIME.length>1)document.getElementById('vend').value='';
@@ -602,6 +639,28 @@ const statusTxt=(v)=>v.payment_status==='cancelado'?'cancelada'
   :v.payment_status==='pendente'?(v.channel==='site'?'aguardando pagamento':'fiado'):(v.payment_method||'pago');
 document.querySelector('#vListaWrap .search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
 document.getElementById('abrirVendas').onclick=()=>{dlgV.showModal();mostrarLista();};
+document.getElementById('bvIco').innerHTML=ICO('recibo',20);
+// ---- Últimas vendas lançadas (embaixo do Finalizar) ----
+// A venda que acabou de sair aparece ali na hora, piscando: é onde quem
+// lançou já está olhando. Tocar abre a venda (conferir, trocar, cancelar).
+async function ultimasVendas(nova){
+  try{
+    const r=await api('/api/vendas/ultimas?n=3');
+    const n=r.hoje.n,bn=document.getElementById('bvN');
+    bn.hidden=false;bn.textContent=n?`${n} hoje`:'nenhuma hoje';
+    const box=document.getElementById('ultimas');
+    box.hidden=!r.vendas.length;
+    const hora=(iso)=>new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    document.getElementById('ultLista').innerHTML=r.vendas.map(v=>`<button type="button" class="ult-row${v.payment_status==='cancelado'?' canc':''}${v.code===nova?' nova':''}" data-id="${v.id}">
+      <span class="c">${esc(v.code)}</span><span class="t">${BRL(v.total)}</span>
+      <small>${hora(v.created_at)} · ${esc(v.customer_name||'Sem cliente')}${v.seller_name?' · '+esc(v.seller_name.split(' ')[0]):''} · ${
+        v.payment_status==='cancelado'?'cancelada':v.payment_status==='pendente'?'fiado':esc(v.payment_method||'pago')}${v.trocas?` · ${v.trocas} ${pl(v.trocas,'troca')}`:''}</small></button>`).join('');
+  }catch(_){}
+}
+document.getElementById('ultLista').onclick=(e)=>{const b=e.target.closest('.ult-row');if(!b)return;dlgV.showModal();abrirVenda(b.dataset.id);};
+document.getElementById('ultTodas').onclick=()=>{dlgV.showModal();mostrarLista();};
+dlgV.addEventListener('close',()=>ultimasVendas());   // trocou ou cancelou lá dentro: a lista acompanha
+ultimasVendas();
 document.getElementById('vDias').onclick=(e)=>{const b=e.target.closest('.seg-b');if(!b)return;
   document.querySelectorAll('#vDias .seg-b').forEach(x=>x.classList.toggle('sel',x===b));vDias=+b.dataset.d;mostrarLista();};
 let vt;document.getElementById('vBusca').oninput=()=>{clearTimeout(vt);vt=setTimeout(mostrarLista,220);};
@@ -777,6 +836,7 @@ async function confirmarTroca(){
       levar:[...S.cart.values()].map(i=>({variant_id:i.v.id,qty:i.qty})),forma:S.pay})});
     const enc=r.encomendas&&r.encomendas.length?`<br><b style="color:var(--warn)">Pegar no fornecedor:</b> ${r.encomendas.join(', ')}`:'';
     avisarConflitos(r);
+    ultimasVendas(r.code);
     toast(`Troca feita · ${r.code}`,(r.diferenca>0?`Cliente pagou ${BRL(r.diferenca)}`:r.diferenca<0?`Devolvido ${BRL(-r.diferenca)}`:'Sem diferença de valor')+enc);
     sairTroca();carregar(document.getElementById('search').value.trim());
   }catch(e){toast('Não deu para trocar',e.message,true);btn.disabled=false;btn.textContent='Confirmar troca';}

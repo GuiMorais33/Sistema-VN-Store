@@ -106,3 +106,15 @@ test('lançou no dia errado: corrige a data, a hora fica, o dinheiro vai junto',
   await comoDono('POST', `/api/sales/${v.id}/cancelar`, { motivo: 'teste', forma: 'Pix' });
   assert.equal((await comoDono('POST', `/api/sales/${v.id}/vendedor`, { data: diasAtras(1) })).status, 400);
 });
+
+test('últimas vendas lançadas: pela ordem em que entraram, e quantas hoje', async () => {
+  const hojeAntes = (await comoDono('GET', '/api/vendas/ultimas')).json.hoje.n;
+  const deHoje = await vender({});
+  const deOntem = await vender({ data: diasAtras(1) });   // lançada agora, com data de ontem
+  const r = (await comoDono('GET', '/api/vendas/ultimas?n=3')).json;
+  assert.deepEqual(r.vendas.slice(0, 2).map((v) => v.code), [deOntem.json.code, deHoje.json.code]);
+  assert.equal(r.hoje.n, hojeAntes + 1);                   // a de ontem não conta como de hoje
+  // O vendedor com PIN também vê (é ele que procura a venda que lançou).
+  const ana = await s.pedir('GET', '/api/vendas/ultimas', { headers: { Cookie: sessaoAna } });
+  assert.equal(ana.status, 200);
+});

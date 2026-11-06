@@ -144,7 +144,7 @@ app.use((req, res, next) => {
 const DO_VENDEDOR = [
   ['GET', /^\/(pdv|minhas|ajuda|como-usar)\/?$/],
   ['GET', /^\/api\/(products|customers|eu|minhas)\/?$/],
-  ['GET', /^\/api\/vendas(\/\d+)?\/?$/],
+  ['GET', /^\/api\/vendas(\/\d+|\/ultimas)?\/?$/],
   ['POST', /^\/api\/sales\/?$/],
   ['POST', /^\/api\/sales\/\d+\/(troca|settle)\/?$/],
   ['POST', /^\/api\/customers\/?$/],
@@ -1927,6 +1927,19 @@ app.get('/api/vendas', (req, res) => {
       payment_status, total, items_count, cancelado_em,
       (SELECT COUNT(*) FROM trocas t WHERE t.sale_id = sales.id) trocas
     FROM sales WHERE ${where.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT 120`).all(...args));
+});
+// As últimas vendas lançadas no PDV, na ordem em que foram lançadas (a de
+// ontem lançada agora aparece primeiro), e quantas o PDV fez hoje. É o que
+// o carrinho mostra embaixo do "Finalizar": quem acabou de vender vê a
+// venda ali mesmo, sem ter que achar o botão de vendas.
+app.get('/api/vendas/ultimas', (req, res) => {
+  const n = Math.min(10, Math.max(1, parseInt(req.query.n, 10) || 3));
+  const vendas = db.prepare(`SELECT id, code, canal, created_at, customer_name, seller_name, payment_method,
+      payment_status, total, items_count, (SELECT COUNT(*) FROM trocas t WHERE t.sale_id = sales.id) trocas
+    FROM sales WHERE channel = 'pdv' ORDER BY id DESC LIMIT ?`).all(n);
+  const hoje = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(total),0) total FROM sales
+    WHERE channel = 'pdv' AND payment_status <> 'cancelado' AND created_at >= ?`).get(inicioDoDia(diaLocal()));
+  res.json({ hoje: { n: hoje.n, total: money(hoje.total) }, vendas });
 });
 app.get('/api/vendas/:id', (req, res) => {
   const s = db.prepare('SELECT * FROM sales WHERE id = ?').get(req.params.id);
