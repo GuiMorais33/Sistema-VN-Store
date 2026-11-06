@@ -69,6 +69,32 @@
   .settle{display:flex;align-items:center;gap:var(--s3)}
 
   /* Filas de trabalho */
+  /* Meta do mês: quanto da meta já entrou, onde deveria estar hoje e quanto
+     falta por dia — o número que guia o dia da loja. */
+  .meta-mes{display:block;padding:var(--s4) var(--s5);margin-bottom:var(--s4);color:inherit;text-decoration:none}
+  .meta-mes[hidden]{display:none}
+  .meta-mes:hover{border-color:rgba(47,210,79,.35)}
+  .mm-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .mm-top .label{font-size:11px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--ink-3)}
+  .mm-top .ver{font-size:12px;font-weight:700;color:var(--brand-hi)}
+  .mm-val{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-top:6px}
+  .mm-val b{font-family:var(--font-mono);font-size:26px;line-height:1.1;color:var(--ink)}
+  .mm-val span{color:var(--ink-2);font-size:13.5px}
+  .mm-val .pct{font-family:var(--font-mono);font-weight:700;font-size:15px;color:var(--brand-hi)}
+  .mm-bar{position:relative;height:12px;border-radius:999px;background:var(--bg-elev);border:1px solid var(--line-soft);margin:26px 0 6px;overflow:visible}
+  .mm-bar .f{position:absolute;inset:0 auto 0 0;border-radius:999px;background:var(--brand);box-shadow:0 0 12px var(--glow);min-width:4px}
+  .mm-bar .f.atras{background:var(--warn);box-shadow:none}
+  .mm-bar .r{position:absolute;top:-5px;bottom:-5px;width:2px;background:var(--ink);opacity:.85;border-radius:2px}
+  .mm-bar .r::after{content:attr(data-t);position:absolute;top:-17px;left:50%;transform:translateX(-50%);font-size:10px;
+    white-space:nowrap;color:var(--ink-3);font-weight:700}
+  .mm-linhas{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--ink-2);margin-top:8px}
+  .mm-linhas b{color:var(--ink)}
+  .mm-ritmo{font-weight:700}
+  .mm-ritmo.ok{color:var(--brand-hi)} .mm-ritmo.quase{color:var(--warn)} .mm-ritmo.atras{color:var(--crit)}
+  .mm-pessoas{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .mm-pessoas span{font-size:12px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2)}
+  .mm-pessoas span b{color:var(--ink);font-family:var(--font-mono)}
+  @media (max-width:560px){.meta-mes{padding:var(--s4)}.mm-val b{font-size:22px}}
   .filas{display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));gap:var(--s3);margin-bottom:var(--s4)}
   .fila{display:flex;align-items:center;gap:var(--s3);padding:14px var(--s4);text-align:left;cursor:pointer;
     background:linear-gradient(180deg,var(--surface-2),var(--surface));border:1px solid var(--line);
@@ -167,6 +193,9 @@
       <div class="m-tags" id="maestroTags"></div>
     </div>
   </div>
+
+  <!-- Meta do mês (a mesma conta da Equipe) -->
+  <a class="card meta-mes" id="metaMes" href="/equipe" hidden></a>
 
   <!-- Filas de trabalho: o que precisa de ação agora -->
   <div class="filas" id="filas"></div>
@@ -530,8 +559,40 @@ document.getElementById('lSalvar').onclick=async e=>{
 };
 
 document.getElementById('pdvLink').insertAdjacentHTML('afterbegin',ICO('pdv',16));
-load(); loadChart(); lembretes();
-setInterval(()=>{load();loadChart();lembretes();},20000);
+// ---- Meta do mês ----
+// Os mesmos números da Equipe (GET /api/metas): o que entrou no mês, a meta
+// da loja, quanto falta por dia e o ritmo — o marcador na barra é onde a
+// loja deveria estar hoje, pelos dias que já passaram.
+async function metaMes(){
+  const el=document.getElementById('metaMes');
+  let d;try{d=await api('/api/metas');}catch(_){return;}
+  const L=d.loja,D=d.dias;
+  const mes=new Date(d.ym+'-15T12:00:00').toLocaleDateString('pt-BR',{month:'long'});
+  el.hidden=false;
+  if(!(L.meta>0)){
+    el.innerHTML=`<div class="mm-top"><span class="label">Meta de ${mes}</span><span class="ver">Definir na Equipe →</span></div>
+      <div class="mm-linhas"><span>Ainda não tem meta para ${mes}. Já entraram <b>${BRL(L.vendido)}</b> em ${L.vendas} ${pl(L.vendas,'venda')}.
+      Em <b>Equipe → Meta da loja</b> você define o alvo do mês.</span></div>`;
+    return;
+  }
+  const pct=L.pct||0,dev=D.decorrido_pct;
+  const prev=D.atual>0?L.vendido/D.atual*D.no_mes:0;
+  const ritmo=L.falta<=0?['ok','Meta batida!']:pct>=dev?['ok','No ritmo']:pct>=dev*0.8?['quase','Um pouco abaixo do ritmo']:['atras','Abaixo do ritmo'];
+  const pessoas=d.pessoas.filter(p=>p.meta>0).slice(0,6);
+  el.innerHTML=`<div class="mm-top"><span class="label">Meta de ${mes}</span><span class="ver">Ver na Equipe →</span></div>
+    <div class="mm-val"><b>${BRL(L.vendido)}</b><span>de ${BRL(L.meta)}</span><span class="pct">${pct}%</span></div>
+    <div class="mm-bar" title="O traço é onde a loja deveria estar hoje (${dev}% do mês passou)">
+      <div class="f${L.falta>0&&pct<dev?' atras':''}" style="width:${Math.min(100,pct)}%"></div>
+      ${L.falta>0&&D.restam>0?`<div class="r" style="left:${dev}%" data-t="hoje: ${dev}%"></div>`:''}</div>
+    <div class="mm-linhas">
+      ${L.falta>0?`<span>Faltam <b>${BRL(L.falta)}</b>${D.restam>0?` · <b>${BRL(L.por_dia)}</b> por dia ${D.restam===1?'no último dia':`nos ${D.restam} dias que restam`}`:''}</span>`:''}
+      <span><span class="mm-ritmo ${ritmo[0]}">${ritmo[1]}</span>${L.falta>0&&D.restam>0?` · no ritmo de agora, o mês fecha em <b>${BRL(prev)}</b> (${Math.round(prev/L.meta*100)}% da meta)`:''}</span>
+    </div>
+    ${pessoas.length?`<div class="mm-pessoas">${pessoas.map(p=>`<span>${esc(p.nome.split(' ')[0])} <b>${p.pct??0}%</b></span>`).join('')}</div>`:''}`;
+}
+
+load(); loadChart(); lembretes(); metaMes();
+setInterval(()=>{load();loadChart();lembretes();metaMes();},20000);
 </script>
 </body>
 </html>
