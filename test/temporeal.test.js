@@ -29,14 +29,19 @@ function loja(cfg = {}) {
         if (req.method === 'PUT') st.estoque = JSON.parse(corpo).stock;
         return json(produto().variants[0]);
       }
+      // Lista vazia, como a Nuvemshop de verdade: 404 "Last page is 0".
+      const vazia = () => { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ code: 404, message: 'Not Found', description: 'Last page is 0' })); };
       if (recurso === 'orders') {
         if (pg1) st.pedidosLidos.push(url.searchParams.get('created_at_min'));
         const min = url.searchParams.get('created_at_min');
-        return json(pg1 ? st.pedidos.filter((o) => !min || o.created_at >= new Date(min).toISOString()) : []);
+        const lista = pg1 ? st.pedidos.filter((o) => !min || o.created_at >= new Date(min).toISOString()) : [];
+        return lista.length || !pg1 ? json(lista) : vazia();
       }
       if (recurso === 'customers') {
         if (pg1) st.clientesLidos.push(url.searchParams.get('created_at_min'));
-        return setTimeout(() => json(pg1 ? st.clientes : []), st.demoraClientes);
+        const min = url.searchParams.get('created_at_min');
+        const lista = pg1 ? st.clientes.filter((c) => !min || !c.created_at || c.created_at >= new Date(min).toISOString()) : [];
+        return setTimeout(() => (lista.length || !pg1 ? json(lista) : vazia()), st.demoraClientes);
       }
       return json([]);
     });
@@ -82,6 +87,16 @@ test('o site vendeu a última e o balcão vende a mesma: o PDV avisa na hora', a
   await s.pedir('POST', `/api/sales/${id}/cancelar`, { corpo: { motivo: 'teste', forma: 'Pix' } });
   assert.equal(st.estoque, 3);
   assert.equal(s.banco().prepare("SELECT COUNT(*) n FROM reminders WHERE title LIKE 'Conferir pedidos do site%'").get().n, 1);
+});
+
+test('dia sem pedido ainda (a loja responde 404 "Last page is 0"): não é erro', async () => {
+  const { s, st } = await subir({ estoque: 5 },
+    { PRIMEIRA_RODADA_MS: '100', SYNC_INTERVALO_MS: '600000', PEDIDOS_RAPIDO_MS: '200' });
+  for (let i = 0; i < 60 && st.pedidosLidos.length < 4; i++) await espera(50);   // a cheia e algumas rápidas
+  assert.ok(st.pedidosLidos.length >= 4);
+  const a = (await s.pedir('GET', '/api/connection')).json.automatico;
+  assert.equal(a.pedidos.erro, null, a.pedidos.erro);
+  assert.ok(a.pedidos.ultima);
 });
 
 test('pedido de hoje chega na volta rápida, sem esperar a leitura dos 45 dias', async () => {

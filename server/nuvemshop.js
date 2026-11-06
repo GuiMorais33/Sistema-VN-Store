@@ -122,13 +122,15 @@ async function chamar(apiBase, method, path, body) {
 
 // Uma página de uma lista. Pedir a página depois da última dá 404 ("Last
 // page is…") quando o total é múltiplo exato do tamanho da página: isso é
-// o fim da lista, não erro.
+// o fim da lista, não erro. E lista VAZIA também vem como 404, já na
+// primeira página ("Last page is 0"): os pedidos de hoje antes do primeiro
+// pedido do dia, os clientes novos quando ninguém se cadastrou.
 async function pagina(path, page) {
   try {
     const { data } = await request('GET', path);
     return Array.isArray(data) ? data : [];
   } catch (err) {
-    if (err.status === 404 && page > 1) return [];
+    if (err.status === 404 && (page > 1 || /last page is 0/i.test(err.message))) return [];
     throw err;
   }
 }
