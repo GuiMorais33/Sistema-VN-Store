@@ -98,6 +98,18 @@ sudo systemctl start vnstore
 **Bucket** e acesso **Permit object writes**. Copie o endereço (termina em `/o/`), coloque no
 `.env` como `BACKUP_UPLOAD_URL=...` e reinicie (`sudo systemctl restart vnstore`).
 
+## A máquina trava e só volta reiniciando pelo painel?
+A forma gratuita (VM.Standard.E2.1.Micro) tem **1 GB de memória** e vem sem swap. Quando a memória
+acaba, a máquina inteira trava (nem o ssh responde). Rode uma vez (a `setup.sh` já roda sozinha nas
+instalações novas):
+```bash
+bash ~/Sistema-VN-Store/deploy/proteger-memoria.sh
+```
+Ele cria um swap de 2 GB, põe um limite de memória no sistema da loja (passou do limite, só ele
+reinicia, em 3 segundos) e guarda o diário do Linux entre um ligar e outro. Para ver a saúde da
+máquina de longe: `GET /api/sistema` (memória, swap, quando ligou, amostras a cada 5 min e o que
+o Linux registrou antes do último travamento).
+
 ## Comandos úteis (dentro da VM)
 ```bash
 sudo systemctl status vnstore     # ver se está rodando

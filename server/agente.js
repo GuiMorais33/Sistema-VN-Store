@@ -56,6 +56,7 @@ export const LEITURAS = [
   ['/api/canvas', 'Visão do negócio (Canvas)'],
   ['/api/mapa', 'Mapa da estratégia'],
   ['/api/backup/status', 'Se a cópia de segurança do dia foi feita'],
+  ['/api/sistema', 'Saúde da máquina: memória, swap, disco, quando ligou, amostras a cada 5 min (?horas=24..72) e o que o Linux registrou antes do último travamento'],
 ];
 
 // Nem com acesso total. Não é trabalho da loja, é a chave de casa: quem

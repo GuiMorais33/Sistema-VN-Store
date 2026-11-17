@@ -82,6 +82,11 @@ UNIT
 sudo systemctl daemon-reload
 sudo systemctl enable vnstore
 sudo systemctl restart vnstore
+
+# A máquina gratuita da Oracle tem 1 GB: sem swap e sem limite, quando a
+# memória acaba ela trava inteira (só volta reiniciando pelo painel).
+echo "==> Protegendo a máquina de 1 GB (swap e limite de memória)..."
+bash "$APP_DIR/deploy/proteger-memoria.sh" || true
 sleep 2
 sudo systemctl --no-pager status vnstore | head -n 8 || true
 

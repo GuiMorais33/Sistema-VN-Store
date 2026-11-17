@@ -23,6 +23,7 @@ const loja = {
     produto(900, 'Moletom Que Volta', 9001, 1),    // some da loja e volta depois
   ],
   escondido: new Set(['900']),
+  catalogoInteiro: 0,   // pedidos da lista de 200 em 200 (o catálogo inteiro de uma vez)
 };
 const pedido = (id, quando, pago, envio, itens) => ({
   id, number: id, created_at: quando, status: 'open',
@@ -46,11 +47,17 @@ const lerPedidos = () => s.pedir('POST', '/api/import-customers', { corpo: { day
 before(async () => {
   nuvem = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
-    const [l, recurso] = url.pathname.split('/').filter(Boolean);
+    const [l, recurso, pid] = url.pathname.split('/').filter(Boolean);
     const json = (d) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(d)); };
     const primeira = url.searchParams.get('page') === '1';
     if (l !== LOJA) { res.writeHead(404); return res.end('{}'); }
-    if (recurso === 'products') return json(primeira ? loja.produtos.filter((p) => !loja.escondido.has(String(p.id))) : []);
+    // Um produto só, como na loja de verdade: apagado (escondido) é 404.
+    if (recurso === 'products' && pid) {
+      const p = loja.produtos.find((x) => String(x.id) === pid && !loja.escondido.has(pid));
+      if (!p) { res.writeHead(404, { 'Content-Type': 'application/json' }); return res.end('{"description":"Not Found"}'); }
+      return json(p);
+    }
+    if (recurso === 'products') { if (url.searchParams.get('per_page') === '200') loja.catalogoInteiro += 1; return json(primeira ? loja.produtos.filter((p) => !loja.escondido.has(String(p.id))) : []); }
     if (recurso === 'orders') return json(primeira ? pedidos : []);
     return json([]);   // categorias, clientes, carrinhos
   });
@@ -83,6 +90,12 @@ test('produto esgotado vem da loja e a venda soma nele', async () => {
   const jaqueta = varianteDaLoja(8001);
   assert.ok(jaqueta, 'a Jaqueta Esgotada foi trazida da loja');
   assert.equal(jaqueta.stock, 0);
+  // Trazida sozinha: ler os pedidos não baixa o catálogo inteiro da loja
+  // para a memória (a releitura do estoque lê a lista de 50 em 50, página
+  // por página). Numa máquina de 1 GB, o catálogo inteiro de uma vez trava.
+  assert.equal(loja.catalogoInteiro, 0, 'ninguém pediu o catálogo inteiro de uma vez');
+  // O apagado da loja (991) fica anotado e não é procurado de novo.
+  assert.ok(JSON.parse(s.banco().prepare("SELECT value FROM settings WHERE key = 'produtos_apagados_na_loja'").get().value).includes('991'));
   assert.equal(itensDa('SITE-6')[0].variant_id, jaqueta.id);
   // Produto apagado da loja fica sem variação, mas com a sua linha no relatório.
   const rel = (await s.pedir('GET', '/api/relatorios?days=90')).json;

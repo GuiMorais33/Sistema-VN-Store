@@ -17,6 +17,7 @@ import { naFila, enviarEstoque, enviarPendentes, gravarEnviado, contagemAMao, le
 import * as backup from './backup.js';
 import * as agente from './agente.js';
 import { procurar, procurarProdutos } from './busca.js';
+import * as saude from './saude.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, '..', 'public');
@@ -3997,12 +3998,33 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
       if (pid && it.variant_id != null && !produtosProcurados.has(pid) && !conhecida.get(String(it.variant_id))) faltam.add(pid);
     }
   }
+  // Um por um, só os que faltam (até 20 por leitura). Antes baixava o
+  // catálogo inteiro da loja (mais de 3 mil produtos, com descrição e fotos)
+  // para a memória só para achar estes — e de novo a cada vez que o sistema
+  // ligava. Numa máquina de 1 GB, isso pode travar tudo. Produto apagado na
+  // loja (404) fica anotado e não é procurado de novo.
   if (faltam.size) {
-    faltam.forEach((pid) => produtosProcurados.add(pid));
-    try {
-      const daLoja = (await nuvem.listAllProducts()).filter((p) => faltam.has(String(p.id)));
-      if (daLoja.length) gravarProdutosDaLoja(daLoja, await lerCategoriasDaLoja());
-    } catch (err) { console.error('Produtos dos pedidos:', err.message); }
+    let apagados;
+    try { apagados = new Set(JSON.parse(getSetting('produtos_apagados_na_loja') || '[]')); } catch (_) { apagados = new Set(); }
+    for (const pid of faltam) if (apagados.has(pid)) produtosProcurados.add(pid);
+    const achados = [];
+    for (const pid of [...faltam].filter((x) => !apagados.has(x)).slice(0, 20)) {
+      try {
+        const p = await nuvem.getProduct(pid);
+        produtosProcurados.add(pid);
+        if (p && p.id) achados.push(p);
+      } catch (err) {
+        if (err.status === 404) { apagados.add(pid); produtosProcurados.add(pid); continue; }
+        console.error('Produto do pedido:', err.message);
+        if (!err.status) break;          // sem rede: o resto fica para a próxima leitura
+        produtosProcurados.add(pid);     // loja recusou: não insiste até religar
+      }
+    }
+    setSetting('produtos_apagados_na_loja', JSON.stringify([...apagados].slice(-500)));
+    if (achados.length) {
+      try { gravarProdutosDaLoja(achados, await lerCategoriasDaLoja()); }
+      catch (err) { console.error('Produtos dos pedidos:', err.message); }
+    }
   }
 
   const achar = db.prepare('SELECT id, payment_status, fin_posted, estoque_baixado FROM sales WHERE nuvemshop_order_id = ?');
@@ -4319,6 +4341,10 @@ async function voltaDoMotor(motivo) {
   } finally { setSetting('motor_volta_fim', now()); }
 }
 setInterval(() => tickAutomatico(), RAPIDO_MS);
+// Saúde da máquina: uma amostra de memória a cada 5 min (server/saude.js).
+const SAUDE_MS = parseInt(process.env.SAUDE_A_CADA_MS, 10) || 5 * 60e3;   // o teste encurta
+setTimeout(() => { try { saude.anotar(); } catch (_) { /* não atrapalha o resto */ } }, Math.min(30e3, SAUDE_MS));
+setInterval(() => { try { saude.anotar(); } catch (_) { /* idem */ } }, SAUDE_MS);
 // A primeira volta sai logo depois de ligar (o teste encurta a espera).
 setTimeout(() => tickAutomatico('início'), parseInt(process.env.PRIMEIRA_RODADA_MS, 10) || 8000);
 backup.agendarBackups();
@@ -4571,6 +4597,10 @@ app.get('/api/agente', (req, res) => {
 });
 
 app.get('/api/agente/status', (req, res) => res.json(agente.situacao()));
+
+// A máquina está com memória? Desde quando está ligada? O que aconteceu
+// antes do último travamento? (server/saude.js)
+app.get('/api/sistema', async (req, res) => res.json(await saude.situacao({ horas: parseInt(req.query.horas, 10) || 24 })));
 
 // Vendas do período com os itens (site não tem itens: só o total).
 // Pela data, não pelo id: pedidos antigos do site importados depois têm id
