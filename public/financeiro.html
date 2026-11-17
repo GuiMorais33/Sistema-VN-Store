@@ -83,6 +83,9 @@
   .m .txt{min-width:0;display:flex;flex-direction:column;gap:2px}
   .m .txt .d{font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .m .txt .s{font-size:10.5px;color:var(--ink-3);font-family:var(--font-mono);display:block}
+  .m .txt .cli{display:block;font-size:12.5px;color:var(--brand-hi);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mov-busca{width:100%;margin:2px 0 8px;padding:9px 11px;border-radius:9px;border:1px solid var(--line);background:var(--bg-elev);
+    color:var(--ink);font:inherit;font-size:13px}
   .m .rt{display:flex;align-items:center;gap:8px}
   .m .r{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
   .m .r.in{color:var(--ok)} .m .r.out{color:var(--crit)}
@@ -225,6 +228,7 @@
     </div>
     <div class="card panel">
       <h3>Movimentações</h3>
+      <input id="movBusca" class="mov-busca" type="search" placeholder="Buscar por cliente, código (VN-…, SITE-…) ou descrição" autocomplete="off">
       <div class="mov" id="mov"></div>
     </div>
   </div>
@@ -401,21 +405,37 @@ async function load(){
   barras(document.getElementById('catIn'),d.por_categoria_receita,'in');
   barras(document.getElementById('catOut'),d.por_categoria_despesa,'out');
 
+  MOV=d.entries;movimentacoes();
+  contasAPagar(d);
+}
+
+/* movimentações: cada venda com o nome do cliente (o mesmo do PDV e do site) */
+let MOV=[];
+// Nome que identifica alguém (não "Cliente do site", "Sem cliente"…).
+const nomeDe=(n)=>{const t=String(n||'').trim();return /^(|-+|cliente( do site)?|sem cliente|n[ãa]o informad[oa]|sem nome)$/i.test(t)?'':t;};
+const ORIGEM_MOV=(e)=>!e.venda_id?'':e.venda_canal==='site'?(e.venda_origem==='balcao'?'PDV Nuvemshop':'Site')
+  :({whatsapp:'WhatsApp',instagram:'Instagram'}[e.venda_onde]||'PDV');
+const semAc=(t)=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+function movimentacoes(){
   const mov=document.getElementById('mov');
-  mov.innerHTML=d.entries.length?d.entries.map(e=>{
-    const inn=e.type==='receita';
+  const q=semAc(document.getElementById('movBusca').value.trim());
+  const lista=q?MOV.filter(e=>semAc([e.description,e.category,e.ref,e.cliente,e.vendedor].join(' ')).includes(q)):MOV;
+  mov.innerHTML=lista.length?lista.map(e=>{
+    const inn=e.type==='receita',cli=nomeDe(e.cliente);
+    const extra=[ORIGEM_MOV(e),e.forma,e.vendedor?'vendeu: '+e.vendedor.split(' ')[0]:''].filter(Boolean).map(esc).join(' · ');
     return `<div class="m"><div class="l">
       <span class="ico-box ${inn?'brand':'crit'}" style="width:30px;height:30px">${ICO(inn?'subiu':'desceu',15)}</span>
-      <span class="txt"><span class="d">${esc(e.description||e.category)}</span><span class="s">${D(e.created_at)} · ${esc(e.category)}${e.type==='despesa'&&!e.paid?' · A PAGAR':''}</span></span>
+      <span class="txt"><span class="d">${esc(e.description||e.category)}</span>
+        ${e.venda_id?`<span class="cli">${cli?esc(cli):'<span style="color:var(--ink-3);font-weight:600">sem cliente</span>'}</span>`:''}
+        <span class="s">${D(e.created_at)} · ${esc(e.category)}${extra?' · '+extra:''}${e.type==='despesa'&&!e.paid?' · A PAGAR':''}</span></span>
       </div><span class="rt"><span class="r ${inn?'in':'out'}">${inn?'+':'−'} ${BRL(e.amount)}</span>
       ${e.ref?'':`<button class="ib" data-del="${e.id}" type="button" aria-label="apagar">${ICO('lixeira',15)}</button>`}</span></div>`;
-  }).join(''):vazio('recibo','Sem lançamentos','Nada movimentado neste período.');
+  }).join(''):vazio('recibo',q?'Nada encontrado':'Sem lançamentos',q?'Confira o nome ou o código.':'Nada movimentado neste período.');
   mov.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Apagar este lançamento?'))return;
     await api('/api/financial/entry/'+b.dataset.del,{method:'DELETE'});load();});
-
-  contasAPagar(d);
 }
+document.getElementById('movBusca').oninput=movimentacoes;
 
 /* contas a pagar */
 function contasAPagar(d){

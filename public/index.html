@@ -133,7 +133,13 @@
   .dlgf h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;font-size:19px;transform:skewX(-5deg)}
   .dlgf .lst{display:flex;flex-direction:column;gap:6px;overflow-y:auto}
 
-  /* ---- Lembretes (a página virou este painel) ---- */
+  /* ---- Lembretes (a página virou este painel, no topo do Início) ---- */
+  .lem-topo{margin-bottom:var(--s4)}
+  .lem-topo .ph{flex-wrap:wrap}
+  .lem-resumo{font-size:12px;color:var(--ink-3);margin-right:auto}
+  .lem-resumo b.late{color:var(--crit)} .lem-resumo b.hj{color:var(--warn)}
+  .lem-vazio{font-size:13px;color:var(--ink-3);padding:4px 0}
+  .lem-mais{background:none;border:0;color:var(--brand-hi);font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;padding:8px 0 2px}
   .lem{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:start;
     padding:9px 0;border-bottom:1px solid var(--line-soft)}
   .lem:last-child{border-bottom:none}
@@ -194,6 +200,15 @@
     </div>
   </div>
 
+  <!-- Lembretes: logo ao abrir, antes de tudo — o que não pode escapar
+       hoje (quem paga, encomenda de cliente, reposição). -->
+  <div class="card panel lem-topo" id="painelLem">
+    <div class="ph"><h3>Lembretes</h3><span class="lem-resumo" id="lemResumo"></span>
+      <button class="btn sm ghost" id="verFeitos" type="button">Ver feitos</button>
+      <button class="btn sm primary" id="novoLem" type="button">Novo</button></div>
+    <div class="rows" id="rem"></div>
+  </div>
+
   <!-- Meta do mês (a mesma conta da Equipe) -->
   <a class="card meta-mes" id="metaMes" href="/equipe" hidden></a>
 
@@ -222,18 +237,10 @@
     </div>
   </div>
 
-  <div class="cols" style="margin-top:var(--s3)">
-    <div class="card panel">
-      <h3 style="display:flex;justify-content:space-between;align-items:center">Estoque no vermelho
-        <a href="/repor" style="font-size:12px;font-weight:700;color:var(--brand-hi);text-transform:none;letter-spacing:0">Repor →</a></h3>
-      <div class="rows" id="low"></div>
-    </div>
-    <div class="card panel" id="painelLem">
-      <div class="ph"><h3>Lembretes</h3>
-        <button class="btn sm ghost" id="verFeitos" type="button">Ver feitos</button>
-        <button class="btn sm primary" id="novoLem" type="button">Novo</button></div>
-      <div class="rows" id="rem"></div>
-    </div>
+  <div class="card panel" style="margin-top:var(--s3)">
+    <h3 style="display:flex;justify-content:space-between;align-items:center">Estoque no vermelho
+      <a href="/repor" style="font-size:12px;font-weight:700;color:var(--brand-hi);text-transform:none;letter-spacing:0">Repor →</a></h3>
+    <div class="rows" id="low"></div>
   </div>
 
 </div>
@@ -488,26 +495,33 @@ function quandoLem(r){
   const dias=Math.round((new Date(r.due_date+'T12:00')-new Date().setHours(12,0,0,0))/864e5);
   return dias===1?{cls:'now',txt:'amanhã'}:{cls:'dt',txt:dataBr(r.due_date)};
 }
+// No topo do Início: os 5 mais urgentes (atrasados e de hoje vêm primeiro);
+// o resto, num toque. Vazio ocupa uma linha só — não empurra a tela.
+let lemTodos=false;
 async function lembretes(){
   const d=await api('/api/reminders?filter='+filtroLem);
   const box=document.getElementById('rem');
+  const R=d.resumo||{},at=R.atrasados||0,hj=R.hoje||0,ab=R.abertos||0;
+  document.getElementById('lemResumo').innerHTML=filtroLem==='feitos'?'concluídos':
+    (at?`<b class="late">${at} ${pl(at,'atrasado')}</b>`:'')+(at&&hj?' · ':'')+(hj?`<b class="hj">${hj} para hoje</b>`:'')
+    +(!at&&!hj?(ab?`${ab} em aberto`:''):'');
   if(!d.items.length){
-    box.innerHTML=vazio('sino',filtroLem==='feitos'?'Nada concluído ainda':'Nada pendente',
-      'Anote o que não pode escapar: quem vai pagar, encomenda de cliente, reposição.');
+    box.innerHTML=`<div class="lem-vazio">${filtroLem==='feitos'?'Nada concluído ainda.':'Nada pendente. Anote em <b>Novo</b> o que não pode escapar: quem vai pagar, encomenda de cliente, reposição.'}</div>`;
     return;
   }
   box.innerHTML='';
-  for(const r of d.items){
+  const mostrar=lemTodos||filtroLem==='feitos'?d.items:d.items.slice(0,5);
+  for(const r of mostrar){
     const q=quandoLem(r);
     const el=document.createElement('div');
     el.className='lem'+(r.done?' feito':'');
     el.innerHTML=`<button class="chk ${r.done?'on':''}" type="button" aria-label="concluir">${ICO('ok',14)}</button>
-      <div><div class="t">${r.title}</div>
-        ${r.notes?`<div class="n">${r.notes}</div>`:''}
+      <div><div class="t">${esc(r.title)}</div>
+        ${r.notes?`<div class="n">${esc(r.notes)}</div>`:''}
         <div class="tags">
           <span class="tg">${ICO(ICO_TIPO[r.kind]||'lembrete',12)}${NOME_TIPO[r.kind]||'Geral'}</span>
           <span class="tg ${q.cls}">${ICO('calendario',12)}${q.txt}</span>
-          ${r.customer_name?`<span class="tg">${ICO('clientes',12)}${r.customer_name}</span>`:''}
+          ${r.customer_name?`<span class="tg">${ICO('clientes',12)}${esc(r.customer_name)}</span>`:''}
           ${r.amount?`<span class="tg val">${BRL(r.amount)}</span>`:''}
         </div></div>
       <button class="ib" data-del="${r.id}" type="button" aria-label="apagar">${ICO('lixeira',15)}</button>`;
@@ -522,6 +536,11 @@ async function lembretes(){
     };
     el.querySelector('.t').onclick=()=>abrirLem(r);
     box.appendChild(el);
+  }
+  if(mostrar.length<d.items.length){
+    const b=document.createElement('button');b.type='button';b.className='lem-mais';
+    b.textContent=`Ver todos (${d.items.length})`;b.onclick=()=>{lemTodos=true;lembretes();};
+    box.appendChild(b);
   }
 }
 const dlgLem=document.getElementById('dlgLem');

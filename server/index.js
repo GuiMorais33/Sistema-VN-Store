@@ -3565,8 +3565,15 @@ app.get('/api/financial', (req, res) => {
     WHERE ${PIX_PENDENTE()} AND COALESCE(ns_status,'open') <> 'cancelled'`).get();
   const byMethod = db.prepare(`SELECT COALESCE(NULLIF(payment_method,''),'—') label, COUNT(*) n, COALESCE(SUM(total),0) total
     FROM sales WHERE payment_status='pago' ${cond} GROUP BY payment_method ORDER BY total DESC`).all(...a);
-  const entries = db.prepare(`SELECT id, type, category, description, amount, ref, paid, due_date, created_at
-    FROM financial_entries ${since ? 'WHERE created_at >= ?' : ''} ORDER BY id DESC LIMIT 120`).all(...a);
+  // Cada movimentação de venda traz o cliente, o vendedor e de onde veio,
+  // pela própria venda (o código está em "ref"): a mesma venda se reconhece
+  // no PDV, no site e aqui. Pela venda, e não escrito no texto, para valer
+  // também nas antigas e acompanhar o cliente ligado depois ao pedido.
+  const entries = db.prepare(`SELECT fe.id, fe.type, fe.category, fe.description, fe.amount, fe.ref, fe.paid,
+      fe.due_date, fe.created_at, fe.forma, s.id AS venda_id, s.customer_name AS cliente, s.seller_name AS vendedor,
+      s.channel AS venda_canal, s.canal AS venda_onde, s.origem AS venda_origem
+    FROM financial_entries fe LEFT JOIN sales s ON s.code = fe.ref
+    ${since ? 'WHERE fe.created_at >= ?' : ''} ORDER BY fe.id DESC LIMIT 120`).all(...a);
   // Contas a pagar: o que está agendado, do mais vencido para o mais longe.
   const aPagar = db.prepare(`SELECT id, category, description, amount, due_date, created_at
     FROM financial_entries WHERE type='despesa' AND paid = 0
