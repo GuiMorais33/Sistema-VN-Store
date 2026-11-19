@@ -515,6 +515,12 @@ ensureColumn('variants', 'ns_tentado', 'ns_tentado INTEGER');
 ensureColumn('variants', 'ns_tentado_delta', 'ns_tentado_delta INTEGER');   // a diferença que ia naquela tentativa
 // O que o agente mandou quando alterou algo (com acesso total), para o dono ler.
 ensureColumn('agent_log', 'detalhe', 'detalhe TEXT');
+// Preço promocional da Nuvemshop (Black Friday, liquidação): o PDV cobra
+// este enquanto existir. Vazio = sem promoção.
+ensureColumn('variants', 'preco_promo', 'preco_promo REAL');
+// O dono ligou o pedido do site a um cliente daqui: a releitura da loja
+// não desfaz.
+ensureColumn('sales', 'cliente_manual', 'cliente_manual INTEGER NOT NULL DEFAULT 0');
 
 // ---- Despesa a pagar ----
 // Uma despesa pode já ter saído do caixa ou estar só agendada. Sem isso

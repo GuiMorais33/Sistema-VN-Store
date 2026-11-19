@@ -198,6 +198,23 @@
   .ult-row.canc .c,.ult-row.canc .t{text-decoration:line-through;color:var(--ink-3)}
   .ult-row.nova{border-color:rgba(47,210,79,.8);box-shadow:0 0 0 2px rgba(47,210,79,.25);animation:ultNova 1.2s ease 2}
   @keyframes ultNova{50%{background:rgba(47,210,79,.16)}}
+  /* Preço promocional (Black Friday): o que se cobra, com o cheio riscado */
+  .prod .pr s{display:block;font-size:10.5px;line-height:1.15;color:var(--ink-3);font-weight:500;white-space:nowrap}
+  .prod .promo{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.5px;padding:1px 6px;border-radius:999px;
+    background:rgba(232,163,23,.16);color:var(--warn);margin-left:4px;vertical-align:middle}
+  .line .meta .preco-b{background:none;border:0;padding:0 0 0 2px;font:inherit;color:var(--brand-hi);cursor:pointer;text-decoration:underline dotted}
+  .line .meta s{color:var(--ink-3)}
+  /* Editando uma venda já lançada */
+  body.modo-edicao .cart{border-color:rgba(47,210,79,.6);box-shadow:0 0 0 1px rgba(47,210,79,.3) inset}
+  body.modo-edicao #wrapAtend,body.edicao-dados #segWrap,body.edicao-dados #discWrap{display:none!important}
+  .edi-banner{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-radius:var(--r);
+    background:rgba(47,210,79,.08);border:1px solid rgba(47,210,79,.45);color:var(--brand-hi);font-size:12.5px}
+  .edi-banner[hidden]{display:none}
+  .edi-banner b{display:block;font-size:13px}
+  .vcli{display:flex;flex-direction:column;gap:6px}
+  .vcli input{padding:9px 11px;border-radius:9px;border:1px solid var(--line);background:var(--bg-elev);color:var(--ink);font:inherit}
+  .vcli .res{display:flex;flex-direction:column;gap:4px}
+  .vcli .res button{text-align:left;padding:7px 10px;border-radius:8px;border:1px solid var(--line-soft);background:var(--bg-elev);color:var(--ink);font:inherit;cursor:pointer}
   .busca-aviso{grid-column:1/-1;font-size:12.5px;color:var(--ink-3);padding:2px 2px 4px}
   .busca-aviso b{color:var(--warn)}
 </style>
@@ -231,6 +248,10 @@
           <button type="button" class="btn ghost sm" id="dataHoje" hidden>Voltar para hoje</button>
         </div>
         <div class="outro-dia-aviso" id="outroDia" hidden></div>
+      </div>
+      <div class="edi-banner" id="ediBanner" hidden>
+        <div><b id="ediTit"></b><span id="ediSub"></span></div>
+        <button type="button" class="btn ghost sm" id="ediSair">Sair sem salvar</button>
       </div>
       <div class="troca-banner" id="trocaBanner" hidden>
         <div><b id="trocaTit"></b><span id="trocaSub"></span></div>
@@ -339,6 +360,9 @@ const vazio=(ico,t,d)=>`<div class="empty">${ICO(ico,28)}<div class="t">${t}</di
 document.querySelector('.search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
 
 /* catálogo */
+// O preço que se cobra: o promocional da Nuvemshop enquanto houver.
+const temPromo=(v)=>v.preco_promo>0&&v.preco_promo<v.price;
+const precoV=(v)=>temPromo(v)?v.preco_promo:v.price;
 function estado(v){
   // Sob encomenda: a numeração nunca esgota no site — o que muda é se o
   // par está aqui ou se você busca no fornecedor.
@@ -368,35 +392,48 @@ async function carregar(q=''){
     const [cls,txt]=estado(v), out=!v.on_demand&&v.stock_management&&v.stock<=0;
     const b=document.createElement('button');b.className='prod';b.type='button';b.disabled=out;
     const img=v.image_url?`<img src="${v.image_url}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:ICO('estoque',22)}))">`:ICO('estoque',22);
-    b.innerHTML=`<span class="thumb">${img}</span><span class="nm">${v.product_name}</span>
-      <span class="vr">${v.variant_name||''}${v.brand?' · '+v.brand:''}</span>
-      <span class="bot"><span class="pr">${BRL(v.price)}</span><span class="st ${cls}">${txt}</span></span>`;
+    b.innerHTML=`<span class="thumb">${img}</span><span class="nm">${esc(v.product_name)}${temPromo(v)?'<span class="promo">PROMO</span>':''}</span>
+      <span class="vr">${esc(v.variant_name||'')}${v.brand?' · '+esc(v.brand):''}</span>
+      <span class="bot"><span class="pr">${BRL(precoV(v))}${temPromo(v)?`<s>${BRL(v.price)}</s>`:''}</span><span class="st ${cls}">${txt}</span></span>`;
     b.addEventListener('click',()=>{add(v);b.classList.remove('foi');void b.offsetWidth;b.classList.add('foi');});g.appendChild(b);
   }
 }
-function add(v){const c=S.cart.get(v.id)||{v,qty:0};
+// Até quanto dá: o estoque; editando uma venda, mais o que ela já tinha
+// (essas peças já saíram do estoque quando a venda foi lançada).
+const limite=(v)=>v.stock+(S.edit?(S.edit.orig.get(v.id)||0):0);
+function add(v){const c=S.cart.get(v.id)||{v,qty:0,preco:precoV(v)};
   // Sob encomenda não tem limite: o que faltar é buscado no fornecedor.
-  if(!v.on_demand&&v.stock_management&&c.qty>=v.stock)return toast('Estoque no limite',`Só há ${v.stock} un. deste item.`,true);
+  if(!v.on_demand&&v.stock_management&&c.qty>=limite(v))return toast('Estoque no limite',`Só há ${limite(v)} un. deste item.`,true);
   c.qty++;S.cart.set(v.id,c);renderCart();
   if(sobEnc(v))toast('Vai por encomenda',`${v.product_name} ${v.variant_name} não está na loja — o sistema cria o lembrete de pegar no fornecedor.`);}
 function qty(id,d){const it=S.cart.get(id);if(!it)return;it.qty+=d;
   if(it.qty<=0)S.cart.delete(id);
-  else if(!it.v.on_demand&&it.v.stock_management&&it.qty>it.v.stock){it.qty=it.v.stock;toast('Estoque no limite',`Máximo ${it.v.stock} un.`,true);}
+  else if(!it.v.on_demand&&it.v.stock_management&&it.qty>limite(it.v)){it.qty=limite(it.v);toast('Estoque no limite',`Máximo ${limite(it.v)} un.`,true);}
   renderCart();}
 function renderCart(){
   const box=document.getElementById('lines');
   const n=[...S.cart.values()].reduce((s,i)=>s+i.qty,0);
   document.getElementById('count').textContent=n?n+' '+pl(n,'item','itens'):'';
   if(!S.cart.size){box.innerHTML=S.troca?'<div class="aviso-site">Toque nos produtos que o cliente vai levar (ou só marque o que voltou, se for devolução).</div>'
+    :S.edit&&S.edit.soDados?'<div class="aviso-site">As peças desta venda ficam como estão: ela já teve troca. Mude abaixo o cliente, a forma, quem vendeu, onde ou a data.</div>'
+    :S.edit?'<div class="aviso-site">Sem peças. Toque nos produtos para pôr de volta — ou, para desfazer a venda inteira, use Cancelar venda.</div>'
     :vazio('pdv','Carrinho vazio','Toque num produto para começar a venda.');}
   else{box.innerHTML='';
     for(const [id,it] of S.cart){
       const el=document.createElement('div');el.className='line';
-      el.innerHTML=`<div><div class="nm">${it.v.product_name}</div>
-        <div class="meta">${it.v.variant_name||''} · ${BRL(it.v.price)}${sobEnc(it.v)?' · <b class="enc">encomenda</b>':''}</div>
+      // O preço da linha se toca para mudar (promoção da loja, preço combinado).
+      const cheio=it.preco<it.v.price-0.004?` <s>${BRL(it.v.price)}</s>`:'';
+      el.innerHTML=`<div><div class="nm">${esc(it.v.product_name)}</div>
+        <div class="meta">${esc(it.v.variant_name||'')} · <button type="button" class="preco-b" title="Mudar o preço desta peça">${BRL(it.preco)}</button>${cheio}${sobEnc(it.v)?' · <b class="enc">encomenda</b>':''}</div>
         <button class="rm" type="button">remover</button></div>
         <div><div class="qty"><button type="button" aria-label="menos">−</button><span>${it.qty}</span><button type="button" aria-label="mais">+</button></div>
-        <div class="lt">${BRL(it.v.price*it.qty)}</div></div>`;
+        <div class="lt">${BRL(it.preco*it.qty)}</div></div>`;
+      el.querySelector('.preco-b').onclick=()=>{
+        const t=prompt(`Preço de cada "${it.v.product_name} ${it.v.variant_name||''}" (R$):`,String(it.preco).replace('.',','));
+        if(t==null)return;
+        const n=parseFloat(String(t).replace(/[^\d,.-]/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.'));
+        if(!(n>=0))return toast('Preço inválido','Digite só o valor, por exemplo 79,90.',true);
+        it.preco=Math.round(n*100)/100;renderCart();};
       const [m,p]=el.querySelectorAll('.qty button');
       m.onclick=()=>qty(id,-1);p.onclick=()=>qty(id,1);
       el.querySelector('.rm').onclick=()=>{S.cart.delete(id);renderCart();};
@@ -406,12 +443,12 @@ function renderCart(){
 }
 function totais(){
   if(S.troca)return totaisTroca();
-  let sub=0;for(const [,it] of S.cart)sub+=it.v.price*it.qty;
+  let sub=0;for(const [,it] of S.cart)sub+=it.preco*it.qty;
   const d=Math.max(0,parseFloat(document.getElementById('disc').value)||0);
   document.getElementById('sub').textContent=BRL(sub);
   document.getElementById('dsc').textContent=BRL(d);
   document.getElementById('tot').textContent=BRL(Math.max(0,sub-d));
-  document.getElementById('finish').disabled=!S.cart.size;
+  document.getElementById('finish').disabled=!S.cart.size&&!(S.edit&&S.edit.soDados);
   barra(Math.max(0,sub-d));
 }
 /* barra do celular: some quando a venda já está na tela */
@@ -533,7 +570,7 @@ document.getElementById('canais').onclick=e=>{const b=e.target.closest('.pay');i
 
 /* controles */
 document.getElementById('seg').onclick=e=>{const b=e.target.closest('.seg-b');if(!b)return;
-  document.querySelectorAll('.seg-b').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');S.status=b.dataset.st;
+  document.querySelectorAll('#seg .seg-b').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');S.status=b.dataset.st;
   document.getElementById('payWrap').style.opacity=S.status==='pendente'?'.5':'1';};
 document.getElementById('pays').onclick=e=>{const b=e.target.closest('.pay');if(!b)return;
   document.querySelectorAll('#pays .pay').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');S.pay=b.dataset.pay;};
@@ -565,7 +602,7 @@ const diaMes=(iso)=>iso.slice(8,10)+'/'+iso.slice(5,7);
 const SEMANA=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
 const diaSemana=(iso)=>SEMANA[new Date(iso+'T12:00:00').getDay()];
 S.data='';   // '' = hoje
-function textoFinalizar(){return S.data?`Finalizar venda de ${diaMes(S.data)}`:'Finalizar venda';}
+function textoFinalizar(){if(S.edit)return 'Salvar alterações';return S.data?`Finalizar venda de ${diaMes(S.data)}`:'Finalizar venda';}
 function pintarData(){
   const inp=document.getElementById('dataVenda'),hoje=hojeISO();
   if(S.data&&S.data>=hoje)S.data='';            // virou o dia com a tela aberta
@@ -588,6 +625,7 @@ pintarData();
 
 async function finalizar(){
   if(S.troca)return confirmarTroca();
+  if(S.edit)return salvarEdicao();
   if(!S.cart.size)return;
   // Venda paga sem forma: o caixa do dia não teria onde pôr o dinheiro.
   if(S.status==='pago'&&!S.pay)return toast('Escolha a forma','Pix, Espécie, Crédito ou Débito — é por ela que o caixa fecha.',true);
@@ -598,7 +636,7 @@ async function finalizar(){
     return toast('Quem vendeu?','Toque no nome de quem fez a venda — ou em Loja, se ninguém ganha comissão.',true);
   }
   const btn=document.getElementById('finish');btn.disabled=true;btn.textContent='Lançando…';
-  const items=[...S.cart.values()].map(i=>({variant_id:i.v.id,qty:i.qty}));
+  const items=[...S.cart.values()].map(i=>({variant_id:i.v.id,qty:i.qty,unit_price:i.preco}));
   try{
     const r=await api('/api/sales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       items,customer_id:S.cliente?S.cliente.id:null,payment_method:S.pay,payment_status:S.status,
@@ -708,7 +746,10 @@ async function abrirVenda(id){
     <div class="vdet" style="gap:5px">${(v.itens||[]).map(linha).join('')||'<div class="aviso-site">Pedido sem as peças registradas.</div>'}</div>
     <div class="meta">Total: <b style="font-family:var(--font-mono);font-size:15px">${BRL(v.total)}</b>
       ${v.trocas.length?` · ${v.trocas.length} ${pl(v.trocas.length,'troca')}`:''}</div>
+    ${v.channel==='site'&&quem.papel==='dono'?`<div class="vcli"><span class="meta">Cliente desta venda (fica ligado ao cadastro daqui)</span>
+      <input id="vCliBusca" placeholder="Nome ou @instagram para ligar a venda…" autocomplete="off"><div class="res" id="vCliRes"></div></div>`:''}
     ${v.pode_mexer?`<div class="vacoes">
+        ${quem.papel==='dono'?'<button type="button" class="btn" id="vEditar">Editar venda</button>':''}
         <button type="button" class="btn primary" id="vTrocar">Trocar ou devolver</button>
         ${quem.papel==='dono'?'<button type="button" class="btn danger" id="vCancelar">Cancelar venda</button>':''}</div>
       <div class="vcanc" id="vCancBox" hidden>
@@ -752,8 +793,24 @@ async function abrirVenda(id){
       body:JSON.stringify({seller_id:vv.value||null})});toast(v.code,'Agora é de '+nome+'.');v.seller_id=vv.value?Number(vv.value):null;}
     catch(e){toast('Não deu para trocar',e.message,true);vv.value=v.seller_id||'';}
   };
+  // Pedido do site: ligar ao cliente daqui (a releitura da loja não desfaz).
+  const vcb=document.getElementById('vCliBusca');
+  if(vcb){let tm;vcb.oninput=()=>{clearTimeout(tm);tm=setTimeout(async()=>{
+    const q=vcb.value.trim(),res=document.getElementById('vCliRes');
+    if(!q){res.innerHTML='';return;}
+    const rows=await api('/api/customers?q='+encodeURIComponent(q));
+    res.innerHTML=rows.slice(0,5).map(c=>`<button type="button" data-c="${c.id}">${esc(rotulo(c))}</button>`).join('')
+      +`<button type="button" data-novo="1">+ Criar “${esc(q)}”</button>`;
+    res.querySelectorAll('button').forEach(bt=>bt.onclick=async()=>{
+      const corpo=bt.dataset.novo?{new_customer:{name:q}}:{customer_id:+bt.dataset.c};
+      try{await api(`/api/sales/${v.id}/cliente`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
+        toast(v.code,'Cliente ligado à venda.');abrirVenda(v.id);}
+      catch(e){toast('Não deu',e.message,true);}
+    });},200);};}
   if(!v.pode_mexer)return;
   document.getElementById('vTrocar').onclick=()=>iniciarTroca(v);
+  const ve=document.getElementById('vEditar');
+  if(ve)ve.onclick=()=>iniciarEdicao(v);
   // Cancelar devolve dinheiro do caixa: só o dono (o servidor também barra).
   if(!document.getElementById('vCancelar'))return;
   document.getElementById('vCancelar').onclick=()=>{document.getElementById('vCancBox').hidden=false;};
@@ -769,9 +826,88 @@ async function abrirVenda(id){
   };
 }
 
+// ---- Editar venda já lançada ----
+// O carrinho vira a venda: as peças dela (com o preço que foi cobrado),
+// cliente, pagamento, desconto, vendedor, canal e data. Muda o que precisar
+// — tira, põe peça do catálogo, troca o preço — e "Salvar alterações". O
+// estoque mexe só pela diferença; o dinheiro fica no dia da venda.
+// Venda que já teve troca: as peças ficam como estão (a troca foi feita em
+// cima delas); dá para mudar o resto.
+function iniciarEdicao(v){
+  if(S.troca)sairTroca();
+  dlgV.close();S.cart.clear();
+  const soDados=v.trocas.length>0;
+  S.edit={venda:v,soDados,orig:new Map()};
+  if(!soDados){
+    for(const i of v.itens){
+      if(!i.variant_id||i.qty<=0)continue;
+      S.edit.orig.set(i.variant_id,(S.edit.orig.get(i.variant_id)||0)+i.qty);
+      const vv={id:i.variant_id,product_name:i.product_name||i.name,variant_name:i.variant_name||'',brand:i.brand,
+        price:i.preco_lista??i.unit_price,preco_promo:i.preco_promo,stock:i.stock??0,stock_management:i.stock_management??1,
+        on_demand:i.on_demand,real_stock:i.on_hand};
+      const c=S.cart.get(i.variant_id)||{v:vv,qty:0,preco:i.unit_price};
+      c.qty+=i.qty;S.cart.set(i.variant_id,c);
+    }
+  }
+  // Os campos da venda no carrinho.
+  if(v.customer_id)selCliente({id:v.customer_id,name:v.customer_name,instagram:''});else limparCliente();
+  S.status=v.payment_status==='pendente'?'pendente':'pago';
+  document.querySelectorAll('#seg .seg-b').forEach(x=>x.classList.toggle('sel',x.dataset.st===S.status));
+  document.getElementById('payWrap').style.opacity=S.status==='pendente'?'.5':'1';
+  S.pay=v.payment_method||'';
+  document.querySelectorAll('#pays .pay').forEach(p=>p.classList.toggle('sel',p.dataset.pay===S.pay));
+  document.getElementById('disc').value=v.discount?String(v.discount):'';
+  S.canal=v.canal||'balcao';pintarCanal();
+  document.getElementById('vend').value=v.seller_id?String(v.seller_id):(TIME.length?'loja':'');pintarVendedores();
+  const dia=isoLocal(new Date(v.created_at));S.data=dia<hojeISO()?dia:'';pintarData();
+  document.body.classList.add('modo-edicao');document.body.classList.toggle('edicao-dados',soDados);
+  document.getElementById('ediBanner').hidden=false;
+  document.getElementById('ediTit').textContent='Editando '+v.code;
+  document.getElementById('ediSub').textContent=soDados
+    ?'Teve troca: as peças ficam como estão. Mude cliente, forma, vendedor, canal ou data.'
+    :'Mude o que precisar e toque em Salvar alterações.';
+  document.getElementById('cartTit').textContent='Editar venda';
+  renderCart();
+  document.querySelector('.cart').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function sairEdicao(){
+  S.edit=null;S.cart.clear();document.body.classList.remove('modo-edicao','edicao-dados');
+  document.getElementById('ediBanner').hidden=true;document.getElementById('cartTit').textContent='Venda';
+  limparCliente();S.pay='';document.querySelectorAll('#pays .pay').forEach(p=>p.classList.remove('sel'));
+  S.status='pago';document.querySelectorAll('#seg .seg-b').forEach(x=>x.classList.toggle('sel',x.dataset.st==='pago'));
+  document.getElementById('payWrap').style.opacity='1';
+  document.getElementById('disc').value='';S.canal='balcao';pintarCanal();S.data='';pintarData();
+  if(TIME.length>1)document.getElementById('vend').value='';pintarVendedores();
+  renderCart();
+}
+document.getElementById('ediSair').onclick=()=>{if(confirm('Sair sem salvar? A venda fica como estava.'))sairEdicao();};
+async function salvarEdicao(){
+  const e=S.edit,v=e.venda;
+  if(!e.soDados&&!S.cart.size)return toast('Venda sem peças','Para desfazer a venda inteira, use Cancelar venda.',true);
+  if(S.status==='pago'&&!S.pay)return toast('Escolha a forma','Pix, Espécie, Crédito ou Débito.',true);
+  const corpo={customer_id:S.cliente?S.cliente.id:null,payment_method:S.pay,canal:S.canal,data:S.data||hojeISO(),
+    seller_id:(x=>x&&x!=='loja'?x:null)(document.getElementById('vend').value)};
+  if(!e.soDados){
+    corpo.items=[...S.cart.values()].map(i=>({variant_id:i.v.id,qty:i.qty,unit_price:i.preco}));
+    corpo.discount=parseFloat(document.getElementById('disc').value)||0;
+    corpo.payment_status=S.status;
+  }
+  const btn=document.getElementById('finish');btn.disabled=true;btn.textContent='Salvando…';
+  try{
+    const r=await api('/api/sales/'+v.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
+    const avisos=(r.caixa_fechado?'<br><b style="color:var(--warn)">O caixa desse dia já estava fechado:</b> confira o fechamento.':'')
+      +(r.stock_na_fila?'<br>O estoque sobe para a loja na próxima rodada.':'');
+    toast(`${r.code} corrigida · ${BRL(r.total)}`,(r.payment_status==='pendente'?'Fiado — a receber':'Pago')+avisos);
+    avisarConflitos(r);
+    sairEdicao();ultimasVendas(r.code);carregar(document.getElementById('search').value.trim());
+  }catch(err){toast('Não deu para salvar',err.message,true);}
+  finally{btn.textContent=textoFinalizar();btn.disabled=!S.cart.size&&!S.edit;}
+}
+
 // Troca: o carrinho vira "o que voltou" (da venda) + "o que leva" (o
 // catálogo de sempre). A diferença sai na hora, para mais ou para menos.
 function iniciarTroca(v){
+  if(S.edit)sairEdicao();
   S.troca={venda:v,voltou:new Map(),fator:v.subtotal>0?Math.max(0,(v.subtotal-v.discount)/v.subtotal):1};
   dlgV.close();S.cart.clear();limparCliente();
   document.body.classList.add('modo-troca');
@@ -812,7 +948,7 @@ document.getElementById('voltou').onclick=(e)=>{const b=e.target.closest('button
   const q=Math.min(i.pode_voltar,Math.max(0,(S.troca.voltou.get(i.id)||0)+(+b.dataset.d)));
   S.troca.voltou.set(i.id,q);renderVoltou();totais();};
 function totaisTroca(){
-  let leva=0;for(const [,it] of S.cart)leva+=it.v.price*it.qty;
+  let leva=0;for(const [,it] of S.cart)leva+=it.preco*it.qty;
   let volta=0;for(const i of S.troca.venda.itens)volta+=precoVolta(i)*(S.troca.voltou.get(i.id)||0);
   const dif=Math.round((leva-volta)*100)/100;
   document.getElementById('sub').textContent=BRL(leva);
@@ -833,7 +969,7 @@ async function confirmarTroca(){
   try{
     const r=await api(`/api/sales/${t.venda.id}/troca`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       devolver:[...t.voltou].filter(([,q])=>q>0).map(([item_id,qty])=>({item_id,qty})),
-      levar:[...S.cart.values()].map(i=>({variant_id:i.v.id,qty:i.qty})),forma:S.pay})});
+      levar:[...S.cart.values()].map(i=>({variant_id:i.v.id,qty:i.qty,unit_price:i.preco})),forma:S.pay})});
     const enc=r.encomendas&&r.encomendas.length?`<br><b style="color:var(--warn)">Pegar no fornecedor:</b> ${r.encomendas.join(', ')}`:'';
     avisarConflitos(r);
     ultimasVendas(r.code);

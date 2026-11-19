@@ -170,6 +170,8 @@ const now = () => new Date().toISOString();
 const money = (n) => Math.round((Number(n) || 0) * 100) / 100;
 // Termo de busca sem acento e em minúscula, para comparar com busca(coluna).
 const termo = (q) => `%${semAcento(q)}%`;
+// O preço que o PDV cobra: o promocional da Nuvemshop enquanto houver.
+const precoDeVenda = (v) => (v.preco_promo > 0 && v.preco_promo < v.price ? v.preco_promo : v.price);
 // "1 peça", "3 peças" nos textos que o dono lê (lembretes, avisos).
 const pl = (n, um, varios = um + 's') => (Number(n) === 1 ? um : varios);
 
@@ -830,11 +832,15 @@ function gravarProdutosDaLoja(products, { catById, isBrandCat, isMarcasRoot }, d
   // O custo é NOSSO: nunca sobrescrever no sync.
   // Estoque: o da loja, mais o que daqui ainda não conseguiu subir. Uma
   // contagem à mão que ainda não subiu continua valendo.
-  const upV = db.prepare(`INSERT INTO variants (product_id, nuvemshop_product_id, nuvemshop_variant_id, product_name, variant_name, sku, price, cost, stock, stock_management, updated_at)
-    VALUES (@product_id,@pid,@vid,@pname,@vname,@sku,@price,0,@stock,@sm,@now)
+  // O preço promocional também vem (e vai embora quando a promoção acaba):
+  // preço e promoção mudam no painel da loja, não aqui — por isso entram
+  // mesmo quando o estoque desta variação não pode ser trocado agora.
+  const upPreco = db.prepare('UPDATE variants SET price = @price, preco_promo = @promo WHERE nuvemshop_variant_id = @vid');
+  const upV = db.prepare(`INSERT INTO variants (product_id, nuvemshop_product_id, nuvemshop_variant_id, product_name, variant_name, sku, price, preco_promo, cost, stock, stock_management, updated_at)
+    VALUES (@product_id,@pid,@vid,@pname,@vname,@sku,@price,@promo,0,@stock,@sm,@now)
     ON CONFLICT(nuvemshop_variant_id) DO UPDATE SET
       product_id=excluded.product_id, product_name=excluded.product_name,
-      variant_name=excluded.variant_name, sku=excluded.sku, price=excluded.price,
+      variant_name=excluded.variant_name, sku=excluded.sku, price=excluded.price, preco_promo=excluded.preco_promo,
       stock=CASE WHEN ns_fixar = 1 THEN stock ELSE MAX(0, excluded.stock + ns_delta) END,
       stock_management=excluded.stock_management, updated_at=excluded.updated_at
     WHERE @desde IS NULL OR variants.updated_at IS NULL OR variants.updated_at <= @desde`);
@@ -875,12 +881,16 @@ function gravarProdutosDaLoja(products, { catById, isBrandCat, isMarcasRoot }, d
       for (const v of (p.variants || [])) {
         // Nome da variação: junta os valores dos atributos (ex.: "P / Verde").
         const vname = (v.values || []).map((x) => nameOf(x)).filter(Boolean).join(' / ') || 'Único';
+        const preco = parseFloat(v.price) || 0;
+        const pr = parseFloat(v.promotional_price);
+        const promo = pr > 0 && pr < preco ? money(pr) : null;   // "0.00" ou maior que o preço não é promoção
         upV.run({
           product_id: productId, pid: String(p.id), vid: String(v.id), pname: name, vname,
-          sku: v.sku || '', price: parseFloat(v.price) || 0,
+          sku: v.sku || '', price: preco, promo,
           stock: v.stock == null ? 0 : parseInt(v.stock, 10),
           sm: v.stock_management === false ? 0 : 1, now: now(), desde,
         });
+        upPreco.run({ price: preco, promo, vid: String(v.id) });
         variantCount += 1;
       }
     }
@@ -1595,7 +1605,9 @@ app.post('/api/sales', async (req, res) => {
     if (!v.on_demand && v.stock_management && v.stock < qty) {
       return res.status(409).json({ error: `Estoque insuficiente de "${v.product_name} ${v.variant_name}" (tem ${v.stock}, pediu ${qty}).` });
     }
-    const unitPrice = it.unit_price != null ? parseFloat(it.unit_price) : v.price;
+    // O preço digitado no carrinho vale; sem ele, o da loja (com a promoção).
+    const unitPrice = it.unit_price != null && Number.isFinite(parseFloat(it.unit_price)) && parseFloat(it.unit_price) >= 0
+      ? money(parseFloat(it.unit_price)) : precoDeVenda(v);
     // Faltou par em mãos? Então essa venda gera encomenda no fornecedor.
     const encomendar = v.on_demand ? Math.max(0, qty - (v.on_hand || 0)) : 0;
     lines.push({ v, qty, unitPrice, lineTotal: money(unitPrice * qty), unitCost: v.cost, encomendar });
@@ -1745,6 +1757,196 @@ app.post('/api/sales/:id/vendedor', (req, res) => {
   res.json({ ok: true, ...v, caixa_fechado: nova ? caixaFechado(nova.dia) : false });
 });
 
+// ==================== EDITAR VENDA ====================
+// Corrigir uma venda do PDV já lançada: peças, quantidades, preços,
+// desconto, pagamento (pago/fiado e a forma), cliente, quem vendeu, onde e
+// a data. Erro de lançamento não é troca: não deixa "voltou/levou" no
+// histórico. O que muda vai para os lugares certos:
+//  - estoque: só a DIFERENÇA de peças (saiu mais, sai mais; tirou, volta),
+//    aqui e na Nuvemshop (server/estoque.js);
+//  - dinheiro: a entrada da venda passa a ser o total novo, no dia da
+//    venda (não hoje: é a mesma venda, só corrigida);
+//  - comissão e meta: acompanham sozinhas (saem do dinheiro e da venda).
+// Venda que já teve troca não muda peças, preços nem pago/fiado (a troca
+// foi calculada sobre eles) — muda cliente, forma, vendedor, canal e data.
+// Venda cancelada não se edita: lance de novo. Pedido do site se corrige na
+// Nuvemshop (o sistema acompanha sozinho); aqui, só o cliente.
+const entradasDaVenda = (code) => db.prepare(`SELECT * FROM financial_entries
+  WHERE ref = ? AND type = 'receita' AND (description = ? OR description = ?) ORDER BY id`).all(code, `Venda PDV ${code}`, `Recebimento ${code}`);
+
+app.put('/api/sales/:id', async (req, res) => {
+  const s = db.prepare('SELECT * FROM sales WHERE id = ?').get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Venda não encontrada.' });
+  if (s.channel === 'site') return res.status(400).json({ error: 'Pedido do site: peças, preços e pagamento se corrigem na Nuvemshop, e o sistema acompanha sozinho. Aqui dá para trocar o cliente.' });
+  if (s.payment_status === 'cancelado') return res.status(400).json({ error: 'Venda cancelada não se edita: lance de novo.' });
+  const b = req.body || {};
+  const teveTroca = db.prepare('SELECT COUNT(*) n FROM trocas WHERE sale_id = ?').get(s.id).n > 0;
+  const getV = db.prepare(`SELECT v.*, COALESCE(p.on_demand,0) AS on_demand FROM variants v
+    LEFT JOIN products p ON p.id = v.product_id WHERE v.id = ?`);
+
+  // Peças de agora e as novas, por variação.
+  const atuais = db.prepare('SELECT * FROM sale_items WHERE sale_id = ? ORDER BY id').all(s.id);
+  const antes = new Map();
+  for (const i of atuais) {
+    if (!i.variant_id) continue;
+    const a = antes.get(i.variant_id) || { qty: 0, unit_price: i.unit_price, unit_cost: i.unit_cost, encomenda: 0 };
+    a.qty += i.qty; a.encomenda += i.encomenda || 0;
+    antes.set(i.variant_id, a);
+  }
+  let novas = null;   // null = peças não mudam
+  // Peça sem produto ligado (venda antiga) não teria como voltar para a
+  // lista: mudar as peças apagaria essa linha.
+  if (Array.isArray(b.items) && atuais.some((i) => !i.variant_id)) {
+    return res.status(400).json({ error: 'Esta venda tem peça sem produto do catálogo: as peças não dá para editar. Cliente, pagamento, vendedor, canal e data dá.' });
+  }
+  if (Array.isArray(b.items)) {
+    if (!b.items.length) return res.status(400).json({ error: 'A venda precisa de pelo menos uma peça. Para desfazer a venda inteira, cancele.' });
+    novas = new Map();
+    for (const it of b.items) {
+      const v = getV.get(it.variant_id);
+      if (!v) return res.status(400).json({ error: `Produto não encontrado (id ${it.variant_id}).` });
+      const qty = Math.max(1, parseInt(it.qty, 10) || 1);
+      const a = antes.get(v.id);
+      const pr = parseFloat(it.unit_price);
+      const preco = Number.isFinite(pr) && pr >= 0 ? money(pr) : (a ? a.unit_price : precoDeVenda(v));
+      const n = novas.get(v.id) || { v, qty: 0, preco };
+      n.qty += qty; n.preco = preco;
+      novas.set(v.id, n);
+    }
+    // Mudou mesmo? (mesmas peças, quantidades e preços = não mexe)
+    const igual = novas.size === antes.size && [...novas.values()].every((n) => {
+      const a = antes.get(n.v.id); return a && a.qty === n.qty && Math.abs(a.unit_price - n.preco) < 0.005;
+    });
+    if (igual) novas = null;
+  }
+  const descontoNovo = b.discount !== undefined ? money(Math.max(0, parseFloat(b.discount) || 0)) : s.discount;
+  const statusNovo = b.payment_status === 'pendente' ? 'pendente' : b.payment_status === 'pago' ? 'pago' : s.payment_status;
+  const formaNova = b.payment_method !== undefined ? String(b.payment_method || '').trim() : s.payment_method;
+  if (teveTroca && (novas || Math.abs(descontoNovo - s.discount) > 0.005 || statusNovo !== s.payment_status)) {
+    return res.status(400).json({ error: 'Esta venda já teve troca: peças, preços e pago/fiado não mudam mais (a troca foi feita em cima deles). Cliente, forma, vendedor, canal e data dá para mudar.' });
+  }
+  if (statusNovo === 'pago' && !formaNova) return res.status(400).json({ error: 'Escolha a forma de pagamento (Pix, Espécie, Crédito ou Débito).' });
+
+  // Estoque: a diferença de cada variação.
+  const deltas = [];
+  if (novas) {
+    for (const id of new Set([...antes.keys(), ...novas.keys()])) {
+      const v = (novas.get(id) || {}).v || getV.get(id);
+      const delta = (novas.has(id) ? novas.get(id).qty : 0) - (antes.has(id) ? antes.get(id).qty : 0);
+      if (!delta || !v) continue;
+      if (v.on_demand) return res.status(400).json({ error: `"${v.product_name} ${v.variant_name}" é sob encomenda: para mudar essa peça, use Trocar.` });
+      if (v.stock_management && delta > 0 && v.stock < delta) {
+        return res.status(409).json({ error: `Estoque insuficiente de "${v.product_name} ${v.variant_name}" (tem ${v.stock}, a edição pede mais ${delta}).` });
+      }
+      deltas.push({ v, delta });
+    }
+  }
+
+  // Cliente, vendedor, data.
+  let cliente = { id: s.customer_id, nome: s.customer_name };
+  if (b.new_customer && String(b.new_customer.name || '').trim()) {
+    const nn = String(b.new_customer.name).trim();
+    cliente = { id: db.prepare('INSERT INTO customers (name, instagram, phone, created_at) VALUES (?,?,?,?)')
+      .run(nn, limpaInsta(nn.startsWith('@') ? nn : ''), '', now()).lastInsertRowid, nome: nn };
+  } else if ('customer_id' in b) {
+    const c = b.customer_id ? db.prepare('SELECT id, name FROM customers WHERE id = ?').get(b.customer_id) : null;
+    if (b.customer_id && !c) return res.status(400).json({ error: 'Cliente não encontrado.' });
+    cliente = c ? { id: c.id, nome: c.name } : { id: null, nome: '' };
+  }
+  let vendedor = { id: s.seller_id, nome: s.seller_name };
+  if ('seller_id' in b) {
+    const m = b.seller_id ? db.prepare('SELECT id, name FROM team_members WHERE id = ?').get(b.seller_id) : null;
+    if (b.seller_id && !m) return res.status(400).json({ error: 'Pessoa não encontrada na equipe.' });
+    vendedor = m ? { id: m.id, nome: m.name } : { id: null, nome: null };
+  }
+  const canal = b.canal !== undefined ? (CANAIS_PDV.includes(b.canal) ? b.canal : null) : s.canal;
+  if (!canal) return res.status(400).json({ error: 'Canal inválido.' });
+  let quando = { ts: s.created_at, dia: diaLocal(new Date(s.created_at)) };
+  if (b.data && b.data !== quando.dia) {
+    const meiaNoite = new Date(inicioDoDia(quando.dia)).getTime();
+    try { quando = quandoFoiAVenda(b.data, new Date(s.created_at).getTime() - meiaNoite); }
+    catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
+  }
+
+  // Totais novos.
+  const linhas = novas ? [...novas.values()].map((n) => {
+    const a = antes.get(n.v.id);
+    return { v: n.v, qty: n.qty, preco: n.preco, custo: a ? a.unit_cost : (n.v.cost || 0), encomenda: a ? Math.min(a.encomenda, n.qty) : 0 };
+  }) : null;
+  const subtotal = linhas ? money(linhas.reduce((t, l) => t + l.preco * l.qty, 0)) : s.subtotal;
+  const total = money(Math.max(0, subtotal - descontoNovo));
+  const custo = linhas ? money(linhas.reduce((t, l) => t + l.custo * l.qty, 0)) : s.cost_total;
+  const ts = now();
+  const mexidas = new Set();
+  const antesTotal = s.total, antesStatus = s.payment_status;
+
+  db.transaction(() => {
+    if (linhas) {
+      db.prepare('DELETE FROM sale_items WHERE sale_id = ?').run(s.id);
+      const ins = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, name, qty, unit_price, unit_cost, line_total, encomenda) VALUES (?,?,?,?,?,?,?,?)`);
+      for (const l of linhas) ins.run(s.id, l.v.id, `${l.v.product_name} ${l.v.variant_name}`, l.qty, l.preco, l.custo, money(l.preco * l.qty), l.encomenda);
+      for (const d of deltas) if (mexerNoEstoque(d.v, -d.delta, s.code, 'edicao_venda', ts)) mexidas.add(d.v.id);
+    }
+    const pagoEm = statusNovo === 'pago' ? (antesStatus === 'pago' ? (s.paid_at === s.created_at ? quando.ts : s.paid_at) : quando.ts) : null;
+    db.prepare(`UPDATE sales SET subtotal=?, discount=?, total=?, cost_total=?, margin=?, items_count=?,
+        customer_id=?, customer_name=?, seller_id=?, seller_name=?, canal=?, payment_method=?, payment_status=?, paid_at=?, created_at=?
+      WHERE id = ?`).run(subtotal, descontoNovo, total, custo, money(total - custo),
+      linhas ? linhas.reduce((t, l) => t + l.qty, 0) : s.items_count,
+      cliente.id, cliente.nome || '', vendedor.id, vendedor.nome, canal, formaNova, statusNovo, pagoEm, quando.ts, s.id);
+    // Dinheiro: a entrada da própria venda (não a de troca nem a de estorno).
+    const ent = entradasDaVenda(s.code);
+    if (statusNovo === 'pago') {
+      if (ent.length) {
+        const e = ent[ent.length - 1];
+        const criacao = e.description === `Venda PDV ${s.code}`;
+        db.prepare('UPDATE financial_entries SET amount = ?, forma = ?, created_at = ? WHERE id = ?')
+          .run(total, formaNova, criacao ? quando.ts : e.created_at, e.id);
+        for (const x of ent.slice(0, -1)) db.prepare('DELETE FROM financial_entries WHERE id = ?').run(x.id);
+      } else {
+        db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, ref, forma, created_at)
+          VALUES ('receita','Venda PDV',?,?,?,?,?,?)`).run(categoryId('Venda PDV', 'receita'), `Venda PDV ${s.code}`, total, s.code, formaNova, quando.ts);
+      }
+    } else {
+      // Virou fiado: o dinheiro não entrou — sai do caixa e vai para "a receber".
+      for (const x of ent) db.prepare('DELETE FROM financial_entries WHERE id = ?').run(x.id);
+    }
+    if (s.atendimento_id) {
+      db.prepare('UPDATE atendimentos SET valor = ?, member_id = ?, day = ?, created_at = ? WHERE id = ? AND sale_id = ?')
+        .run(total, vendedor.id, quando.dia, quando.ts, s.atendimento_id, s.id);
+    }
+  })();
+  const loja = await subirVariacoes(mexidas, `Edição ${s.code}`);
+  const dinheiroMudou = antesTotal !== total || antesStatus !== statusNovo || quando.ts !== s.created_at;
+  res.json({ ok: true, code: s.code, total, payment_status: statusNovo,
+    stock_synced: loja.ok && isLive(), stock_na_fila: loja.naFila, notes: loja.notas, conflitos: loja.conflitos || [],
+    caixa_fechado: dinheiroMudou && caixaFechado(quando.dia) });
+});
+
+// Pedido do site: o cliente daqui. Fica (a releitura da loja não desfaz).
+app.post('/api/sales/:id/cliente', (req, res) => {
+  const s = db.prepare('SELECT * FROM sales WHERE id = ?').get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Venda não encontrada.' });
+  const b = req.body || {};
+  let c = null;
+  if (b.new_customer && String(b.new_customer.name || '').trim()) {
+    const nn = String(b.new_customer.name).trim();
+    c = { id: db.prepare('INSERT INTO customers (name, instagram, phone, created_at) VALUES (?,?,?,?)')
+      .run(nn, limpaInsta(nn.startsWith('@') ? nn : ''), '', now()).lastInsertRowid, name: nn };
+  } else if (b.customer_id) {
+    c = db.prepare('SELECT id, name FROM customers WHERE id = ?').get(b.customer_id);
+    if (!c) return res.status(400).json({ error: 'Cliente não encontrado.' });
+  }
+  if (s.channel === 'site') {
+    // Com o nome dele (o Financeiro e as listas mostram o nome da venda);
+    // tirou o cliente: a próxima leitura da loja põe o do pedido de volta.
+    db.prepare('UPDATE sales SET customer_id = ?, customer_name = COALESCE(?, customer_name), cliente_manual = ? WHERE id = ?')
+      .run(c ? c.id : null, c ? c.name : null, c ? 1 : 0, s.id);
+  } else {
+    db.prepare('UPDATE sales SET customer_id = ?, customer_name = ? WHERE id = ?').run(c ? c.id : null, c ? c.name : '', s.id);
+  }
+  res.json({ ok: true, customer_id: c ? c.id : null, customer_name: c ? c.name : null });
+});
+
 // Baixa (marca como pago) — aí sim entra no caixa.
 app.post('/api/sales/:id/settle', (req, res) => {
   const s = db.prepare('SELECT * FROM sales WHERE id = ?').get(req.params.id);
@@ -1864,7 +2066,7 @@ app.post('/api/sales/:id/troca', async (req, res) => {
     if (!v.on_demand && v.stock_management && v.stock < q) {
       return res.status(409).json({ error: `Estoque insuficiente de "${v.product_name} ${v.variant_name}" (tem ${v.stock}, pediu ${q}).` });
     }
-    const preco = it.unit_price != null ? money(parseFloat(it.unit_price)) : v.price;
+    const preco = it.unit_price != null && parseFloat(it.unit_price) >= 0 ? money(parseFloat(it.unit_price)) : precoDeVenda(v);
     leva.push({ v, q, preco, encomendar: v.on_demand ? Math.max(0, q - (v.on_hand || 0)) : 0 });
   }
   if (!volta.length && !leva.length) return res.status(400).json({ error: 'Marque o que voltou ou o que o cliente vai levar.' });
@@ -1946,7 +2148,12 @@ app.get('/api/vendas/:id', (req, res) => {
   const s = db.prepare('SELECT * FROM sales WHERE id = ?').get(req.params.id);
   if (!s) return res.status(404).json({ error: 'Venda não encontrada.' });
   delete s.ns_origem;
-  const itens = db.prepare(`SELECT i.*, v.variant_name, v.product_name, p.image_url FROM sale_items i
+  // Com o estoque e o preço de cada peça agora: é o que o PDV usa para
+  // editar a venda (até quanto dá para aumentar, qual o preço de lista).
+  const itens = db.prepare(`SELECT i.*, v.variant_name, v.product_name, p.image_url, p.brand,
+      v.stock, v.stock_management, v.price AS preco_lista, v.preco_promo, COALESCE(p.on_demand,0) AS on_demand,
+      COALESCE(v.on_hand,0) AS on_hand
+    FROM sale_items i
     LEFT JOIN variants v ON v.id = i.variant_id LEFT JOIN products p ON p.id = v.product_id
     WHERE i.sale_id = ? ORDER BY i.id`).all(s.id);
   const voltou = new Map();
@@ -4189,7 +4396,7 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
         updSale.run(nosso, pago ? quando : null, total, total, total,
           nsPay, nsShip, nsStat, retirada ? 'retirada' : 'envio', nItens, forma, ex.id);
         // Corrige o vínculo (não usa COALESCE: se estava errado, conserta).
-        db.prepare('UPDATE sales SET customer_id = ?, ns_customer_id = ? WHERE id = ?').run(cliId, nsCli, ex.id);
+        db.prepare('UPDATE sales SET customer_id = CASE WHEN cliente_manual = 1 THEN customer_id ELSE ? END, ns_customer_id = ? WHERE id = ?').run(cliId, nsCli, ex.id);
         atualizados += 1;
         gravarOrigem.run(origem, JSON.stringify(infoOrigem), ex.id);
         gravarItens(ex.id, o);
