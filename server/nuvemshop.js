@@ -255,6 +255,11 @@ export async function setVariantStock(productId, variantId, stock) {
 const escritaOk = () => { try { return JSON.parse(getSetting('nuvemshop_escrita') || 'null')?.ok === true; } catch (_) { return false; } };
 
 // -------- Produtos (criar / atualizar na Nuvemshop) --------
+// A loja: domínios (o endereço do site, para ler os preços como um cliente).
+export async function getStore() {
+  const { data } = await request('GET', '/store?fields=domains,original_domain');
+  return data;
+}
 export async function getProduct(nuvemshopProductId) {
   const { data } = await request('GET', `/products/${nuvemshopProductId}`);
   return data; // inclui variants[] com o estoque atual da loja

@@ -360,9 +360,12 @@ const vazio=(ico,t,d)=>`<div class="empty">${ICO(ico,28)}<div class="t">${t}</di
 document.querySelector('.search-wrap').insertAdjacentHTML('afterbegin',ICO('busca',17));
 
 /* catálogo */
-// O preço que se cobra: o promocional da Nuvemshop enquanto houver.
-const temPromo=(v)=>v.preco_promo>0&&v.preco_promo<v.price;
-const precoV=(v)=>temPromo(v)?v.preco_promo:v.price;
+// O preço que se cobra: o menor entre o cheio, o promocional do produto na
+// Nuvemshop e o que o site mostra agora (promoções do menu Promoções, lidas
+// do site a cada 30 min).
+const precoV=(v)=>Math.min(v.price,v.preco_promo>0?v.preco_promo:Infinity,v.preco_site>0?v.preco_site:Infinity);
+const temPromo=(v)=>precoV(v)<v.price-0.004;
+const pctPromo=(v)=>Math.round((1-precoV(v)/v.price)*100);
 function estado(v){
   // Sob encomenda: a numeração nunca esgota no site — o que muda é se o
   // par está aqui ou se você busca no fornecedor.
@@ -392,7 +395,7 @@ async function carregar(q=''){
     const [cls,txt]=estado(v), out=!v.on_demand&&v.stock_management&&v.stock<=0;
     const b=document.createElement('button');b.className='prod';b.type='button';b.disabled=out;
     const img=v.image_url?`<img src="${v.image_url}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:ICO('estoque',22)}))">`:ICO('estoque',22);
-    b.innerHTML=`<span class="thumb">${img}</span><span class="nm">${esc(v.product_name)}${temPromo(v)?'<span class="promo">PROMO</span>':''}</span>
+    b.innerHTML=`<span class="thumb">${img}</span><span class="nm">${esc(v.product_name)}${temPromo(v)?`<span class="promo">−${pctPromo(v)}%</span>`:''}</span>
       <span class="vr">${esc(v.variant_name||'')}${v.brand?' · '+esc(v.brand):''}</span>
       <span class="bot"><span class="pr">${BRL(precoV(v))}${temPromo(v)?`<s>${BRL(v.price)}</s>`:''}</span><span class="st ${cls}">${txt}</span></span>`;
     b.addEventListener('click',()=>{add(v);b.classList.remove('foi');void b.offsetWidth;b.classList.add('foi');});g.appendChild(b);
@@ -843,7 +846,7 @@ function iniciarEdicao(v){
       if(!i.variant_id||i.qty<=0)continue;
       S.edit.orig.set(i.variant_id,(S.edit.orig.get(i.variant_id)||0)+i.qty);
       const vv={id:i.variant_id,product_name:i.product_name||i.name,variant_name:i.variant_name||'',brand:i.brand,
-        price:i.preco_lista??i.unit_price,preco_promo:i.preco_promo,stock:i.stock??0,stock_management:i.stock_management??1,
+        price:i.preco_lista??i.unit_price,preco_promo:i.preco_promo,preco_site:i.preco_site,stock:i.stock??0,stock_management:i.stock_management??1,
         on_demand:i.on_demand,real_stock:i.on_hand};
       const c=S.cart.get(i.variant_id)||{v:vv,qty:0,preco:i.unit_price};
       c.qty+=i.qty;S.cart.set(i.variant_id,c);

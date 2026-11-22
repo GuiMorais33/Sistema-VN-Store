@@ -518,6 +518,9 @@ ensureColumn('agent_log', 'detalhe', 'detalhe TEXT');
 // Preço promocional da Nuvemshop (Black Friday, liquidação): o PDV cobra
 // este enquanto existir. Vazio = sem promoção.
 ensureColumn('variants', 'preco_promo', 'preco_promo REAL');
+// Preço que o site mostra agora, quando é menor (promoção do menu
+// "Promoções" da Nuvemshop, que não vem pela API): server/precos-site.js.
+ensureColumn('variants', 'preco_site', 'preco_site REAL');
 // O dono ligou o pedido do site a um cliente daqui: a releitura da loja
 // não desfaz.
 ensureColumn('sales', 'cliente_manual', 'cliente_manual INTEGER NOT NULL DEFAULT 0');

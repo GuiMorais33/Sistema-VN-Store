@@ -18,6 +18,7 @@ import * as backup from './backup.js';
 import * as agente from './agente.js';
 import { procurar, procurarProdutos } from './busca.js';
 import * as saude from './saude.js';
+import * as precosSite from './precos-site.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, '..', 'public');
@@ -170,8 +171,10 @@ const now = () => new Date().toISOString();
 const money = (n) => Math.round((Number(n) || 0) * 100) / 100;
 // Termo de busca sem acento e em minúscula, para comparar com busca(coluna).
 const termo = (q) => `%${semAcento(q)}%`;
-// O preço que o PDV cobra: o promocional da Nuvemshop enquanto houver.
-const precoDeVenda = (v) => (v.preco_promo > 0 && v.preco_promo < v.price ? v.preco_promo : v.price);
+// O preço que o PDV cobra: o menor entre o cheio, o promocional do produto
+// na Nuvemshop e o que o site mostra agora (promoção do menu Promoções).
+const precoDeVenda = (v) => Math.min(v.price,
+  v.preco_promo > 0 ? v.preco_promo : Infinity, v.preco_site > 0 ? v.preco_site : Infinity);
 // "1 peça", "3 peças" nos textos que o dono lê (lembretes, avisos).
 const pl = (n, um, varios = um + 's') => (Number(n) === 1 ? um : varios);
 
@@ -2151,7 +2154,7 @@ app.get('/api/vendas/:id', (req, res) => {
   // Com o estoque e o preço de cada peça agora: é o que o PDV usa para
   // editar a venda (até quanto dá para aumentar, qual o preço de lista).
   const itens = db.prepare(`SELECT i.*, v.variant_name, v.product_name, p.image_url, p.brand,
-      v.stock, v.stock_management, v.price AS preco_lista, v.preco_promo, COALESCE(p.on_demand,0) AS on_demand,
+      v.stock, v.stock_management, v.price AS preco_lista, v.preco_promo, v.preco_site, COALESCE(p.on_demand,0) AS on_demand,
       COALESCE(v.on_hand,0) AS on_hand
     FROM sale_items i
     LEFT JOIN variants v ON v.id = i.variant_id LEFT JOIN products p ON p.id = v.product_id
@@ -4447,6 +4450,9 @@ const TESTAR_ESCRITA_MIN = 24 * 60;
 let sincronizando = false;
 let ultimaVoltaCheia = 0;    // a última volta que releu os 45 dias de pedidos
 let relendoClientes = false;
+let lendoPrecosSite = false;
+const PRECOS_SITE_MIN = 30;
+const PRECOS_SITE_MS = parseInt(process.env.PRECOS_SITE_MS, 10) || PRECOS_SITE_MIN * 60e3;   // o teste encurta
 async function tickAutomatico(motivo = 'automático') {
   // As fixas não dependem da loja: rodam mesmo sem conexão.
   try { const n = lancarFixas(); if (n) console.log(`› ${n} despesa(s) fixa(s) lançada(s) como a pagar.`); }
@@ -4532,6 +4538,12 @@ async function voltaDoMotor(motivo) {
         if (cli && cli.novos) console.log(`› Clientes da loja: ${cli.novos} novo(s).`);
       }).finally(() => { relendoClientes = false; });
     }
+    // Os preços do site (Black Friday): a cada 30 min, por fora da volta —
+    // leva um minuto e pouco (mais de 60 páginas) e não pode segurar os pedidos.
+    const ultPrecos = getSetting('precos_site_em');
+    if (!lendoPrecosSite && (!ultPrecos || Date.now() - new Date(ultPrecos).getTime() >= PRECOS_SITE_MS)) {
+      lerPrecosDoSite().catch(() => { /* o erro fica anotado */ });
+    }
     // A permissão de gravar estoque na loja: conferida uma vez por dia; se
     // está com problema, a cada volta — arrumou, fica verde sozinho.
     let escr = null; try { escr = JSON.parse(getSetting('nuvemshop_escrita') || 'null'); } catch (_) { /* valor antigo */ }
@@ -4555,6 +4567,42 @@ async function voltaDoMotor(motivo) {
   } finally { setSetting('motor_volta_fim', now()); }
 }
 setInterval(() => tickAutomatico(), RAPIDO_MS);
+// O endereço do site da loja: SITE_URL, o que já se descobriu, ou o
+// primeiro domínio que a Nuvemshop informa.
+async function enderecoDoSite() {
+  if (process.env.SITE_URL) return process.env.SITE_URL;
+  const salvo = getSetting('site_url');
+  if (salvo) return salvo;
+  const loja = await nuvem.getStore();
+  const dominio = (Array.isArray(loja && loja.domains) && loja.domains[0]) || (loja && loja.original_domain);
+  if (!dominio) throw new Error('A Nuvemshop não informou o endereço do site.');
+  const url = /^https?:\/\//.test(dominio) ? dominio : `https://${dominio}`;
+  setSetting('site_url', url);
+  return url;
+}
+async function lerPrecosDoSite() {
+  if (lendoPrecosSite) return { ocupado: true };
+  lendoPrecosSite = true;
+  try {
+    const lido = await precosSite.lerSite(await enderecoDoSite(), process.env.PRECOS_SITE_ESPERA_MS != null ? { esperaMs: parseInt(process.env.PRECOS_SITE_ESPERA_MS, 10) } : {});
+    const r = { ...precosSite.gravar(lido), paginas: lido.paginas };
+    setSetting('precos_site_em', now());
+    setSetting('precos_site_erro', '');
+    setSetting('precos_site_resumo', JSON.stringify(r));
+    if (r.com_desconto) console.log(`› Preços do site: ${r.com_desconto} variação(ões) com desconto.`);
+    return r;
+  } catch (err) {
+    setSetting('precos_site_em', now());   // tenta de novo daqui a 30 min, não a cada volta
+    setSetting('precos_site_erro', err.message);
+    console.error('Preços do site:', err.message);
+    throw err;
+  } finally { lendoPrecosSite = false; }
+}
+app.post('/api/precos-site/ler', async (req, res) => {
+  if (!isLive() && !process.env.SITE_URL) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
+  try { res.json(await lerPrecosDoSite()); } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
 // Saúde da máquina: uma amostra de memória a cada 5 min (server/saude.js).
 const SAUDE_MS = parseInt(process.env.SAUDE_A_CADA_MS, 10) || 5 * 60e3;   // o teste encurta
 setTimeout(() => { try { saude.anotar(); } catch (_) { /* não atrapalha o resto */ } }, Math.min(30e3, SAUDE_MS));
@@ -4861,6 +4909,8 @@ app.get('/api/connection', (req, res) => res.json({
     escrita_a_cada_min: TESTAR_ESCRITA_MIN,
     travou_em: getSetting('motor_travou_em') || null,
     ultima_volta: getSetting('motor_volta_fim') || null,
+    precos_site: { a_cada_min: PRECOS_SITE_MIN, ultima: getSetting('precos_site_em') || null,
+      erro: getSetting('precos_site_erro') || null, resumo: (() => { try { return JSON.parse(getSetting('precos_site_resumo') || 'null'); } catch (_) { return null; } })() },
   },
   alertas: alertasDoSistema(),
 }));
