@@ -98,5 +98,27 @@ test('a tela Conectar mostra a leitura dos preços do site', async () => {
   const p = (await s.pedir('GET', '/api/connection')).json.automatico.precos_site;
   assert.ok(p.ultima);
   assert.equal(p.erro, null);
-  assert.equal(p.a_cada_min, 30);
+  assert.equal(p.a_cada_min, null);   // não relê sozinho: só no "Ler agora"
+});
+
+test('passou da data final da promoção: o PDV volta ao preço cheio sozinho', async () => {
+  site[1001] = 150;
+  await ler();
+  assert.equal(precoSite(1001), 150);
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  const ontem = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(Date.now() - 864e5));
+  // Ainda dentro do período (vale até hoje): cobra a promoção.
+  assert.equal((await s.pedir('POST', '/api/precos-site/periodo', { corpo: { ate: hoje } })).status, 200);
+  let v = (await s.pedir('POST', '/api/sales', { corpo: { items: [{ variant_id: vid(1001), qty: 1 }], payment_method: 'Pix' } })).json;
+  assert.equal(v.total, 150);
+  // Acabou ontem: preço cheio, o PDV não vê mais a promoção e não lê mais o site.
+  assert.equal((await s.pedir('POST', '/api/precos-site/periodo', { corpo: { ate: ontem } })).status, 200);
+  assert.equal((await s.pedir('GET', '/api/products?q=amiri')).json[0].preco_site, null);
+  v = (await s.pedir('POST', '/api/sales', { corpo: { items: [{ variant_id: vid(1001), qty: 1 }], payment_method: 'Pix' } })).json;
+  assert.equal(v.total, 200);
+  assert.equal((await s.pedir('POST', '/api/precos-site/ler')).status, 400);
+  const p = (await s.pedir('GET', '/api/connection')).json.automatico.precos_site;
+  assert.equal(p.valem, false);
+  assert.equal(p.ate, ontem);
+  assert.equal((await s.pedir('POST', '/api/precos-site/periodo', { corpo: { ate: '31/11/2026' } })).status, 400);
 });

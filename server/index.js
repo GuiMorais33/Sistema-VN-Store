@@ -171,10 +171,15 @@ const now = () => new Date().toISOString();
 const money = (n) => Math.round((Number(n) || 0) * 100) / 100;
 // Termo de busca sem acento e em minúscula, para comparar com busca(coluna).
 const termo = (q) => `%${semAcento(q)}%`;
+// As promoções lidas do site valem até o dia que o dono marcou (a Black
+// November vai até 30/11): depois disso o PDV volta ao preço cheio sozinho,
+// mesmo que ninguém releia o site. Sem data marcada, valem enquanto o site
+// mostrar.
+const precosSiteValem = () => { const ate = getSetting('precos_site_ate'); return !ate || diaLocal() <= ate; };
 // O preço que o PDV cobra: o menor entre o cheio, o promocional do produto
-// na Nuvemshop e o que o site mostra agora (promoção do menu Promoções).
+// na Nuvemshop e o que o site mostra (promoção do menu Promoções).
 const precoDeVenda = (v) => Math.min(v.price,
-  v.preco_promo > 0 ? v.preco_promo : Infinity, v.preco_site > 0 ? v.preco_site : Infinity);
+  v.preco_promo > 0 ? v.preco_promo : Infinity, v.preco_site > 0 && precosSiteValem() ? v.preco_site : Infinity);
 // "1 peça", "3 peças" nos textos que o dono lê (lembretes, avisos).
 const pl = (n, um, varios = um + 's') => (Number(n) === 1 ? um : varios);
 
@@ -336,6 +341,8 @@ app.get('/api/products', (req, res) => {
   }
   // O PDV pede "detalhe" para saber se alguma palavra foi deixada de lado;
   // quem pede só a lista (o agente, telas antigas) continua recebendo a lista.
+  // Passou do período das promoções do site: o PDV não vê mais esse preço.
+  if (!precosSiteValem()) for (const r of rows) r.preco_site = null;
   if (req.query.detalhe) return res.json({ itens: rows, ...info });
   res.json(rows);
 });
@@ -2160,6 +2167,7 @@ app.get('/api/vendas/:id', (req, res) => {
     LEFT JOIN variants v ON v.id = i.variant_id LEFT JOIN products p ON p.id = v.product_id
     WHERE i.sale_id = ? ORDER BY i.id`).all(s.id);
   const voltou = new Map();
+  if (!precosSiteValem()) for (const i of itens) i.preco_site = null;
   for (const i of itens) if (i.ref_item_id) voltou.set(i.ref_item_id, (voltou.get(i.ref_item_id) || 0) - i.qty);
   for (const i of itens) if (i.qty > 0) i.pode_voltar = i.qty - (voltou.get(i.id) || 0);
   s.itens = itens;
@@ -4451,8 +4459,6 @@ let sincronizando = false;
 let ultimaVoltaCheia = 0;    // a última volta que releu os 45 dias de pedidos
 let relendoClientes = false;
 let lendoPrecosSite = false;
-const PRECOS_SITE_MIN = 30;
-const PRECOS_SITE_MS = parseInt(process.env.PRECOS_SITE_MS, 10) || PRECOS_SITE_MIN * 60e3;   // o teste encurta
 async function tickAutomatico(motivo = 'automático') {
   // As fixas não dependem da loja: rodam mesmo sem conexão.
   try { const n = lancarFixas(); if (n) console.log(`› ${n} despesa(s) fixa(s) lançada(s) como a pagar.`); }
@@ -4538,12 +4544,11 @@ async function voltaDoMotor(motivo) {
         if (cli && cli.novos) console.log(`› Clientes da loja: ${cli.novos} novo(s).`);
       }).finally(() => { relendoClientes = false; });
     }
-    // Os preços do site (Black Friday): a cada 30 min, por fora da volta —
-    // leva um minuto e pouco (mais de 60 páginas) e não pode segurar os pedidos.
-    const ultPrecos = getSetting('precos_site_em');
-    if (!lendoPrecosSite && (!ultPrecos || Date.now() - new Date(ultPrecos).getTime() >= PRECOS_SITE_MS)) {
-      lerPrecosDoSite().catch(() => { /* o erro fica anotado */ });
-    }
+    // Os preços do site (Black Friday) são lidos uma vez — quando o dono
+    // toca em "Ler agora" na tela Conectar — e valem até a data final que
+    // ele marcou: a promoção não muda no meio, não há o que reler todo dia.
+    // Passou a data: os preços lidos saem e o PDV volta ao preço cheio.
+    if (!precosSiteValem()) db.prepare('UPDATE variants SET preco_site = NULL WHERE preco_site IS NOT NULL').run();
     // A permissão de gravar estoque na loja: conferida uma vez por dia; se
     // está com problema, a cada volta — arrumou, fica verde sozinho.
     let escr = null; try { escr = JSON.parse(getSetting('nuvemshop_escrita') || 'null'); } catch (_) { /* valor antigo */ }
@@ -4592,7 +4597,7 @@ async function lerPrecosDoSite() {
     if (r.com_desconto) console.log(`› Preços do site: ${r.com_desconto} variação(ões) com desconto.`);
     return r;
   } catch (err) {
-    setSetting('precos_site_em', now());   // tenta de novo daqui a 30 min, não a cada volta
+    setSetting('precos_site_em', now());
     setSetting('precos_site_erro', err.message);
     console.error('Preços do site:', err.message);
     throw err;
@@ -4600,7 +4605,18 @@ async function lerPrecosDoSite() {
 }
 app.post('/api/precos-site/ler', async (req, res) => {
   if (!isLive() && !process.env.SITE_URL) return res.status(400).json({ error: 'Conecte a loja primeiro.' });
+  if (!precosSiteValem()) return res.status(400).json({ error: 'O período das promoções do site já acabou. Marque uma data nova para ler de novo.' });
   try { res.json(await lerPrecosDoSite()); } catch (err) { res.status(502).json({ error: err.message }); }
+});
+// Até quando valem as promoções lidas do site (AAAA-MM-DD; vazio = sem fim).
+app.post('/api/precos-site/periodo', (req, res) => {
+  const ate = String((req.body || {}).ate || '').slice(0, 10);
+  if (ate && (!/^\d{4}-\d{2}-\d{2}$/.test(ate) || diaLocal(new Date(inicioDoDia(ate))) !== ate)) {
+    return res.status(400).json({ error: 'Data inválida.' });
+  }
+  setSetting('precos_site_ate', ate || null);
+  if (ate && diaLocal() > ate) db.prepare('UPDATE variants SET preco_site = NULL WHERE preco_site IS NOT NULL').run();
+  res.json({ ok: true, ate: ate || null, valem: precosSiteValem() });
 });
 
 // Saúde da máquina: uma amostra de memória a cada 5 min (server/saude.js).
@@ -4909,7 +4925,8 @@ app.get('/api/connection', (req, res) => res.json({
     escrita_a_cada_min: TESTAR_ESCRITA_MIN,
     travou_em: getSetting('motor_travou_em') || null,
     ultima_volta: getSetting('motor_volta_fim') || null,
-    precos_site: { a_cada_min: PRECOS_SITE_MIN, ultima: getSetting('precos_site_em') || null,
+    precos_site: { a_cada_min: null, ate: getSetting('precos_site_ate') || null, valem: precosSiteValem(),
+      ultima: getSetting('precos_site_em') || null,
       erro: getSetting('precos_site_erro') || null, resumo: (() => { try { return JSON.parse(getSetting('precos_site_resumo') || 'null'); } catch (_) { return null; } })() },
   },
   alertas: alertasDoSistema(),

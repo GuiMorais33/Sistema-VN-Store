@@ -49,6 +49,7 @@
   .stat{background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:10px;padding:10px}
   .stat .l{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-3);font-weight:700}
   .stat .v{font-family:var(--font-mono);font-weight:700;font-size:17px;margin-top:3px;color:var(--brand-hi)}
+  .ps-acoes{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -187,6 +188,7 @@ function automatico(c){
       <div class="q">${o.ultima?hora(o.ultima):'ainda não'}<small>${o.cadaMin?cada(o.mostrarMin||o.cadaMin):''}</small></div></div>`;
   };
   const p=a.pedidos||{},es=a.estoque||{},cl=a.clientes||{},ps=a.precos_site||{};
+  const dm=(iso)=>iso?iso.slice(8,10)+'/'+iso.slice(5,7):'';
   document.getElementById('auto').innerHTML=[
     {t:'Pedidos do site e do PDV da Nuvemshop',d:'Vendas, pagamentos, envios e retiradas. O pago entra sozinho no caixa. Os de hoje são lidos a cada 2 min; os mais antigos (pagou depois, cancelou), a cada 10.',
       ultima:p.ultima,cadaMin:p.a_cada_min,mostrarMin:p.de_hoje_a_cada_min,erro:p.erro},
@@ -194,9 +196,14 @@ function automatico(c){
       ultima:es.ultima,cadaMin:es.a_cada_min,erro:es.erro?es.erro+' — tenta de novo sozinho na próxima volta.':null},
     {t:'Clientes da loja',d:'Quem criou conta no site, mesmo sem ter comprado ainda.',ultima:cl.ultima,cadaMin:cl.a_cada_min,
       erro:cl.erro?cl.erro+' — tenta de novo sozinho na próxima volta.':null},
-    {t:'Preços do site (promoções)',d:'Lê o site como um cliente e traz o preço com o desconto das promoções da Nuvemshop (Black Friday): o PDV cobra o mesmo.'
-      +(ps.resumo?` Na última leitura: <b>${ps.resumo.com_desconto}</b> ${ps.resumo.com_desconto===1?'variação':'variações'} com desconto.`:''),
-      ultima:ps.ultima,cadaMin:ps.a_cada_min,erro:ps.erro?ps.erro+' — tenta de novo sozinho daqui a 30 min.':null},
+    {t:'Preços do site (promoções)',d:(ps.valem===false
+        ?`Promoções do site encerradas em <b>${dm(ps.ate)}</b>: o PDV voltou ao preço cheio.`
+        :'O sistema leu o site como um cliente e guardou o preço com o desconto das promoções da Nuvemshop (Black Friday): o PDV cobra o mesmo.'
+          +(ps.ate?` Valem até <b>${dm(ps.ate)}</b>; depois o PDV volta ao preço cheio sozinho.`:'')
+          +' Não relê sozinho: mudou alguma promoção, toque em <b>Ler agora</b>.'
+          +(ps.resumo?` Na última leitura: <b>${ps.resumo.com_desconto}</b> ${ps.resumo.com_desconto===1?'variação':'variações'} com desconto.`:''))
+        +`<div class="ps-acoes">${ps.valem===false?'':'<button type="button" class="btn sm" data-ps="ler">Ler agora</button> '}<button type="button" class="btn sm ghost" data-ps="data">${ps.ate?'Mudar a data final':'Marcar a data final'}</button></div>`,
+      ultima:ps.ultima,cadaMin:ps.valem===false?null:ps.a_cada_min,erro:ps.erro&&ps.valem!==false?ps.erro+' — toque em Ler agora para tentar de novo.':null},
     {t:'Gravar estoque na Nuvemshop',d:e&&!e.ok?'Como arrumar: no Portal de Parceiros, abra o app → Permissões → marque <b>produtos: escrita</b>, salve e autorize de novo (passo 3 desta tela).'
       :'A venda daqui baixa o estoque do site. A permissão é conferida sozinha todo dia (e a cada poucos minutos enquanto der problema).',
       ultima:e?e.quando:null,cadaMin:a.escrita_a_cada_min,erro:e&&!e.ok?(e.erro||'A loja recusou a gravação.'):null},
@@ -209,6 +216,26 @@ document.getElementById('escritaBtn').addEventListener('click', async (ev)=>{
   try{ await api('/api/connection/testar-escrita',{method:'POST'}); automatico(await api('/api/connection')); }
   catch(err){ document.getElementById('escritaMsg').innerHTML='<span style="color:#ff8377">'+err.message+'</span>'; }
   finally{ ev.target.disabled=false;ev.target.textContent='Testar de novo'; }
+});
+
+// Promoções do site: ler agora (mudou alguma promoção no meio do período) e
+// até quando valem (depois, o PDV volta ao preço cheio sozinho).
+document.getElementById('auto').addEventListener('click', async (ev)=>{
+  const b=ev.target.closest('[data-ps]'); if(!b) return;
+  if(b.dataset.ps==='data'){
+    const t=prompt('Até que dia valem as promoções do site? (dd/mm/aaaa — deixe vazio para não ter data final)','30/11/'+new Date().getFullYear());
+    if(t==null) return;
+    const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t.trim());
+    if(t.trim()&&!m) return alert('Use o formato dd/mm/aaaa, por exemplo 30/11/2026.');
+    const ate=m?`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`:'';
+    try{ await api('/api/precos-site/periodo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ate})}); }
+    catch(err){ return alert(err.message); }
+  } else {
+    b.disabled=true;b.textContent='Lendo o site…';
+    try{ const r=await api('/api/precos-site/ler',{method:'POST'}); alert(`Pronto: ${r.com_desconto} ${r.com_desconto===1?'variação':'variações'} com desconto no site.`); }
+    catch(err){ alert(err.message); }
+  }
+  automatico(await api('/api/connection'));
 });
 
 const oi=document.getElementById('okIco'); if(oi) oi.innerHTML=ICO('ok',20);
