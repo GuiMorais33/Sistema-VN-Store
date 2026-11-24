@@ -76,7 +76,7 @@
       <a href="#compras">Compra: repor, pedir, receber</a>
       <a href="#crm">Clientes</a>
       <a href="#negocio">Visão do negócio</a>
-      <a href="#financeiro">Financeiro e lucro</a>
+      <a href="#financeiro">Financeiro, vendas e lucro</a>
       <a href="#equipe">Equipe, comissão e metas</a>
       <a href="#automatico">O que roda sozinho</a>
       <a href="#duvidas">Dúvidas comuns</a>
@@ -435,7 +435,44 @@
         <p>Toda entrada de venda mostra o <b>cliente</b> (o mesmo nome do PDV e do pedido do site), de onde
           veio (PDV, WhatsApp, Instagram, site), a forma e quem vendeu — troca, cancelamento e recebimento de
           fiado também, porque são da mesma venda. A busca acha pelo nome do cliente ou pelo código
-          (<kbd>VN-…</kbd>, <kbd>SITE-…</kbd>).</p>
+          (<kbd>VN-…</kbd>, <kbd>SITE-…</kbd>). Toque numa movimentação de venda para abrir a venda inteira.</p>
+
+        <h3>Vendas: abrir, conferir e corrigir cada venda</h3>
+        <p>A aba <b>Vendas</b> (também em <kbd>/vendas</kbd>) traz <b>todas as vendas do período</b> — PDV
+          e site, inclusive as canceladas e os pix do site esperando pagamento. Escolha o período (Hoje,
+          Ontem, 7 dias, Este mês, Mês passado ou as datas que quiser) e filtre por origem, situação ou
+          vendedor. A busca acha cliente, código, peça, vendedor, cupom ou observação.</p>
+        <ul>
+          <li><b>As contas da lista:</b> vendas, faturamento, lucro (já sem o frete e o custo), descontos
+            dados e o que falta receber — sempre do que está na lista, com os filtros.</li>
+          <li><b>Por forma de pagamento:</b> Pix, Crédito, Espécie… cada uma com o total. É o número para
+            bater com o extrato do banco e da maquininha. Tocar numa forma filtra a lista por ela.</li>
+          <li><b>Marque as vendas</b> (a caixinha da esquerda) para somar só elas, e marcar todas como
+            conferidas de uma vez. <b>Baixar planilha</b> leva a lista para o Excel ou Google Planilhas.</li>
+        </ul>
+        <p>Tocando numa venda, ela abre com tudo:</p>
+        <ul>
+          <li><b>Peças</b> com o preço cobrado, o preço cheio de hoje e o custo de cada uma.</li>
+          <li><b>As contas</b>: peças, trocas, desconto, frete e cupom (no pedido do site), total, custo,
+            lucro com a margem, a comissão de quem vendeu e o que sobra para a loja.</li>
+          <li><b>Dinheiro no caixa</b>: cada entrada e saída desta venda (a venda, o fiado recebido, a
+            diferença de troca, o estorno) e se <b>bate</b> com o total. Se não bater, aparece em vermelho
+            — e a situação <b>Caixa não bate</b> lista todas assim.</li>
+          <li><b>Estoque</b> que a venda mexeu e o <b>histórico</b>: quando foi lançada, cada correção
+            (o que mudou, de quanto para quanto, e quem fez), trocas, recebimento e cancelamento.</li>
+          <li><b>Observação</b>: anote o que precisar (ex.: "metade no pix, metade em espécie").</li>
+        </ul>
+        <p><b>Conferir:</b> confira a venda com o extrato e toque em <b>Marcar como conferida</b> — ou em
+          <b>Conferida → próxima</b> para seguir para a seguinte (as setas ‹ › e as do teclado também
+          passam de uma venda para outra). Se a venda mudar depois (edição, troca, cancelamento, o site
+          mudou o pedido), a marca sai sozinha e o histórico diz o porquê: é só conferir de novo.</p>
+        <p><b>Corrigir:</b> na venda do PDV, <b>Editar venda</b> muda tudo numa tela só — peças (quantidade,
+          preço, tirar, pôr outra), desconto, pago ou fiado, forma, data, cliente, quem vendeu e onde. O
+          "Como fica" mostra antes de salvar o total novo, o lucro, o que volta ou sai do estoque e o que muda
+          no caixa. O estoque mexe só pela diferença (aqui e no site) e o dinheiro fica no dia da venda.
+          Dali também se <b>recebe o fiado</b> e se <b>cancela</b>; trocar ou devolver abre o PDV na venda.
+          No pedido do site, peças e pagamento se corrigem na Nuvemshop (o sistema acompanha sozinho); aqui
+          dá para ligar o cliente, anotar e conferir.</p>
 
         <h3>Lucro não é saldo</h3>
         <p>São dois números diferentes, e confundir os dois engana:</p>

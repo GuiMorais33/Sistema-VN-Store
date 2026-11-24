@@ -525,6 +525,32 @@ ensureColumn('variants', 'preco_site', 'preco_site REAL');
 // não desfaz.
 ensureColumn('sales', 'cliente_manual', 'cliente_manual INTEGER NOT NULL DEFAULT 0');
 
+// ---- Vendas no Financeiro: conferir uma por uma ----
+// O dono abre cada venda (PDV ou site), confere com o extrato do banco ou
+// da maquininha e marca "conferida". Se a venda mudar depois (edição,
+// troca, cancelamento, o site mudou o pedido), a marca sai: tem que
+// conferir de novo. A observação é dele (ex.: "metade no pix, metade em
+// espécie") e a leitura da loja nunca mexe nela.
+ensureColumn('sales', 'conferida_em', 'conferida_em TEXT');
+ensureColumn('sales', 'obs', 'obs TEXT');
+// Os valores do pedido do site que não cabem nas colunas de sempre: soma
+// das peças, frete (do cliente e da loja), descontos (cupom, pagamento,
+// promoção), cupom, forma de envio. JSON, regravado a cada leitura.
+ensureColumn('sales', 'ns_valores', 'ns_valores TEXT');
+// O que mudou em cada venda depois de lançada, quem mudou e quando. A
+// troca e o cancelamento têm o registro deles (trocas, cancelado_em).
+db.exec(`CREATE TABLE IF NOT EXISTS venda_historico (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  sale_id    INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+  tipo       TEXT NOT NULL,          -- edicao | data | vendedor | canal | cliente | recebido | conferida | obs
+  texto      TEXT NOT NULL,
+  quem       TEXT,
+  created_at TEXT NOT NULL
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_venda_hist ON venda_historico(sale_id)');
+// O dinheiro de cada venda (a aba Vendas soma por venda).
+db.exec('CREATE INDEX IF NOT EXISTS idx_fin_ref ON financial_entries(ref)');
+
 // ---- Despesa a pagar ----
 // Uma despesa pode já ter saído do caixa ou estar só agendada. Sem isso
 // o "sobrou" do mês contaria dinheiro que ainda não saiu.

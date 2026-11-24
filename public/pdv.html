@@ -981,6 +981,9 @@ async function confirmarTroca(){
   }catch(e){toast('Não deu para trocar',e.message,true);btn.disabled=false;btn.textContent='Confirmar troca';}
 }
 
+// Veio do Financeiro (Vendas → "Trocar ou devolver"): já abre a venda.
+{const qv=new URLSearchParams(location.search).get('venda');
+  if(qv&&/^\d+$/.test(qv)){dlgV.showModal();abrirVenda(qv);history.replaceState(null,'','/pdv');}}
 let st;document.getElementById('search').oninput=e=>{clearTimeout(st);st=setTimeout(()=>carregar(e.target.value.trim()),200);};
 document.getElementById('finish').onclick=finalizar;
 renderCart();carregar(document.getElementById('search').value.trim());

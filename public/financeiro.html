@@ -173,12 +173,162 @@
   .pr .s{font-size:10.5px;color:var(--ink-3);font-family:var(--font-mono);margin-top:2px}
   .pr .v{font-family:var(--font-mono);font-weight:700;color:var(--warn);text-align:right;white-space:nowrap}
   .lucro-lista{display:flex;flex-direction:column;gap:5px;max-height:420px;overflow-y:auto}
+
+  /* ================= ABA VENDAS ================= */
+  .vf{display:flex;flex-direction:column;gap:var(--s2);padding:var(--s3) var(--s4)}
+  .vf-l{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center}
+  .vf-l input[type=search]{flex:1 1 260px;min-width:0;padding:9px 12px;font-size:13.5px}
+  .vf-l select{width:auto;flex:0 1 auto;padding:8px 10px;font-size:13px}
+  .vf-d{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-3);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+  .vf-d input{width:auto;padding:7px 9px;font-size:13px}
+  .vformas{display:flex;gap:6px;flex-wrap:wrap;margin-top:var(--s3)}
+  .fchip{display:inline-flex;gap:7px;align-items:baseline;padding:7px 12px;border-radius:999px;border:1px solid var(--line);
+    background:var(--bg-elev);color:var(--ink-2);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font-body)}
+  .fchip b{font-family:var(--font-mono);color:var(--ink)}
+  .fchip small{color:var(--ink-3);font-weight:600;font-size:11px}
+  .fchip:hover{border-color:var(--line-str)}
+  .fchip.sel{border-color:var(--brand);background:rgba(47,210,79,.1);color:var(--brand-hi)}
+  .vtopo{display:flex;justify-content:space-between;align-items:center;gap:var(--s2);flex-wrap:wrap;margin:var(--s4) 0 var(--s2)}
+  .vconf{font-size:12.5px;color:var(--ink-2);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .vconf .barra{display:inline-block;width:130px;height:8px;border-radius:5px;background:var(--bg-elev);border:1px solid var(--line-soft);overflow:hidden}
+  .vconf .barra i{display:block;height:100%;background:var(--ok)}
+  .vtopo .acts{display:flex;gap:6px;flex-wrap:wrap}
+  .vlista{display:flex;flex-direction:column;gap:5px}
+  .vr{display:grid;grid-template-columns:22px 96px minmax(0,1fr) minmax(120px,170px) 118px 22px;gap:var(--s3);align-items:center;
+    padding:9px 12px;border:1px solid var(--line);border-radius:var(--r);background:linear-gradient(180deg,var(--surface-2),var(--surface));
+    cursor:pointer;font-size:13px;transition:border-color var(--t-fast)}
+  .vr:hover{border-color:var(--line-str)}
+  .vr.canc{opacity:.55}
+  .vr.esperando{opacity:.72}
+  .vr.sel{border-color:var(--brand);background:rgba(47,210,79,.06)}
+  .vr input[type=checkbox]{width:17px;height:17px;accent-color:var(--brand);margin:0;cursor:pointer}
+  .vr .q{font-family:var(--font-mono);font-size:11px;color:var(--ink-3);line-height:1.4}
+  .vr .q b{display:block;color:var(--ink-2);font-size:11.5px}
+  .vr .cli{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vr .sub{font-size:11px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+  .vr .fm{font-size:12px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+  .tg{font-size:10px;font-weight:800;letter-spacing:.3px;padding:2px 7px;border-radius:999px;border:1px solid var(--line);color:var(--ink-3);white-space:nowrap}
+  .tg.warn{color:var(--warn);border-color:rgba(232,163,23,.42)}
+  .tg.crit{color:var(--crit);border-color:rgba(242,86,74,.42)}
+  .tg.ok{color:var(--ok);border-color:rgba(53,192,138,.42)}
+  .tg.info{color:var(--brand-hi);border-color:rgba(47,210,79,.35)}
+  .vr .vl{text-align:right;font-family:var(--font-mono);font-weight:700;white-space:nowrap}
+  .vr .vl small{display:block;font-size:10.5px;font-weight:600;color:var(--ink-3);margin-top:2px}
+  .vr .vl small.pos{color:var(--brand-hi)} .vr .vl small.neg{color:var(--crit)}
+  .ck{display:grid;place-items:center;color:var(--ok)}
+  .ck i{display:block;width:14px;height:14px;border-radius:50%;border:1.5px solid var(--line-str)}
+  @media (max-width:760px){
+    .vr{grid-template-columns:22px minmax(0,1fr) auto;gap:3px 10px;padding:10px}
+    .vr>input{grid-row:1/span 3;align-self:start;margin-top:2px}
+    .vr .q{grid-column:2;grid-row:1}.vr .q b{display:inline;margin-right:6px}
+    .vr .who{grid-column:2;grid-row:2;min-width:0}
+    .vr .fmw{grid-column:2;grid-row:3;min-width:0}
+    .vr .vl{grid-column:3;grid-row:1/span 2}
+    .vr .ck{grid-column:3;grid-row:3;justify-self:end}
+  }
+  .vmais{margin:var(--s3) auto 0;display:block}
+  .vsel{position:sticky;bottom:12px;z-index:30;margin-top:var(--s3);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap;
+    justify-content:space-between;padding:11px 14px;border-radius:var(--r-lg);border:1px solid var(--brand);
+    background:rgba(10,16,11,.96);box-shadow:var(--sh-3);backdrop-filter:blur(6px)}
+  .vsel .n{font-size:13px;color:var(--ink-2)} .vsel .n b{font-family:var(--font-mono);color:var(--ink)}
+  .vsel .acts{display:flex;gap:6px;flex-wrap:wrap}
+
+  /* ---- Uma venda aberta ---- */
+  #dlgVenda{width:min(820px,96vw)}
+  .dv-head{display:flex;align-items:center;gap:8px;padding:var(--s3) var(--s4);border-bottom:1px solid var(--line)}
+  .dv-head h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;font-size:19px;transform:skewX(-5deg)}
+  .dv-head .tit{flex:1;min-width:0;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .dv-head .meta{font-size:11.5px;color:var(--ink-3);font-family:var(--font-mono)}
+  .nb{background:var(--bg-elev);border:1px solid var(--line);color:var(--ink-2);border-radius:9px;min-width:36px;height:34px;
+    font-size:17px;font-weight:700;cursor:pointer;display:grid;place-items:center;padding:0 9px}
+  .nb:hover:not(:disabled){border-color:var(--line-str);color:var(--ink)}
+  .nb:disabled{opacity:.35;cursor:default}
+  .dv{display:flex;flex-direction:column;gap:var(--s3);padding:var(--s4);overflow-y:auto;min-height:0}
+  .dv-resumo{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:13px;color:var(--ink-2)}
+  .dv-resumo b{color:var(--ink)}
+  .dvs{border:1px solid var(--line);border-radius:var(--r);background:var(--bg-elev);padding:var(--s3) var(--s4)}
+  .dvs h4{margin:0 0 var(--s2);font-size:10.5px;text-transform:uppercase;letter-spacing:.9px;color:var(--ink-3);font-weight:800;
+    display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .dv-2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+  @media (max-width:700px){.dv-2{grid-template-columns:1fr}}
+  .di{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--line-soft)}
+  .di:first-of-type{border-top:none}
+  .di .th{width:38px;height:38px;border-radius:8px;overflow:hidden;background:var(--surface-2);display:block}
+  .di .th img{width:100%;height:100%;object-fit:cover;display:block}
+  .di .nm{font-weight:600;font-size:13px;line-height:1.3}
+  .di .mt{font-size:11px;color:var(--ink-3);font-family:var(--font-mono);margin-top:2px}
+  .di .vv{font-family:var(--font-mono);font-weight:700;white-space:nowrap}
+  .di.volta .nm,.di .vv.neg{color:var(--crit)}
+  .di.nova .nm{color:var(--brand-hi)}
+  .aviso{color:var(--warn);font-weight:700}
+  .dc{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--ink-2);padding:4px 0}
+  .dc .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .dc.neg .v{color:var(--crit)}
+  .dc.tot{border-top:1px dashed var(--line-str);margin-top:4px;padding-top:8px;color:var(--ink);font-weight:800}
+  .dc.tot .v{font-size:15px}
+  .dc.lucro{font-weight:800;color:var(--ink)} .dc.lucro .v{color:var(--brand-hi);font-size:15px}
+  .dc.lucro.neg .v{color:var(--crit)}
+  .dnota{font-size:11.5px;color:var(--ink-3);line-height:1.45;margin-top:6px}
+  .chk{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.45;padding:9px 11px;border-radius:9px;margin-top:8px}
+  .chk.ok{color:var(--ok);background:rgba(53,192,138,.09)}
+  .chk.warn{color:var(--warn);background:rgba(232,163,23,.09)}
+  .chk.crit{color:var(--crit);background:rgba(242,86,74,.09)}
+  .chk.info{color:var(--ink-2);background:var(--surface-2)}
+  .de{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;font-size:12.5px;padding:5px 0;border-top:1px solid var(--line-soft)}
+  .de:first-of-type{border-top:none}
+  .de .s{font-size:10.5px;color:var(--ink-3);font-family:var(--font-mono);margin-top:1px}
+  .de .v{font-family:var(--font-mono);font-weight:700;white-space:nowrap}
+  .de .v.in{color:var(--ok)} .de .v.out{color:var(--crit)}
+  .tl{display:flex;flex-direction:column;gap:7px;font-size:12.5px}
+  .tl div{display:grid;grid-template-columns:132px minmax(0,1fr);gap:10px}
+  .tl .t{font-family:var(--font-mono);font-size:11px;color:var(--ink-3);padding-top:1px;white-space:nowrap}
+  @media (max-width:520px){.tl div{grid-template-columns:1fr;gap:1px}}
+  .tl .w{color:var(--ink-3);font-size:11px}
+  .dv-acts{display:flex;gap:6px;flex-wrap:wrap}
+  .dv-aviso{padding:10px 12px;border-radius:9px;font-size:12.5px;line-height:1.45}
+  .dv-aviso.ok{background:rgba(53,192,138,.1);color:var(--ok)}
+  .dv-aviso.erro{background:rgba(242,86,74,.1);color:var(--crit)}
+  .dv-box{display:flex;flex-direction:column;gap:8px;padding:var(--s3);border:1px solid var(--line-str);border-radius:var(--r);background:var(--surface-2)}
+  .dv-box .linha{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .dv-box .linha select,.dv-box .linha input{width:auto;flex:1 1 150px}
+  .bconf{display:inline-flex;align-items:center;gap:7px}
+  .bconf.on{color:var(--ok);border-color:rgba(53,192,138,.45);background:rgba(53,192,138,.08)}
+  .busca-res{display:flex;flex-direction:column;gap:3px;max-height:220px;overflow-y:auto}
+  .busca-res button{display:flex;justify-content:space-between;gap:10px;text-align:left;padding:8px 10px;border-radius:8px;
+    border:1px solid var(--line);background:var(--bg-elev);color:var(--ink);font-size:12.5px;cursor:pointer;font-family:var(--font-body)}
+  .busca-res button:hover:not(:disabled){border-color:var(--brand)}
+  .busca-res button:disabled{opacity:.45;cursor:not-allowed}
+  .busca-res small{color:var(--ink-3);font-family:var(--font-mono);font-size:11px;white-space:nowrap}
+  /* edição */
+  .el{display:grid;grid-template-columns:minmax(0,1fr) auto 104px 92px 30px;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line-soft)}
+  .el:first-of-type{border-top:none}
+  .el .nm{font-size:12.5px;font-weight:600;line-height:1.3}
+  .el .mt{font-size:10.5px;color:var(--ink-3);font-family:var(--font-mono);margin-top:2px}
+  .el .lt{font-family:var(--font-mono);font-weight:700;text-align:right;font-size:12.5px}
+  .el input{padding:7px 8px;font-size:13px;text-align:right}
+  .stp{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .stp button{background:var(--surface-2);border:none;color:var(--ink);width:28px;height:30px;font-size:15px;cursor:pointer}
+  .stp button:disabled{opacity:.35;cursor:default}
+  .stp span{min-width:28px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:13px}
+  @media (max-width:560px){.el{grid-template-columns:minmax(0,1fr) auto 30px}.el .nmw{grid-column:1/-1}.el .lt{grid-column:2}}
+  .ed-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:var(--s3)}
+  .segb{display:inline-flex;gap:3px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px}
+  .segb button{padding:6px 12px;border-radius:8px;border:none;background:none;color:var(--ink-3);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font-body)}
+  .segb button.sel{background:rgba(47,210,79,.14);color:var(--brand-hi)}
+  .segb button.sel.warn{background:rgba(232,163,23,.14);color:var(--warn)}
+  .m.abre{cursor:pointer} .m.abre:hover{border-color:var(--line-str)}
+  .dv-aviso.info{background:var(--surface-2);color:var(--ink-2)}
+  #vKpis{grid-template-columns:repeat(auto-fit,minmax(176px,1fr))}
+  @media (max-width:560px){#vKpis{grid-template-columns:1fr 1fr}}
+  #vPer{max-width:100%;overflow-x:auto} #vPer button{white-space:nowrap;padding:6px 11px}
+  @media (max-width:620px){.vf-l select{flex:1 1 100%}.vf-d{flex:1 1 40%}.vf-d input{flex:1}}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="pagehead">
-    <div><h1>Financeiro</h1><div class="ph-sub">Caixa · lucro · de onde vem cada venda</div></div>
+    <div><h1>Financeiro</h1><div class="ph-sub">Caixa · vendas · lucro</div></div>
     <div class="ph-actions">
       <div class="seg" id="per">
         <button data-p="today" type="button">Hoje</button>
@@ -192,6 +342,7 @@
 
   <div class="abas">
     <button class="aba on" data-t="caixa" type="button">Caixa</button>
+    <button class="aba" data-t="vendas" type="button">Vendas</button>
     <button class="aba" data-t="lucro" type="button">Lucro</button>
   </div>
 
@@ -234,6 +385,67 @@
   </div>
   </div>
 
+  <div data-pane="vendas" hidden>
+    <div class="card vf">
+      <div class="vf-l">
+        <div class="seg" id="vPer">
+          <button data-r="hoje" type="button">Hoje</button>
+          <button data-r="ontem" type="button">Ontem</button>
+          <button data-r="7" type="button">7 dias</button>
+          <button data-r="mes" class="sel" type="button">Este mês</button>
+          <button data-r="mesant" type="button">Mês passado</button>
+        </div>
+        <label class="vf-d">de <input type="date" id="vDe"></label>
+        <label class="vf-d">até <input type="date" id="vAte"></label>
+      </div>
+      <div class="vf-l">
+        <input id="vBusca" type="search" placeholder="Buscar cliente, código (VN-…, SITE-…), peça, vendedor, cupom ou observação" autocomplete="off">
+        <select id="vOrigem" aria-label="Origem">
+          <option value="">Todas as origens</option>
+          <option value="balcao">Balcão</option>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="instagram">Instagram</option>
+          <option value="site">Site</option>
+          <option value="pdvns">PDV Nuvemshop</option>
+        </select>
+        <select id="vSit" aria-label="Situação">
+          <option value="">Todas as situações</option>
+          <option value="conta">Só as que contam como venda</option>
+          <option value="paga">Pagas</option>
+          <option value="fiado">Fiado (a receber)</option>
+          <option value="esperando">Site aguardando pagamento</option>
+          <option value="cancelada">Canceladas</option>
+          <option value="nconf">Falta conferir</option>
+          <option value="conf">Conferidas</option>
+          <option value="naobate">Caixa não bate</option>
+          <option value="troca">Com troca</option>
+          <option value="editada">Editadas</option>
+          <option value="semcusto">Sem custo</option>
+          <option value="obs">Com observação</option>
+        </select>
+        <select id="vVend" aria-label="Vendedor"><option value="">Todos os vendedores</option></select>
+      </div>
+    </div>
+    <div class="kpis" id="vKpis" style="margin-top:var(--s3)"></div>
+    <div class="vformas" id="vFormas"></div>
+    <div class="vtopo">
+      <div class="vconf" id="vConf"></div>
+      <div class="acts">
+        <button class="btn sm ghost" id="vTodas" type="button">Selecionar as da lista</button>
+        <button class="btn sm ghost" id="vCsv" type="button">Baixar planilha</button>
+      </div>
+    </div>
+    <div class="vlista" id="vLista"><div class="sk" style="height:58px"></div></div>
+    <div class="vsel" id="vSel" hidden>
+      <span class="n" id="vSelN"></span>
+      <span class="acts">
+        <button class="btn sm primary" id="vSelConf" type="button">Marcar como conferidas</button>
+        <button class="btn sm ghost" id="vSelDes" type="button">Desmarcar</button>
+        <button class="btn sm ghost" id="vSelLimpa" type="button">Limpar seleção</button>
+      </span>
+    </div>
+  </div>
+
   <div data-pane="lucro" hidden>
     <div class="ph-actions" style="justify-content:flex-end;margin-bottom:var(--s3)">
       <div class="seg" id="perL">
@@ -264,6 +476,17 @@
   <div class="lucro-lista" id="parado"></div>
   </div>
 </div>
+
+<!-- Uma venda: tudo dela, as contas, conferir e corrigir -->
+<dialog id="dlgVenda">
+  <div class="dv-head">
+    <button class="nb" id="dvAnt" type="button" aria-label="venda anterior" title="Anterior (←)">‹</button>
+    <div class="tit"><h3 id="dvCode">Venda</h3><span class="meta" id="dvPos"></span></div>
+    <button class="nb" id="dvProx" type="button" aria-label="próxima venda" title="Próxima (→)">›</button>
+    <button class="nb" id="dvFechar" type="button" aria-label="fechar" autofocus>✕</button>
+  </div>
+  <div class="dv" id="dvCorpo"></div>
+</dialog>
 
 <!-- Lançamento -->
 <dialog id="dlg">
@@ -423,7 +646,7 @@ function movimentacoes(){
   mov.innerHTML=lista.length?lista.map(e=>{
     const inn=e.type==='receita',cli=nomeDe(e.cliente);
     const extra=[ORIGEM_MOV(e),e.forma,e.vendedor?'vendeu: '+e.vendedor.split(' ')[0]:''].filter(Boolean).map(esc).join(' · ');
-    return `<div class="m"><div class="l">
+    return `<div class="m${e.venda_id?' abre':''}"${e.venda_id?` data-venda="${e.venda_id}" title="Abrir a venda"`:''}><div class="l">
       <span class="ico-box ${inn?'brand':'crit'}" style="width:30px;height:30px">${ICO(inn?'subiu':'desceu',15)}</span>
       <span class="txt"><span class="d">${esc(e.description||e.category)}</span>
         ${e.venda_id?`<span class="cli">${cli?esc(cli):'<span style="color:var(--ink-3);font-weight:600">sem cliente</span>'}</span>`:''}
@@ -431,6 +654,7 @@ function movimentacoes(){
       </div><span class="rt"><span class="r ${inn?'in':'out'}">${inn?'+':'−'} ${BRL(e.amount)}</span>
       ${e.ref?'':`<button class="ib" data-del="${e.id}" type="button" aria-label="apagar">${ICO('lixeira',15)}</button>`}</span></div>`;
   }).join(''):vazio('recibo',q?'Nada encontrado':'Sem lançamentos',q?'Confira o nome ou o código.':'Nada movimentado neste período.');
+  mov.querySelectorAll('[data-venda]').forEach(x=>x.onclick=(ev)=>{if(!ev.target.closest('[data-del]'))abrirVendaFin(+x.dataset.venda);});
   mov.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Apagar este lançamento?'))return;
     await api('/api/financial/entry/'+b.dataset.del,{method:'DELETE'});load();});
@@ -694,11 +918,17 @@ document.getElementById('perL').onclick=e=>{
   b.classList.add('sel');diasL=parseInt(b.dataset.d,10);carregarLucro();
 };
 
-document.querySelectorAll('.aba').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('.aba').forEach(x=>x.classList.toggle('on',x===b));
-  document.querySelectorAll('[data-pane]').forEach(x=>{x.hidden=x.dataset.pane!==b.dataset.t;});
-  if(b.dataset.t==='lucro'&&!lucroCarregado){lucroCarregado=true;carregarLucro();}
-});
+function abrirAba(t){
+  document.querySelectorAll('.aba').forEach(x=>x.classList.toggle('on',x.dataset.t===t));
+  document.querySelectorAll('[data-pane]').forEach(x=>{x.hidden=x.dataset.pane!==t;});
+  // Hoje/Mês/Tudo do topo é do Caixa; Vendas e Lucro têm o período delas.
+  document.getElementById('per').style.visibility=t==='caixa'?'':'hidden';
+  if(t==='lucro'&&!lucroCarregado){lucroCarregado=true;carregarLucro();}
+  if(t==='vendas')mostrarVendas();
+  history.replaceState(null,'',t==='caixa'?location.pathname.replace(/^\/vendas/,'/financeiro'):'#'+t);
+}
+document.querySelectorAll('.aba').forEach(b=>b.onclick=()=>abrirAba(b.dataset.t));
 </script>
+<script src="/financeiro-vendas.js"></script>
 </body>
 </html>

@@ -27,7 +27,7 @@ export const LEITURAS = [
   ['/api/health', 'Modo (ao vivo/demonstração) e tamanho do catálogo'],
   ['/api/connection', 'Conexão com a Nuvemshop: permissão do app e se gravar estoque funciona'],
   ['/api/dashboard', 'Números de hoje: vendas, margem, fiado, estoque baixo'],
-  ['/api/vendas', 'Vendas para achar e conferir (/api/vendas?q=&dias=); /api/vendas/:id traz itens e trocas'],
+  ['/api/vendas', 'Vendas para achar e conferir (/api/vendas?q=&dias=); /api/vendas/:id traz itens, trocas, dinheiro, lucro e histórico; /api/vendas/conferencia?de=&ate= traz todas do período (aba Vendas do Financeiro)'],
   ['/api/operacao', 'O que precisa de ação agora (pedidos do site, fiado, encomendas)'],
   ['/api/sales-series', 'Vendas por dia (gráfico)'],
   ['/api/products', 'Variações à venda (como o PDV vê)'],

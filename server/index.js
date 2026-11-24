@@ -1748,11 +1748,20 @@ app.post('/api/sales/:id/vendedor', (req, res) => {
     if (mid && !m) return res.status(400).json({ error: 'Pessoa não encontrada na equipe.' });
   }
   db.transaction(() => {
+    const quem = quemFez(req);
     if ('seller_id' in b) {
       db.prepare('UPDATE sales SET seller_id = ?, seller_name = ? WHERE id = ?').run(m ? m.id : null, m ? m.name : null, s.id);
       if (s.atendimento_id) db.prepare('UPDATE atendimentos SET member_id = ? WHERE id = ?').run(m ? m.id : null, s.atendimento_id);
+      if ((m ? m.id : null) !== (s.seller_id || null)) anotarNaVenda(s.id, 'vendedor', `vendedor ${s.seller_name || 'loja'} → ${m ? m.name : 'loja'}`, quem);
     }
-    if (b.canal !== undefined) db.prepare('UPDATE sales SET canal = ? WHERE id = ?').run(b.canal, s.id);
+    if (b.canal !== undefined) {
+      db.prepare('UPDATE sales SET canal = ? WHERE id = ?').run(b.canal, s.id);
+      if (b.canal !== (s.canal || 'balcao')) anotarNaVenda(s.id, 'canal', `${CANAL_NOME[s.canal || 'balcao']} → ${CANAL_NOME[b.canal]}`, quem);
+    }
+    if (nova && nova.ts !== s.created_at) {
+      anotarNaVenda(s.id, 'data', `data ${diaBR(diaLocal(new Date(s.created_at)))} → ${diaBR(nova.dia)}`, quem);
+      desconferir(s.id, 'a data da venda mudou');
+    }
     if (nova) {
       db.prepare('UPDATE sales SET created_at = ?, paid_at = CASE WHEN paid_at = created_at THEN ? ELSE paid_at END WHERE id = ?')
         .run(nova.ts, nova.ts, s.id);
@@ -1783,6 +1792,27 @@ app.post('/api/sales/:id/vendedor', (req, res) => {
 // Nuvemshop (o sistema acompanha sozinho); aqui, só o cliente.
 const entradasDaVenda = (code) => db.prepare(`SELECT * FROM financial_entries
   WHERE ref = ? AND type = 'receita' AND (description = ? OR description = ?) ORDER BY id`).all(code, `Venda PDV ${code}`, `Recebimento ${code}`);
+
+// ---- Histórico e conferência de cada venda ----
+// Quem fez: o vendedor logado (pelo nome), o agente ou o dono.
+const quemFez = (req) => (req.quem && req.quem.papel === 'vendedor' ? req.quem.nome : (req.agente ? 'Claude' : 'dono'));
+const reais = (n) => 'R$ ' + money(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const diaBR = (dia) => dia.split('-').reverse().join('/');
+const CANAL_NOME = { balcao: 'balcão', whatsapp: 'WhatsApp', instagram: 'Instagram' };
+const anotarNaVenda = (saleId, tipo, texto, quem) => db.prepare(`INSERT INTO venda_historico
+  (sale_id, tipo, texto, quem, created_at) VALUES (?,?,?,?,?)`).run(saleId, tipo, String(texto).slice(0, 1000), quem || null, now());
+// A venda mudou depois de conferida: a marca sai e o motivo fica no
+// histórico — o dono vê na lista que precisa conferir de novo.
+function desconferir(saleId, porque) {
+  const r = db.prepare('UPDATE sales SET conferida_em = NULL WHERE id = ? AND conferida_em IS NOT NULL').run(saleId);
+  if (r.changes) anotarNaVenda(saleId, 'conferida', `Saiu de "conferida": ${porque}. Confira de novo.`, 'sistema');
+}
+// Frete do pedido do site (JSON de sales.ns_valores). O total do pedido
+// inclui o frete, que não é dinheiro da loja: vai para a transportadora.
+// Conta o maior entre o que o cliente pagou e o que a loja pagou (frete
+// grátis: o cliente paga zero e a loja paga o frete).
+const valoresDoSite = (txt) => { try { return txt ? JSON.parse(txt) : null; } catch (_) { return null; } };
+const freteDaVenda = (ns) => (ns ? money(Math.max(Number(ns.frete_cliente) || 0, Number(ns.frete_loja) || 0)) : 0);
 
 app.put('/api/sales/:id', async (req, res) => {
   const s = db.prepare('SELECT * FROM sales WHERE id = ?').get(req.params.id);
@@ -1890,7 +1920,33 @@ app.put('/api/sales/:id', async (req, res) => {
   const mexidas = new Set();
   const antesTotal = s.total, antesStatus = s.payment_status;
 
+  // O que mudou, em palavras, para o histórico da venda.
+  const mudou = [];
+  if (linhas) {
+    for (const id of new Set([...antes.keys(), ...novas.keys()])) {
+      const n = novas.get(id), a = antes.get(id);
+      const nome = n ? `${n.v.product_name} ${n.v.variant_name || ''}`.trim() : ((atuais.find((i) => i.variant_id === id) || {}).name || 'peça');
+      const qa = a ? a.qty : 0, qn = n ? n.qty : 0;
+      if (qn !== qa) mudou.push(`${qn > qa ? '+' : '−'}${Math.abs(qn - qa)} ${nome}`);
+      if (a && n && Math.abs(a.unit_price - n.preco) >= 0.005) mudou.push(`${nome}: ${reais(a.unit_price)} → ${reais(n.preco)}`);
+    }
+  }
+  if (Math.abs(descontoNovo - s.discount) >= 0.005) mudou.push(`desconto ${reais(s.discount)} → ${reais(descontoNovo)}`);
+  if (statusNovo !== s.payment_status) mudou.push(statusNovo === 'pago' ? 'fiado → pago' : 'pago → fiado');
+  if ((formaNova || '') !== (s.payment_method || '')) mudou.push(`forma ${s.payment_method || '—'} → ${formaNova || '—'}`);
+  if ((cliente.id || null) !== (s.customer_id || null) || (cliente.nome || '') !== (s.customer_name || '')) {
+    mudou.push(`cliente ${s.customer_name || 'sem cliente'} → ${cliente.nome || 'sem cliente'}`);
+  }
+  if ((vendedor.id || null) !== (s.seller_id || null)) mudou.push(`vendedor ${s.seller_name || 'loja'} → ${vendedor.nome || 'loja'}`);
+  if (canal !== (s.canal || 'balcao')) mudou.push(`${CANAL_NOME[s.canal || 'balcao']} → ${CANAL_NOME[canal]}`);
+  if (quando.ts !== s.created_at) mudou.push(`data ${diaBR(diaLocal(new Date(s.created_at)))} → ${diaBR(quando.dia)}`);
+  if (Math.abs(total - s.total) >= 0.005) mudou.push(`total ${reais(s.total)} → ${reais(total)}`);
+  const mexeuNoDinheiro = Boolean(linhas) || Math.abs(total - s.total) >= 0.005 || statusNovo !== s.payment_status
+    || (formaNova || '') !== (s.payment_method || '') || quando.ts !== s.created_at;
+
   db.transaction(() => {
+    if (mudou.length) anotarNaVenda(s.id, 'edicao', mudou.join(' · '), quemFez(req));
+    if (mexeuNoDinheiro) desconferir(s.id, 'a venda foi editada');
     if (linhas) {
       db.prepare('DELETE FROM sale_items WHERE sale_id = ?').run(s.id);
       const ins = db.prepare(`INSERT INTO sale_items (sale_id, variant_id, name, qty, unit_price, unit_cost, line_total, encomenda) VALUES (?,?,?,?,?,?,?,?)`);
@@ -1954,6 +2010,10 @@ app.post('/api/sales/:id/cliente', (req, res) => {
   } else {
     db.prepare('UPDATE sales SET customer_id = ?, customer_name = ? WHERE id = ?').run(c ? c.id : null, c ? c.name : '', s.id);
   }
+  if ((c ? c.id : null) !== (s.customer_id || null)) {
+    anotarNaVenda(s.id, 'cliente', c ? `cliente ${s.customer_name || 'sem cliente'} → ${c.name}`
+      : 'cliente tirado da venda' + (s.channel === 'site' ? ' (volta o do pedido na próxima leitura da loja)' : ''), quemFez(req));
+  }
   res.json({ ok: true, customer_id: c ? c.id : null, customer_name: c ? c.name : null });
 });
 
@@ -1974,6 +2034,8 @@ app.post('/api/sales/:id/settle', (req, res) => {
     db.prepare("UPDATE sales SET payment_status='pago', paid_at=?, payment_method=? WHERE id=?").run(ts, method, s.id);
     db.prepare(`INSERT INTO financial_entries (type, category, category_id, description, amount, ref, forma, created_at)
       VALUES ('receita',?,?,?,?,?,?,?)`).run(cat, categoryId(cat, 'receita'), `Recebimento ${s.code}`, s.total, s.code, method, ts);
+    anotarNaVenda(s.id, 'recebido', `fiado recebido: ${reais(s.total)}${method ? ' em ' + method : ''}`, quemFez(req));
+    desconferir(s.id, 'o fiado foi recebido');
   })();
   res.json({ ok: true, code: s.code, total: s.total });
 });
@@ -2035,6 +2097,7 @@ app.post('/api/sales/:id/cancelar', async (req, res) => {
     // Só devolve o que entrou: fiado cancelado não tinha entrado no caixa.
     if (estorno) lancarNoCaixa(-estorno, `Cancelamento ${s.code}${motivo ? ' · ' + motivo : ''}`, s.code, forma, ts);
     db.prepare("UPDATE sales SET payment_status = 'cancelado', cancelado_em = ?, cancel_motivo = ? WHERE id = ?").run(ts, motivo, s.id);
+    desconferir(s.id, 'a venda foi cancelada');
     if (s.atendimento_id) {
       db.prepare(`UPDATE atendimentos SET stage = 'perdido', motivo = 'venda cancelada', updated_at = ?
         WHERE id = ? AND stage = 'vendido'`).run(ts, s.atendimento_id);
@@ -2117,6 +2180,7 @@ app.post('/api/sales/:id/troca', async (req, res) => {
     }
     const pecas = leva.reduce((t, x) => t + x.q, 0) - volta.reduce((t, x) => t + x.q, 0);
     db.prepare('UPDATE sales SET total = ROUND(total + ?, 2), items_count = items_count + ? WHERE id = ?').run(diferenca, pecas, s.id);
+    desconferir(s.id, 'teve troca');
     recalcularCusto.run(s.id);
     // Fiado: a diferença muda o que o cliente deve, sem passar pelo caixa.
     if (pago && diferenca !== 0) {
@@ -2154,10 +2218,88 @@ app.get('/api/vendas/ultimas', (req, res) => {
     WHERE channel = 'pdv' AND payment_status <> 'cancelado' AND created_at >= ?`).get(inicioDoDia(diaLocal()));
   res.json({ hoje: { n: hoje.n, total: money(hoje.total) }, vendas });
 });
+// ==================== VENDAS NO FINANCEIRO ====================
+// Todas as vendas de um período (PDV e site, inclusive canceladas e pix
+// do site esperando pagamento), com o que o dono precisa para conferir e
+// fazer as contas: cliente, vendedor, forma, peças, desconto, frete, custo,
+// lucro, se já foi conferida, editada, trocada. Os filtros e as somas são
+// feitos na tela; "conta" diz se a venda entra nas somas (regra VENDA, no
+// topo deste arquivo) e "fiado" se é dinheiro a receber (regra FIADO).
+const diaSeguinte = (dia) => diaLocal(new Date(new Date(inicioDoDia(dia)).getTime() + 36 * 3600e3));
+app.get('/api/vendas/conferencia', (req, res) => {
+  const ehDia = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+  const hoje = diaLocal();
+  let ate = ehDia(req.query.ate) ? req.query.ate : hoje;
+  let de = ehDia(req.query.de) ? req.query.de : mesLocal() + '-01';
+  if (de > ate) [de, ate] = [ate, de];
+  // Até um ano e pouco de uma vez: mais do que isso a tela fica pesada.
+  const minimo = diaLocal(new Date(new Date(inicioDoDia(ate)).getTime() - 400 * 864e5));
+  if (de < minimo) de = minimo;
+  const LIMITE = 5000;
+  const rows = db.prepare(`SELECT s.id, s.code, s.channel, s.origem, s.canal, s.created_at, s.customer_id, s.customer_name,
+      s.seller_name, s.payment_method, s.payment_status, s.subtotal, s.discount, s.total, s.cost_total, s.items_count,
+      s.cancelado_em, s.conferida_em, s.obs, s.ns_valores, s.ns_shipping_type,
+      (SELECT COUNT(*) FROM trocas t WHERE t.sale_id = s.id) trocas,
+      (SELECT COUNT(*) FROM venda_historico h WHERE h.sale_id = s.id AND h.tipo IN ('edicao','data')) editada,
+      (SELECT GROUP_CONCAT(i.name, ' · ') FROM sale_items i WHERE i.sale_id = s.id AND i.qty > 0) pecas,
+      (SELECT ROUND(COALESCE(SUM(fe.amount),0),2) FROM financial_entries fe WHERE fe.ref = s.code AND fe.type = 'receita') no_caixa,
+      EXISTS(SELECT 1 FROM sale_items i WHERE i.sale_id = s.id AND i.qty > 0 AND COALESCE(i.unit_cost,0) <= 0) sem_custo,
+      NOT EXISTS(SELECT 1 FROM sale_items i WHERE i.sale_id = s.id) sem_pecas,
+      CASE WHEN ${VENDA('s.')} THEN 1 ELSE 0 END conta,
+      CASE WHEN ${FIADO('s.')} THEN 1 ELSE 0 END fiado
+    FROM sales s WHERE s.created_at >= ? AND s.created_at < ?
+    ORDER BY s.created_at DESC, s.id DESC LIMIT ${LIMITE}`).all(inicioDoDia(de), inicioDoDia(diaSeguinte(ate)));
+  for (const r of rows) {
+    const ns = valoresDoSite(r.ns_valores);
+    delete r.ns_valores;
+    r.frete = freteDaVenda(ns);
+    r.cupom = ns && Array.isArray(ns.cupons) && ns.cupons.length ? ns.cupons.join(', ') : null;
+    // Desconto dado: o do PDV, ou o do pedido do site (cupom, pagamento).
+    r.desconto = r.channel === 'site' ? (ns ? money(ns.desconto) : 0) : r.discount;
+    // Lucro da venda: o que o cliente pagou, menos o frete, menos o custo
+    // das peças (o custo de cada peça na hora da venda).
+    r.lucro = r.payment_status === 'cancelado' ? 0 : money(r.total - r.frete - r.cost_total);
+  }
+  res.json({ de, ate, hoje, vendas: rows, limite: rows.length >= LIMITE ? LIMITE : null });
+});
+
+// Conferir: marca (ou desmarca) uma ou várias vendas de uma vez — por
+// exemplo, todas as de pix do dia que bateram com o extrato do banco.
+app.post('/api/vendas/conferir', (req, res) => {
+  const b = req.body || {};
+  const ids = [...new Set((Array.isArray(b.ids) ? b.ids : [b.id]).map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 5000);
+  if (!ids.length) return res.status(400).json({ error: 'Escolha a venda.' });
+  const marcar = b.conferida !== false;
+  const ts = now(), quem = quemFez(req);
+  const marca = db.prepare('UPDATE sales SET conferida_em = ? WHERE id = ? AND conferida_em IS NULL');
+  const tira = db.prepare('UPDATE sales SET conferida_em = NULL WHERE id = ? AND conferida_em IS NOT NULL');
+  let alteradas = 0;
+  db.transaction(() => {
+    for (const id of ids) {
+      const r = marcar ? marca.run(ts, id) : tira.run(id);
+      if (r.changes) { alteradas += 1; anotarNaVenda(id, 'conferida', marcar ? 'conferida' : 'desmarcada como conferida', quem); }
+    }
+  })();
+  res.json({ ok: true, alteradas, conferida_em: marcar ? ts : null });
+});
+
+// Observação do dono na venda (PDV ou site). A leitura da loja não mexe.
+app.post('/api/sales/:id/obs', (req, res) => {
+  const s = db.prepare('SELECT id, obs FROM sales WHERE id = ?').get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Venda não encontrada.' });
+  const obs = String((req.body || {}).obs || '').trim().slice(0, 500);
+  if (obs === (s.obs || '')) return res.json({ ok: true, obs });
+  db.prepare('UPDATE sales SET obs = ? WHERE id = ?').run(obs || null, s.id);
+  anotarNaVenda(s.id, 'obs', obs ? `observação: ${obs}` : 'observação apagada', quemFez(req));
+  res.json({ ok: true, obs });
+});
+
 app.get('/api/vendas/:id', (req, res) => {
   const s = db.prepare('SELECT * FROM sales WHERE id = ?').get(req.params.id);
   if (!s) return res.status(404).json({ error: 'Venda não encontrada.' });
   delete s.ns_origem;
+  const ns = valoresDoSite(s.ns_valores);
+  delete s.ns_valores;
   // Com o estoque e o preço de cada peça agora: é o que o PDV usa para
   // editar a venda (até quanto dá para aumentar, qual o preço de lista).
   const itens = db.prepare(`SELECT i.*, v.variant_name, v.product_name, p.image_url, p.brand,
@@ -2173,6 +2315,39 @@ app.get('/api/vendas/:id', (req, res) => {
   s.itens = itens;
   s.trocas = db.prepare('SELECT * FROM trocas WHERE sale_id = ? ORDER BY id').all(s.id);
   s.pode_mexer = s.channel !== 'site' && s.payment_status !== 'cancelado';
+  // O resto é do Financeiro: dinheiro, lucro, comissão e o histórico. O
+  // vendedor vê a venda para trocar, sem isso.
+  if (req.quem && req.quem.papel === 'vendedor') {
+    for (const i of itens) delete i.unit_cost;
+    delete s.cost_total; delete s.margin; delete s.obs; delete s.conferida_em;
+    return res.json(s);
+  }
+  s.ns = ns;
+  s.frete = freteDaVenda(ns);
+  s.conta = Boolean(db.prepare(`SELECT 1 FROM sales WHERE id = ? AND ${SQL_VENDA}`).get(s.id));
+  s.fiado = Boolean(db.prepare(`SELECT 1 FROM sales WHERE id = ? AND ${FIADO()}`).get(s.id));
+  s.lucro = s.payment_status === 'cancelado' ? 0 : money(s.total - s.frete - s.cost_total);
+  s.sem_custo = itens.some((i) => i.qty > 0 && !(i.unit_cost > 0));
+  // Cada dinheiro que entrou ou saiu por esta venda: a venda, o fiado
+  // recebido, a diferença de troca, o estorno do cancelamento.
+  s.entradas = db.prepare(`SELECT id, type, category, description, amount, forma, created_at
+    FROM financial_entries WHERE ref = ? ORDER BY created_at, id`).all(s.code);
+  s.no_caixa = money(s.entradas.filter((e) => e.type === 'receita').reduce((t, e) => t + e.amount, 0));
+  s.historico = db.prepare('SELECT tipo, texto, quem, created_at FROM venda_historico WHERE sale_id = ? ORDER BY id').all(s.id);
+  // O que esta venda fez no estoque daqui (o pedido do site baixa o estoque
+  // lá na Nuvemshop; aqui só aparece o par sob encomenda que saiu da loja).
+  s.estoque = db.prepare(`SELECT m.delta, m.reason, m.created_at, v.product_name, v.variant_name
+    FROM stock_movements m LEFT JOIN variants v ON v.id = m.variant_id WHERE m.ref = ? ORDER BY m.id`).all(s.code);
+  // Comissão desta venda: só balcão, só o que entrou no caixa (a regra de
+  // comissaoDoMes). Fiado gera comissão quando o dinheiro entra.
+  const m = s.seller_id ? db.prepare('SELECT name, commission_pct FROM team_members WHERE id = ?').get(s.seller_id) : null;
+  const balcao = s.channel !== 'site' && (s.canal || 'balcao') === 'balcao';
+  s.comissao = m && balcao && m.commission_pct > 0
+    ? { nome: m.name, pct: m.commission_pct, base: s.no_caixa, valor: money((s.no_caixa * m.commission_pct) / 100) }
+    : { nome: m ? m.name : s.seller_name, pct: m ? m.commission_pct : 0, base: 0, valor: 0,
+      porque: s.channel === 'site' ? 'pedido do site não gera comissão'
+        : !s.seller_id ? 'venda da loja (sem vendedor)'
+          : !balcao ? 'venda pela internet não gera comissão (regra da loja)' : 'sem % de comissão cadastrada na Equipe' };
   res.json(s);
 });
 
@@ -4174,6 +4349,25 @@ const camposDeOrigem = (o) => ({
     ? (o.shipping_option.name || null) : (o.shipping_option ?? null),
   pickup: o.shipping_pickup_type ?? null,
 });
+// Os valores do pedido que não cabem nas colunas da venda: soma das peças,
+// descontos (cupom, pagamento, promoção), frete (do cliente e da loja),
+// cupom e forma de envio. A aba Vendas do Financeiro mostra a conta
+// inteira do pedido com isso (sales.ns_valores).
+function valoresDoPedido(o) {
+  const n = (x) => money(parseFloat(x) || 0);
+  const promo = o.promotional_discount && typeof o.promotional_discount === 'object' ? n(o.promotional_discount.total_discount_amount) : 0;
+  const envio = o.shipping_option && typeof o.shipping_option === 'object' ? o.shipping_option.name : o.shipping_option;
+  return JSON.stringify({
+    pecas: n(o.subtotal), desconto: n(o.discount), desconto_cupom: n(o.discount_coupon),
+    desconto_pagamento: n(o.discount_gateway), desconto_promocao: promo,
+    frete_cliente: n(o.shipping_cost_customer), frete_loja: n(o.shipping_cost_owner),
+    cupons: Array.isArray(o.coupon) ? o.coupon.map((c) => c && (c.code || c.name)).filter(Boolean).map(String) : [],
+    pagamento: o.gateway_name || o.gateway || null,
+    envio: envio ? String(envio).slice(0, 120) : null,
+    rastreio: o.shipping_tracking_number ? String(o.shipping_tracking_number).slice(0, 80) : null,
+    nota_cliente: o.note ? String(o.note).slice(0, 500) : null,
+  });
+}
 const origemDoPedido = (c) => (/^(pos|point[\s_-]?of[\s_-]?sale|pdv)$/i.test(String(c.storefront || '')) ? 'balcao' : 'site');
 const RECEITA = {
   site: { categoria: 'Venda Site', descricao: 'Venda no site' },
@@ -4252,7 +4446,8 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
     }
   }
 
-  const achar = db.prepare('SELECT id, payment_status, fin_posted, estoque_baixado FROM sales WHERE nuvemshop_order_id = ?');
+  const achar = db.prepare('SELECT id, payment_status, total, fin_posted, estoque_baixado FROM sales WHERE nuvemshop_order_id = ?');
+  const gravarValores = db.prepare('UPDATE sales SET ns_valores = ? WHERE id = ?');
   const insSale = db.prepare(`INSERT INTO sales (code, channel, nuvemshop_order_id, customer_id, ns_customer_id, customer_name, payment_method,
       payment_status, paid_at, subtotal, discount, total, cost_total, margin, synced_nuvemshop, created_at,
       ns_payment_status, ns_shipping_status, ns_status, ns_shipping_type, items_count, fin_posted)
@@ -4397,6 +4592,7 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
           nsPay, nsShip, nsStat, retirada ? 'retirada' : 'envio', nItens, 0).lastInsertRowid;
         novos += 1;
         gravarOrigem.run(origem, JSON.stringify(infoOrigem), id);
+        gravarValores.run(valoresDoPedido(o), id);
         gravarItens(id, o);
         if (quando >= desdeBaixa) {
           mexidos.push(id);
@@ -4410,6 +4606,11 @@ async function sincronizarPedidos(dias = JANELA_PEDIDOS_DIAS) {
         db.prepare('UPDATE sales SET customer_id = CASE WHEN cliente_manual = 1 THEN customer_id ELSE ? END, ns_customer_id = ? WHERE id = ?').run(cliId, nsCli, ex.id);
         atualizados += 1;
         gravarOrigem.run(origem, JSON.stringify(infoOrigem), ex.id);
+        gravarValores.run(valoresDoPedido(o), ex.id);
+        // Pagou, foi cancelado ou mudou de valor na loja depois de conferido.
+        if (ex.payment_status !== nosso || Math.abs((ex.total || 0) - total) >= 0.005) {
+          desconferir(ex.id, ex.payment_status !== nosso ? `o pedido mudou na loja (${ex.payment_status} → ${nosso})` : 'o valor do pedido mudou na loja');
+        }
         gravarItens(ex.id, o);
         if (quando >= desdeBaixa) {
           if (ex.payment_status !== nosso) mexidos.push(ex.id);
@@ -5023,6 +5224,7 @@ app.get('/funil', page('clientes.html'));
 app.get('/produtos', page('produtos.html'));
 app.get('/estoque', page('produtos.html'));
 app.get('/financeiro', page('financeiro.html'));
+app.get('/vendas', page('financeiro.html'));     // abre na aba Vendas
 app.get('/negocio', page('negocio.html'));
 app.get('/agentes', page('agentes.html'));
 app.get('/lembretes', page('index.html'));   // virou o painel do Início
