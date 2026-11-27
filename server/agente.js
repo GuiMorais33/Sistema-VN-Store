@@ -45,6 +45,7 @@ export const LEITURAS = [
   ['/api/pipeline', 'Funil resumido'],
   ['/api/team', 'Equipe (sem o PIN: só se a pessoa tem acesso)'],
   ['/api/metas', 'Metas do mês e quanto cada um vendeu'],
+  ['/api/ponto', 'Ponto da equipe: a que horas cada um chegou e saiu, dias trabalhados e diárias a pagar (?de=&ate=)'],
   ['/api/comissoes', 'Comissão do mês de cada vendedor: base, devido, pago, a pagar (?ym=AAAA-MM)'],
   ['/api/sonhos', 'Sonho → meta de cada vendedor'],
   ['/api/financial', 'Financeiro do mês: entradas, saídas, a pagar, a receber'],

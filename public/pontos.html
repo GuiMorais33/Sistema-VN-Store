@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070907">
+<title>VN Store — Ponto</title>
+<link rel="icon" href="/logo.webp">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .agora{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:var(--s3)}
+  .pc{padding:var(--s4);display:flex;flex-direction:column;gap:6px}
+  .pc .n{font-weight:800;font-size:15px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .pc .st{font-size:13px;color:var(--ink-2)}
+  .pc .st b{font-family:var(--font-mono);color:var(--ink)}
+  .pc .sub{font-size:11.5px;color:var(--ink-3)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--line-str);display:inline-block}
+  .dot.on{background:var(--ok);box-shadow:0 0 10px rgba(53,192,138,.6)}
+  .tg{font-size:10px;font-weight:800;letter-spacing:.3px;padding:2px 7px;border-radius:999px;border:1px solid var(--line);color:var(--ink-3);white-space:nowrap}
+  .tg.ok{color:var(--ok);border-color:rgba(53,192,138,.42)}
+  .tg.warn{color:var(--warn);border-color:rgba(232,163,23,.42)}
+  .tg.crit{color:var(--crit);border-color:rgba(242,86,74,.42)}
+  .tg.info{color:var(--brand-hi);border-color:rgba(47,210,79,.35)}
+  .pagar{display:flex;flex-direction:column;gap:6px}
+  .pg{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--line);
+    border-radius:var(--r);background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+  .pg .v{font-family:var(--font-mono);font-weight:700;font-size:18px;color:var(--warn)}
+  .pg .s{font-size:12px;color:var(--ink-3);margin-top:2px}
+  .pg .hist{font-size:11.5px;color:var(--ink-3);margin-top:6px}
+  .pg .hist button{background:none;border:none;color:var(--ink-3);text-decoration:underline;cursor:pointer;font-size:11.5px;padding:0 2px}
+  .bar{display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap;margin-bottom:var(--s3)}
+  .seg{display:inline-flex;gap:3px;background:var(--bg-elev);border:1px solid var(--line);border-radius:10px;padding:3px;max-width:100%;overflow-x:auto}
+  .seg button{padding:6px 12px;border-radius:8px;border:none;background:none;color:var(--ink-3);font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:var(--font-body)}
+  .seg button.sel{background:rgba(47,210,79,.13);color:var(--brand-hi)}
+  .vf-d{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-3);font-weight:700;text-transform:uppercase}
+  .vf-d input{width:auto;padding:7px 9px;font-size:13px}
+  .pessoa{padding:var(--s4);margin-bottom:var(--s3)}
+  .pessoa .cab{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--s3);flex-wrap:wrap}
+  .pessoa h3{margin:0;font-size:16px}
+  .pessoa .res{font-size:12.5px;color:var(--ink-2);margin-top:4px;display:flex;gap:6px 14px;flex-wrap:wrap}
+  .pessoa .res b{font-family:var(--font-mono);color:var(--ink)}
+  .dias{margin-top:var(--s3);display:flex;flex-direction:column;gap:4px}
+  .dl{display:grid;grid-template-columns:118px 74px 74px 70px minmax(0,1fr) 112px;gap:10px;align-items:center;padding:8px 10px;
+    border:1px solid var(--line-soft);border-radius:9px;background:var(--bg-elev);font-size:13px}
+  .dl.cab{background:none;border:none;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-3);font-weight:700;padding:0 10px}
+  .dl .d{font-weight:700}
+  .dl .h{font-family:var(--font-mono)}
+  .dl .h small{display:block;font-size:10.5px;color:var(--warn);font-weight:700}
+  .dl .mk{display:flex;gap:4px;flex-wrap:wrap}
+  .mk span{font-family:var(--font-mono);font-size:11px;padding:2px 6px 2px 7px;border-radius:7px;border:1px solid var(--line);color:var(--ink-2);display:inline-flex;gap:4px;align-items:center}
+  .mk span.e{border-color:rgba(47,210,79,.3)} .mk span.s{border-color:rgba(232,163,23,.35)}
+  .mk span.x{text-decoration:line-through;opacity:.5}
+  .mk span i{font-style:normal;font-family:var(--font-body);font-size:9.5px;font-weight:800;color:var(--ink-3)}
+  .mk span i.fora{color:var(--crit)} .mk span i.dono{color:var(--warn)}
+  .mk button{background:none;border:none;color:var(--ink-3);cursor:pointer;padding:0 0 0 2px;font-size:12px;line-height:1}
+  .mk button:hover{color:var(--crit)}
+  .dl .val{text-align:right}
+  .dl .val button{background:none;border:1px dashed var(--line-str);border-radius:8px;color:var(--ink);font-family:var(--font-mono);
+    font-weight:700;font-size:12.5px;padding:4px 8px;cursor:pointer}
+  .dl .val button:hover{border-color:var(--brand)}
+  .dl .val small{display:block;font-size:10px;color:var(--ink-3);margin-top:2px}
+  @media (max-width:760px){
+    .dl.cab{display:none}
+    .dl{grid-template-columns:1fr auto;gap:4px 10px}
+    .dl .d{grid-column:1}.dl .val{grid-column:2;grid-row:1/span 2}
+    .dl .hh{grid-column:1;display:flex;gap:10px;font-family:var(--font-mono);font-size:12.5px}
+    .dl .mk{grid-column:1/-1}
+    .dl>.h{display:none}
+  }
+  @media (min-width:761px){.dl .hh{display:none}}
+  .dlg{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3);min-width:min(400px,92vw)}
+  .dlg h3{margin:0;font-family:var(--font-disp);text-transform:uppercase;font-size:18px;transform:skewX(-5deg)}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+  .dlg-foot{display:flex;gap:var(--s2);justify-content:flex-end}
+  .aviso-ap{font-size:12px;color:var(--ink-3);line-height:1.45}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="pagehead">
+    <div><h1>Ponto</h1><div class="ph-sub">Quem chegou, a que horas · horas trabalhadas · diárias a pagar</div></div>
+    <div class="ph-actions">
+      <a class="btn ghost" href="/ponto" target="_blank" rel="noopener" id="abrir">Abrir a tela do ponto</a>
+      <button class="btn" id="aparelho" type="button">Este aparelho é o da loja</button>
+    </div>
+  </div>
+  <div class="aviso-ap" id="avisoAp"></div>
+
+  <div class="sec"><h2>Hoje</h2><span class="rule"></span><span class="meta" id="hojeMeta"></span></div>
+  <div class="agora" id="agora"><div class="sk" style="height:90px"></div></div>
+
+  <div class="sec"><h2>Diárias a pagar</h2><span class="rule"></span><span class="meta">todos os dias trabalhados ainda não pagos</span></div>
+  <div class="pagar" id="pagar"></div>
+
+  <div class="sec"><h2>Horários</h2><span class="rule"></span><span class="meta" id="perMeta"></span></div>
+  <div class="bar">
+    <div class="seg" id="per">
+      <button data-p="semana" class="sel" type="button">Esta semana</button>
+      <button data-p="semanaant" type="button">Semana passada</button>
+      <button data-p="mes" type="button">Este mês</button>
+      <button data-p="mesant" type="button">Mês passado</button>
+    </div>
+    <label class="vf-d">de <input type="date" id="de"></label>
+    <label class="vf-d">até <input type="date" id="ate"></label>
+  </div>
+  <div id="pessoas"></div>
+</div>
+
+<!-- Lançar uma marcação (a pessoa esqueceu) -->
+<dialog id="dlgMarca">
+  <form class="dlg" method="dialog">
+    <h3 id="mTit">Lançar marcação</h3>
+    <div class="g2">
+      <div class="field"><label>Dia</label><input id="mDia" type="date" required></div>
+      <div class="field"><label>Hora</label><input id="mHora" type="time" required></div>
+    </div>
+    <div class="field"><label>Tipo</label><select id="mTipo"><option value="entrada">Entrada (chegou)</option><option value="saida">Saída (foi embora)</option></select></div>
+    <div class="field"><label>Observação</label><input id="mObs" placeholder="ex.: esqueceu de marcar"></div>
+    <div class="dlg-foot"><button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn primary" id="mSalvar" value="ok" type="submit">Lançar</button></div>
+  </form>
+</dialog>
+
+<!-- Valor de um dia -->
+<dialog id="dlgValor">
+  <form class="dlg" method="dialog">
+    <h3 id="vTit">Valor do dia</h3>
+    <div class="aviso-ap" id="vInfo"></div>
+    <div class="field"><label>Valor (R$)</label><input id="vValor" type="number" step="0.01" min="0" inputmode="decimal" placeholder="vazio = a diária normal"></div>
+    <div class="field"><label>Por quê</label><input id="vObs" placeholder="ex.: meio período, ficou até mais tarde"></div>
+    <div class="dlg-foot"><button class="btn ghost" value="cancel" type="submit">Cancelar</button>
+      <button class="btn primary" id="vSalvar" value="ok" type="submit">Salvar</button></div>
+  </form>
+</dialog>
+
+<script src="/icons.js"></script>
+<script src="/nav.js"></script>
+<script>
+const BRL=(n)=>'R$ '+(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(p,o){const r=await fetch(p,o);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Erro '+r.status));return d;}
+const json=(c)=>({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c||{})});
+const vazio=(i,t,d)=>`<div class="empty">${ICO(i,28)}<div class="t">${t}</div><div class="d">${d||''}</div></div>`;
+const SEM=['dom','seg','ter','qua','qui','sex','sáb'];
+const diaBR=(d)=>{const [a,m,x]=d.split('-');return `${SEM[new Date(a,m-1,x).getDay()]}, ${x}/${m}`;};
+const curto=(d)=>d.split('-').reverse().slice(0,2).join('/');
+const horas=(h)=>{const t=Math.round(h*60);return `${Math.floor(t/60)}h${String(t%60).padStart(2,'0')}`;};
+const somaDias=(dia,n)=>{const d=new Date(dia+'T12:00:00');d.setDate(d.getDate()+n);return diaLocal(d);};
+const segunda=(dia)=>{const d=new Date(dia+'T12:00:00');return somaDias(dia,-((d.getDay()+6)%7));};
+const PER={
+  semana:()=>[segunda(diaLocal()),diaLocal()],
+  semanaant:()=>{const s=somaDias(segunda(diaLocal()),-7);return [s,somaDias(s,6)];},
+  mes:()=>[diaLocal().slice(0,8)+'01',diaLocal()],
+  mesant:()=>{const f=somaDias(diaLocal().slice(0,8)+'01',-1);return [f.slice(0,8)+'01',f];},
+};
+const ONDE={aparelho:['aparelho da loja','ok'],rede:['internet da loja','ok'],fora:['fora da loja','crit'],dono:['lançado pelo dono','warn']};
+let D=null;
+
+async function carregar(){
+  try{D=await api(`/api/ponto?de=${document.getElementById('de').value}&ate=${document.getElementById('ate').value}`);}
+  catch(e){document.getElementById('pessoas').innerHTML=vazio('alerta','Não deu para carregar',e.message);return;}
+  document.getElementById('de').value=D.de;document.getElementById('ate').value=D.ate;
+  aparelho();agora();pagar();pessoas();
+}
+
+function aparelho(){
+  const b=document.getElementById('aparelho');
+  b.innerHTML=D.aparelho_da_loja?`${ICO('ok',15)} Este é o aparelho da loja`:'Este aparelho é o da loja';
+  b.classList.toggle('primary',!D.aparelho_da_loja);
+  document.getElementById('avisoAp').innerHTML=D.aparelho_da_loja
+    ?'Marcações feitas neste aparelho — e nos celulares ligados na mesma internet — aparecem como <b>da loja</b>. O que for marcado de outro lugar aparece em vermelho, como <b>fora da loja</b>.'
+    :'Dica: abra esta página <b>no computador da loja</b> e toque em "Este aparelho é o da loja". Assim você vê quem marcou o ponto na loja e quem marcou de fora.';
+}
+document.getElementById('aparelho').onclick=async()=>{
+  const ja=D&&D.aparelho_da_loja;
+  if(ja&&!confirm('Este aparelho deixa de ser o da loja?'))return;
+  try{await api('/api/ponto/aparelho',json({loja:!ja}));carregar();}catch(e){alert(e.message);}
+};
+
+function agora(){
+  const hoje=D.hoje,lista=D.pessoas.filter(p=>p.ativo&&p.tem_pin);
+  const dentro=lista.filter(p=>p.hoje&&p.hoje.trabalhando).length;
+  document.getElementById('hojeMeta').textContent=lista.length?`${dentro} ${pl(dentro,'pessoa')} na loja agora`:'';
+  if(!lista.length){document.getElementById('agora').innerHTML=vazio('clientes','Ninguém bate ponto ainda',
+    'Em Equipe, crie o PIN de cada pessoa (e a diária de quem recebe por dia). Depois é só abrir a tela do ponto.');return;}
+  const agoraMin=(()=>{const d=new Date();return d.getHours()*60+d.getMinutes();})();
+  document.getElementById('agora').innerHTML=lista.map(p=>{
+    const h=p.hoje;let st,sub='',tag='';
+    if(h&&h.trabalhando){st=`Na loja desde <b>${h.chegada}</b>`;tag='<span class="dot on" title="na loja"></span>';}
+    else if(h&&h.chegada){st=`Chegou <b>${h.chegada}</b> · saiu <b>${h.saida||'—'}</b>`;sub=h.horas?horas(h.horas)+' trabalhadas':'';tag='<span class="dot"></span>';}
+    else{st='Ainda não marcou hoje';tag='<span class="dot"></span>';
+      if(p.chega_as){const [hh,mm]=p.chega_as.split(':').map(Number);if(agoraMin>hh*60+mm+5)sub=`<span style="color:var(--warn)">devia chegar às ${p.chega_as}</span>`;}}
+    const tags=[h&&h.atraso?`<span class="tg warn">atrasou ${h.atraso} min</span>`:'',h&&h.fora?'<span class="tg crit">marcou fora da loja</span>':''].filter(Boolean).join(' ');
+    return `<div class="card pc"><div class="n"><span>${esc(p.nome)}</span>${tag}</div><div class="st">${st}</div>
+      ${sub?`<div class="sub">${sub}</div>`:''}${tags?`<div>${tags}</div>`:''}</div>`;
+  }).join('');
+}
+
+function pagar(){
+  const box=document.getElementById('pagar');
+  const com=D.pessoas.filter(p=>p.a_pagar.valor>0||p.pagamentos.length);
+  if(!com.length){box.innerHTML=`<div class="aviso-ap">${D.pessoas.some(p=>p.diaria>0)?'Nada a pagar: todas as diárias estão em dia.'
+    :'Para o sistema calcular a diária, cadastre o valor do dia de quem recebe por dia em <a href="/equipe">Equipe</a> (campo "Diária").'}</div>`;return;}
+  box.innerHTML=com.map(p=>{
+    const a=p.a_pagar,n=a.dias.length;
+    const hist=p.pagamentos.slice(0,3).map(x=>`${curto(x.created_at.slice(0,10))}: ${BRL(x.valor)} (${x.dias} ${pl(x.dias,'dia')}) <button type="button" data-desf="${x.id}">desfazer</button>`).join(' · ');
+    return `<div class="pg"><div><div><b>${esc(p.nome)}</b>${p.diaria?` <span style="color:var(--ink-3);font-size:12px">· diária ${BRL(p.diaria)}</span>`:''}</div>
+      ${a.valor>0?`<div class="v">${BRL(a.valor)}</div><div class="s">${n} ${pl(n,'dia')} · ${n?`${curto(a.dias[0])}${n>1?' a '+curto(a.dias[n-1]):''}`:''}
+        ${a.sem_saida?` · <span style="color:var(--warn)">${a.sem_saida} ${pl(a.sem_saida,'dia')} sem saída marcada</span>`:''}</div>`:'<div class="s">Nada a pagar agora.</div>'}
+      ${hist?`<div class="hist">Pagamentos: ${hist}</div>`:''}</div>
+      ${a.valor>0?`<button class="btn primary" type="button" data-pagar="${p.id}">Pagar ${BRL(a.valor)}</button>`:''}</div>`;
+  }).join('');
+  box.querySelectorAll('[data-pagar]').forEach(b=>b.onclick=async()=>{
+    const p=D.pessoas.find(x=>x.id===+b.dataset.pagar),a=p.a_pagar;
+    if(!confirm(`Pagar ${BRL(a.valor)} de diárias para ${p.nome} (${a.dias.length} ${pl(a.dias.length,'dia')})?\n\nVira despesa "Diárias" no Financeiro e esses dias ficam como pagos.`))return;
+    b.disabled=true;
+    try{await api('/api/ponto/pagar',json({member_id:p.id,dias:a.dias}));carregar();}catch(e){alert(e.message);b.disabled=false;}
+  });
+  box.querySelectorAll('[data-desf]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Desfazer este pagamento? A despesa sai do Financeiro e os dias voltam a ficar a pagar.'))return;
+    try{await api('/api/ponto/pagamentos/'+b.dataset.desf,{method:'DELETE'});carregar();}catch(e){alert(e.message);}
+  });
+}
+
+function pessoas(){
+  document.getElementById('perMeta').textContent=`${curto(D.de)} a ${curto(D.ate)}`;
+  const box=document.getElementById('pessoas');
+  const lista=D.pessoas.filter(p=>p.dias.length||(p.ativo&&p.tem_pin));
+  if(!lista.length){box.innerHTML=vazio('relogio','Nenhuma marcação neste período','');return;}
+  box.innerHTML=lista.map(p=>{
+    const r=p.resumo;
+    const res=[`<span><b>${r.dias}</b> ${pl(r.dias,'dia')}</span>`,`<span><b>${horas(r.horas)}</b> trabalhadas</span>`,
+      r.atrasos?`<span style="color:var(--warn)">${r.atrasos} ${pl(r.atrasos,'atraso')}</span>`:'',
+      r.sem_saida?`<span style="color:var(--warn)">${r.sem_saida} sem saída</span>`:'',
+      r.fora?`<span style="color:var(--crit)">${r.fora} ${pl(r.fora,'dia')} com marcação fora da loja</span>`:'',
+      p.diaria||r.valor?`<span>diárias <b>${BRL(r.valor)}</b>${r.pago?` · pago ${BRL(r.pago)}`:''}</span>`:''].filter(Boolean).join('');
+    const linhas=p.dias.map(d=>{
+      const mk=d.marcas.map(m=>{const o=ONDE[m.onde]||['',''];
+        return `<span class="${m.apagado_em?'x':(m.tipo==='entrada'?'e':'s')}" title="${esc(m.apagado_em?'apagada: '+(m.apagado_motivo||''):(o[0]+(m.obs?' · '+m.obs:'')))}">
+          ${m.tipo==='entrada'?'↘':'↗'} ${m.hora}${m.onde==='fora'||m.onde==='dono'?` <i class="${m.onde}">${m.onde==='fora'?'fora':'dono'}</i>`:''}
+          ${m.apagado_em||d.pago?'':`<button type="button" data-apagar="${m.id}" aria-label="apagar">×</button>`}</span>`;}).join('');
+      const val=p.diaria||d.valor_mudado||d.valor?`<button type="button" data-valor="${p.id}|${d.dia}" ${d.pago?'disabled':''}>${BRL(d.pago?d.valor_pago:d.valor)}</button>
+        <small>${d.pago?'pago':d.valor_mudado?(esc(d.obs)||'valor mudado'):d.trabalhando?'trabalhando':'diária'}</small>`:'';
+      return `<div class="dl"><span class="d">${diaBR(d.dia)}</span>
+        <span class="h">${d.chegada||'—'}${d.atraso?`<small>+${d.atraso} min</small>`:''}</span>
+        <span class="h">${d.saida||(d.trabalhando?'…':d.aberto?'<small>sem saída</small>':'—')}</span>
+        <span class="h">${d.horas?horas(d.horas):'—'}</span>
+        <span class="hh">${d.chegada||'—'} → ${d.saida||(d.trabalhando?'…':'sem saída')} · ${d.horas?horas(d.horas):'—'}${d.atraso?` <span style="color:var(--warn)">+${d.atraso} min</span>`:''}</span>
+        <span class="mk">${mk}</span><span class="val">${val}</span></div>`;
+    }).join('');
+    return `<div class="card pessoa"><div class="cab"><div><h3>${esc(p.nome)}${p.ativo?'':' <span class="tg">saiu da equipe</span>'}</h3>
+        <div class="res">${res}</div></div>
+      <button class="btn sm ghost" type="button" data-marca="${p.id}">+ Lançar marcação</button></div>
+      ${p.dias.length?`<div class="dias"><div class="dl cab"><span>Dia</span><span>Chegou</span><span>Saiu</span><span>Horas</span><span>Marcações</span><span style="text-align:right">Valor do dia</span></div>${linhas}</div>`
+        :'<div class="aviso-ap" style="margin-top:8px">Nenhuma marcação neste período.</div>'}</div>`;
+  }).join('');
+  box.querySelectorAll('[data-marca]').forEach(b=>b.onclick=()=>abrirMarca(+b.dataset.marca));
+  box.querySelectorAll('[data-apagar]').forEach(b=>b.onclick=async()=>{
+    const motivo=prompt('Apagar esta marcação? Ela some das contas, mas fica à vista riscada.\n\nMotivo:','marcou errado');
+    if(motivo===null)return;
+    try{await api(`/api/ponto/${b.dataset.apagar}/apagar`,json({motivo}));carregar();}catch(e){alert(e.message);}
+  });
+  box.querySelectorAll('[data-valor]').forEach(b=>b.onclick=()=>{const [id,dia]=b.dataset.valor.split('|');abrirValor(+id,dia);});
+}
+
+let marcaDe=null;
+function abrirMarca(id){
+  marcaDe=D.pessoas.find(p=>p.id===id);
+  document.getElementById('mTit').textContent='Lançar marcação · '+marcaDe.nome.split(' ')[0];
+  document.getElementById('mDia').value=diaLocal();document.getElementById('mDia').max=diaLocal();
+  document.getElementById('mHora').value='';document.getElementById('mObs').value='';
+  document.getElementById('dlgMarca').showModal();
+}
+document.getElementById('mSalvar').onclick=async(e)=>{
+  const dia=document.getElementById('mDia').value,hora=document.getElementById('mHora').value;
+  if(!dia||!hora)return;
+  e.preventDefault();
+  try{await api('/api/ponto/manual',json({member_id:marcaDe.id,dia,hora,tipo:document.getElementById('mTipo').value,obs:document.getElementById('mObs').value}));
+    document.getElementById('dlgMarca').close();carregar();}catch(err){alert(err.message);}
+};
+let valorDe=null;
+function abrirValor(id,dia){
+  const p=D.pessoas.find(x=>x.id===id),d=p.dias.find(x=>x.dia===dia);
+  valorDe={id,dia};
+  document.getElementById('vTit').textContent=`${p.nome.split(' ')[0]} · ${diaBR(dia)}`;
+  document.getElementById('vInfo').innerHTML=`A diária normal é ${BRL(p.diaria)}. Mude só este dia (meia diária, um extra, ou 0). Deixe vazio para voltar ao normal.`;
+  document.getElementById('vValor').value=d&&d.valor_mudado?d.valor:'';
+  document.getElementById('vObs').value=d&&d.obs?d.obs:'';
+  document.getElementById('dlgValor').showModal();
+}
+document.getElementById('vSalvar').onclick=async(e)=>{
+  e.preventDefault();
+  try{await api('/api/ponto/dia',json({member_id:valorDe.id,dia:valorDe.dia,valor:document.getElementById('vValor').value,obs:document.getElementById('vObs').value}));
+    document.getElementById('dlgValor').close();carregar();}catch(err){alert(err.message);}
+};
+
+document.getElementById('per').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+  document.querySelectorAll('#per button').forEach(x=>x.classList.toggle('sel',x===b));
+  const [de,ate]=PER[b.dataset.p]();document.getElementById('de').value=de;document.getElementById('ate').value=ate;carregar();};
+for(const id of ['de','ate'])document.getElementById(id).onchange=()=>{document.querySelectorAll('#per button').forEach(x=>x.classList.remove('sel'));carregar();};
+{const [de,ate]=PER.semana();document.getElementById('de').value=de;document.getElementById('ate').value=ate;}
+carregar();
+// A tela fica aberta no balcão: atualiza sozinha a cada minuto.
+setInterval(()=>{if(!document.querySelector('dialog[open]'))carregar();},60000);
+</script>
+</body>
+</html>

@@ -551,6 +551,49 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_venda_hist ON venda_historico(sale_id)')
 // O dinheiro de cada venda (a aba Vendas soma por venda).
 db.exec('CREATE INDEX IF NOT EXISTS idx_fin_ref ON financial_entries(ref)');
 
+// ---- Ponto da equipe ----
+// Cada pessoa marca a entrada e a saída com o próprio PIN (tela /ponto).
+// É o que diz a que horas chegou, quanto tempo ficou e quantos dias
+// trabalhou — o freelancer recebe por dia (diária). Marcação apagada não
+// some: fica com o motivo, para ninguém "sumir" com um horário.
+db.exec(`CREATE TABLE IF NOT EXISTS ponto (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id      INTEGER NOT NULL REFERENCES team_members(id),
+  tipo           TEXT NOT NULL,              -- entrada | saida
+  quando         TEXT NOT NULL,              -- ISO
+  dia            TEXT NOT NULL,              -- AAAA-MM-DD no fuso da loja
+  onde           TEXT NOT NULL DEFAULT 'fora', -- aparelho (o da loja) | rede (internet da loja) | fora | dono
+  por_dono       INTEGER NOT NULL DEFAULT 0, -- o dono lançou (a pessoa esqueceu de marcar)
+  obs            TEXT,
+  apagado_em     TEXT,
+  apagado_motivo TEXT,
+  created_at     TEXT NOT NULL
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_ponto ON ponto(member_id, dia)');
+// O dia de cada pessoa: o valor que o dono escolheu (meia diária, um extra;
+// vazio = a diária dela) e se já foi pago (com quanto foi pago).
+db.exec(`CREATE TABLE IF NOT EXISTS ponto_dias (
+  member_id    INTEGER NOT NULL REFERENCES team_members(id),
+  dia          TEXT NOT NULL,
+  valor        REAL,
+  obs          TEXT,
+  pagamento_id INTEGER,
+  valor_pago   REAL,
+  PRIMARY KEY (member_id, dia)
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS ponto_pagamentos (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id  INTEGER NOT NULL REFERENCES team_members(id),
+  de         TEXT, ate TEXT, dias INTEGER NOT NULL DEFAULT 0,
+  valor      REAL NOT NULL DEFAULT 0,
+  entry_id   INTEGER,                 -- a despesa "Diárias" no financeiro
+  created_at TEXT NOT NULL
+)`);
+// Quanto a pessoa ganha por dia trabalhado (0 = não recebe por diária) e a
+// que horas deveria chegar (HH:MM, vazio = sem horário): o ponto mostra o atraso.
+ensureColumn('team_members', 'diaria', 'diaria REAL NOT NULL DEFAULT 0');
+ensureColumn('team_members', 'chega_as', 'chega_as TEXT');
+
 // ---- Despesa a pagar ----
 // Uma despesa pode já ter saído do caixa ou estar só agendada. Sem isso
 // o "sobrou" do mês contaria dinheiro que ainda não saiu.

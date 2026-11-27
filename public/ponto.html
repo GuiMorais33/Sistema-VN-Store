@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070907">
+<title>VN Store — Ponto</title>
+<link rel="icon" href="/logo.webp">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  /* Tela do ponto: abre sem senha, no computador da loja ou no celular.
+     Toca no nome, digita o PIN, marca. Letra grande, um passo por vez. */
+  body{display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;min-height:100svh}
+  .box{width:100%;max-width:440px;display:flex;flex-direction:column;gap:18px;padding:26px 22px;border-radius:22px;
+    background:linear-gradient(180deg,var(--surface-2),var(--surface));border:1px solid rgba(85,245,118,.16);box-shadow:var(--sh-3)}
+  .topo{display:flex;align-items:center;gap:12px}
+  .topo img{width:44px;height:44px;border-radius:12px}
+  .topo .t{font-family:var(--font-disp);text-transform:uppercase;font-size:22px;transform:skewX(-6deg);line-height:1}
+  .topo .s{font-size:11px;color:var(--ink-3);letter-spacing:1.5px;text-transform:uppercase;font-weight:700;margin-top:3px}
+  .relogio{text-align:center}
+  .relogio .h{font-family:var(--font-mono);font-size:54px;font-weight:700;letter-spacing:-1px;color:var(--brand-hi);
+    text-shadow:0 0 22px var(--glow);line-height:1}
+  .relogio .d{font-size:13px;color:var(--ink-2);margin-top:6px}
+  .rot{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-3);font-weight:700;text-align:center}
+  .nomes{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px}
+  .nome{padding:16px 10px;border-radius:14px;border:1px solid var(--line);background:var(--bg-elev);color:var(--ink);
+    font-weight:800;font-size:16px;cursor:pointer;font-family:var(--font-body)}
+  .nome:hover{border-color:rgba(85,245,118,.45)}
+  input#pin{padding:15px;border-radius:14px;font-size:26px;text-align:center;letter-spacing:12px}
+  .btn{padding:14px 16px;font-size:15px}
+  .grande{padding:20px 16px;font-size:19px;font-weight:800;border-radius:16px;letter-spacing:.5px}
+  .grande.saida{background:linear-gradient(180deg,#F0A930,#C98410);color:#160E00;border-color:transparent}
+  .ola{text-align:center;font-size:18px;font-weight:700}
+  .ola small{display:block;font-size:12.5px;color:var(--ink-3);font-weight:600;margin-top:4px}
+  .hoje{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+  .hoje span{font-family:var(--font-mono);font-size:12.5px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2)}
+  .hoje span.e{color:var(--brand-hi);border-color:rgba(47,210,79,.35)}
+  .hoje span.s{color:var(--warn);border-color:rgba(232,163,23,.4)}
+  .err{color:var(--crit);font-size:13.5px;font-weight:700;text-align:center;min-height:18px}
+  .feito{text-align:center;padding:10px 0}
+  .feito .ic{width:74px;height:74px;border-radius:50%;margin:0 auto 12px;display:grid;place-items:center;
+    background:rgba(53,192,138,.14);color:var(--ok);border:2px solid rgba(53,192,138,.5)}
+  .feito .t{font-size:22px;font-weight:800}
+  .feito .h{font-family:var(--font-mono);font-size:40px;font-weight:700;color:var(--brand-hi);margin-top:6px}
+  .feito .d{font-size:13px;color:var(--ink-3);margin-top:8px}
+  .link{background:none;border:none;color:var(--ink-3);font-size:13px;cursor:pointer;text-decoration:underline;font-family:var(--font-body)}
+  .rodape{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px}
+  .rodape a{color:var(--ink-3)}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main class="box">
+  <div class="topo"><img src="/logo.webp" alt=""><div><div class="t">VN Store</div><div class="s">Ponto da equipe</div></div></div>
+  <div class="relogio"><div class="h" id="hora">--:--</div><div class="d" id="data"></div></div>
+
+  <!-- 1. Quem é -->
+  <section id="passoNome">
+    <div class="rot" style="margin-bottom:10px">Toque no seu nome</div>
+    <div class="nomes" id="nomes"></div>
+  </section>
+
+  <!-- 2. O PIN -->
+  <section id="passoPin" hidden>
+    <div class="ola" id="pinOla"></div>
+    <form id="formPin" style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
+      <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="PIN" autocomplete="off" aria-label="Seu PIN">
+      <button class="btn primary" type="submit">Continuar</button>
+    </form>
+  </section>
+
+  <!-- 3. Marcar -->
+  <section id="passoMarcar" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="ola" id="marcarOla"></div>
+    <div class="hoje" id="hojeLista"></div>
+    <button class="btn primary grande" id="marcar" type="button"></button>
+  </section>
+
+  <!-- 4. Feito -->
+  <section id="passoFeito" hidden>
+    <div class="feito"><div class="ic" id="feitoIc"></div><div class="t" id="feitoT"></div><div class="h" id="feitoH"></div>
+      <div class="d" id="feitoD"></div></div>
+  </section>
+
+  <div class="err" id="err"></div>
+  <button class="link" id="voltar" type="button" hidden>← Não sou eu / voltar</button>
+  <div class="rodape"><span id="aparelho" style="color:var(--ink-3)"></span><a href="/" id="sistema" hidden>Ir para o sistema</a></div>
+</main>
+
+<script src="/icons.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let pessoa = null, pin = '', proximo = 'entrada', volta = null;
+// A hora que vale é a do servidor (o relógio do celular pode estar errado):
+// a tela só mostra; quem anota a hora é o servidor.
+let difRelogio = 0;
+// Sempre no horário da loja, mesmo que o celular esteja em outro fuso.
+const FUSO = 'America/Sao_Paulo';
+function tick() {
+  const d = new Date(Date.now() + difRelogio);
+  $('hora').textContent = d.toLocaleTimeString('pt-BR', { timeZone: FUSO, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const data = d.toLocaleDateString('pt-BR', { timeZone: FUSO, weekday: 'long', day: 'numeric', month: 'long' });
+  $('data').textContent = data.charAt(0).toUpperCase() + data.slice(1);
+}
+setInterval(tick, 1000); tick();
+
+function passo(qual) {
+  for (const id of ['passoNome', 'passoPin', 'passoMarcar', 'passoFeito']) $(id).hidden = id !== qual;
+  $('voltar').hidden = qual === 'passoNome' || qual === 'passoFeito';
+  $('err').textContent = '';
+}
+function inicio() {
+  clearTimeout(volta);
+  pessoa = null; pin = ''; $('pin').value = '';
+  passo('passoNome');
+}
+$('voltar').onclick = inicio;
+
+async function carregarNomes() {
+  try {
+    const r = await (await fetch('/api/ponto/pessoas')).json();
+    if (r.agora) difRelogio = new Date(r.agora).getTime() - Date.now();
+    $('aparelho').textContent = r.aparelho_da_loja ? '● aparelho da loja' : '';
+    $('nomes').innerHTML = r.pessoas.length
+      ? r.pessoas.map((p) => `<button class="nome" type="button" data-id="${p.id}">${esc(p.nome)}</button>`).join('')
+      : '<div style="grid-column:1/-1;text-align:center;color:var(--ink-3);font-size:13px">Ninguém com PIN ainda. O dono cria o PIN de cada um em Equipe.</div>';
+  } catch (_) { $('err').textContent = 'Sem conexão. Confira a internet e tente de novo.'; }
+}
+$('nomes').onclick = (e) => {
+  const b = e.target.closest('.nome'); if (!b) return;
+  pessoa = { id: Number(b.dataset.id), nome: b.textContent };
+  $('pinOla').innerHTML = `${esc(pessoa.nome)}<small>Digite o seu PIN</small>`;
+  passo('passoPin');
+  $('pin').focus();
+};
+
+async function post(url, corpo) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+  const d = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, d };
+}
+function pintarHoje(hoje) {
+  $('hojeLista').innerHTML = hoje.length
+    ? hoje.map((x) => `<span class="${x.tipo === 'entrada' ? 'e' : 's'}">${x.tipo === 'entrada' ? 'entrou' : 'saiu'} ${x.hora}</span>`).join('')
+    : '<span>nada marcado hoje</span>';
+}
+function pintarMarcar(d) {
+  proximo = d.proximo;
+  $('marcarOla').innerHTML = `Olá, ${esc(d.nome || pessoa.nome)}!<small>${proximo === 'entrada' ? 'Chegou? Marque a entrada.' : 'Vai sair? Marque a saída.'}</small>`;
+  pintarHoje(d.hoje || []);
+  const b = $('marcar');
+  b.textContent = proximo === 'entrada' ? 'Marcar ENTRADA' : 'Marcar SAÍDA';
+  b.classList.toggle('saida', proximo === 'saida');
+  b.disabled = false;
+}
+$('formPin').onsubmit = async (e) => {
+  e.preventDefault();
+  pin = $('pin').value.trim();
+  if (!pin) return;
+  const r = await post('/api/ponto/entrar', { id: pessoa.id, pin });
+  if (!r.ok) { $('err').textContent = r.d.error || 'Não deu.'; $('pin').value = ''; $('pin').focus(); return; }
+  passo('passoMarcar');
+  pintarMarcar(r.d);
+};
+$('marcar').onclick = async () => {
+  const b = $('marcar'); b.disabled = true;
+  const r = await post('/api/ponto/marcar', { id: pessoa.id, pin, tipo: proximo });
+  if (!r.ok) {
+    $('err').textContent = r.d.error || 'Não deu para marcar.';
+    if (r.d.proximo) pintarMarcar({ ...r.d, nome: pessoa.nome }); else b.disabled = false;
+    return;
+  }
+  const entrada = r.d.tipo === 'entrada';
+  $('feitoIc').innerHTML = ICO('ok', 38);
+  $('feitoT').textContent = entrada ? `Entrada marcada, ${r.d.nome}!` : `Saída marcada, ${r.d.nome}!`;
+  $('feitoH').textContent = r.d.hora;
+  $('feitoD').textContent = entrada ? 'Bom trabalho! Na hora de ir embora, marque a saída aqui.' : 'Até a próxima!';
+  passo('passoFeito');
+  pin = '';
+  // Volta sozinha para a lista: o próximo da fila já pode marcar.
+  volta = setTimeout(() => { inicio(); carregarNomes(); }, 6000);
+};
+$('passoFeito').onclick = () => { inicio(); carregarNomes(); };
+
+// Quem já está dentro do sistema (dono ou vendedor) tem o atalho de volta.
+if (/(^|;\s*)vn_quem=/.test(document.cookie)) $('sistema').hidden = false;
+carregarNomes();
+</script>
+</body>
+</html>

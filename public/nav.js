@@ -34,6 +34,7 @@ window.quem = (() => {
     { titulo: window.quem.nome, itens: [
       { href: '/pdv',        ico: 'pdv',        label: 'PDV',        match: (p) => p.startsWith('/pdv') },
       { href: '/minhas',     ico: 'subiu',      label: 'Minhas vendas', match: (p) => p.startsWith('/minhas') },
+      { href: '/ponto',      ico: 'relogio',    label: 'Ponto',      match: (p) => p.startsWith('/ponto') },
       { href: '/ajuda',      ico: 'conversa',   label: 'Como usar',  match: (p) => p.startsWith('/ajuda') || p.startsWith('/como-usar') },
     ] },
   ] : [
@@ -45,7 +46,8 @@ window.quem = (() => {
     ] },
     { titulo: 'Gestão', itens: [
       { href: '/financeiro', ico: 'financeiro', label: 'Financeiro', match: (p) => p.startsWith('/financeiro') || p.startsWith('/relatorios') || p.startsWith('/vendas') },
-      { href: '/equipe',     ico: 'clientes',   label: 'Equipe',     match: (p) => p.startsWith('/equipe') },
+      { href: '/equipe',     ico: 'clientes',   label: 'Equipe',     match: (p) => p.startsWith('/equipe') && !p.startsWith('/equipe/ponto') },
+      { href: '/equipe/ponto', ico: 'relogio',  label: 'Ponto',      match: (p) => p.startsWith('/equipe/ponto') },
     ] },
     { titulo: 'Ajustes', itens: [
       { href: '/negocio',    ico: 'grafico',    label: 'Negócio',    match: (p) => p.startsWith('/negocio') },
@@ -57,7 +59,7 @@ window.quem = (() => {
 
   const path = location.pathname;
   // No celular a barra de cima cabe 5 + "Mais"; o resto vai para o painel.
-  const NO_CELULAR = vendedor ? ['/pdv', '/minhas', '/ajuda'] : ['/', '/pdv', '/produtos', '/clientes', '/financeiro'];
+  const NO_CELULAR = vendedor ? ['/pdv', '/minhas', '/ponto', '/ajuda'] : ['/', '/pdv', '/produtos', '/clientes', '/financeiro'];
   const item = (it) => `<a class="nav-item${it.match(path) ? ' active' : ''}${NO_CELULAR.includes(it.href) ? '' : ' so-pc'}" href="${it.href}">`
     + ICO(it.ico, 19) + `<span>${it.label}</span></a>`;
   const extras = grupos.flatMap((g) => g.itens).filter((it) => !NO_CELULAR.includes(it.href));

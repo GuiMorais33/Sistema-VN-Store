@@ -19,6 +19,7 @@ import * as agente from './agente.js';
 import { procurar, procurarProdutos } from './busca.js';
 import * as saude from './saude.js';
 import * as precosSite from './precos-site.js';
+import { registrarPonto } from './ponto.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, '..', 'public');
@@ -104,21 +105,24 @@ app.get('/api/login/vendedores', (req, res) => {
 
 // PIN de 4 números se adivinha rápido: 5 erros seguidos travam a pessoa
 // por 5 minutos.
+// A mesma trava vale para entrar e para bater o ponto (é o mesmo PIN).
 const errosPin = new Map();
+const travaPin = {
+  travado: (id) => { const t = errosPin.get(id); return Boolean(t && t.n >= 5 && Date.now() - t.ultimo < 5 * 60e3); },
+  errou: (id) => { const t = errosPin.get(id) || { n: 0, ultimo: 0 };
+    errosPin.set(id, { n: (Date.now() - t.ultimo > 5 * 60e3 ? 0 : t.n) + 1, ultimo: Date.now() }); },
+  certo: (id) => errosPin.delete(id),
+};
 app.post('/api/login/vendedor', (req, res) => {
   const id = Number((req.body || {}).id);
   const pin = String((req.body || {}).pin || '').trim();
-  const trava = errosPin.get(id);
-  if (trava && trava.n >= 5 && Date.now() - trava.ultimo < 5 * 60e3) {
-    return res.status(429).json({ error: 'Muitas tentativas. Espere 5 minutos ou peça ao dono.' });
-  }
+  if (travaPin.travado(id)) return res.status(429).json({ error: 'Muitas tentativas. Espere 5 minutos ou peça ao dono.' });
   const m = db.prepare('SELECT id, name, pin_hash FROM team_members WHERE id = ? AND active = 1 AND vende = 1').get(id);
   if (!m || !m.pin_hash || hashPin(m.id, pin) !== m.pin_hash) {
-    const t = errosPin.get(id) || { n: 0, ultimo: 0 };
-    errosPin.set(id, { n: (Date.now() - t.ultimo > 5 * 60e3 ? 0 : t.n) + 1, ultimo: Date.now() });
+    travaPin.errou(id);
     return res.status(401).json({ error: 'PIN errado.' });
   }
-  errosPin.delete(id);
+  travaPin.certo(id);
   // Entrou um vendedor neste aparelho: a sessão do dono sai, senão o
   // balcão ficaria com o financeiro aberto.
   res.setHeader('Set-Cookie', [cookie('vn_vend', `${m.id}.${assinarVendedor(m.id, m.pin_hash)}`, DOZE_HORAS),
@@ -130,7 +134,9 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 // Barreira: libera login, health e assets; bloqueia o resto sem sessão.
+// O ponto também: a pessoa marca com o PIN, sem entrar no sistema.
 const LIVRE = (p) => p === '/login' || p === '/api/login' || p === '/api/login/vendedores' || p === '/api/login/vendedor'
+  || p === '/ponto' || p === '/api/ponto/pessoas' || p === '/api/ponto/entrar' || p === '/api/ponto/marcar'
   || p === '/api/health' || p === '/oauth/callback' || /\.(css|js|webp|png|jpe?g|svg|ico|woff2?)$/i.test(p);
 app.use((req, res, next) => {
   if (!req.agente) req.quem = quemE(req);
@@ -160,6 +166,10 @@ app.use((req, res, next) => {
   return res.redirect('/pdv');
 });
 app.get('/api/eu', (req, res) => res.json(req.quem || { papel: 'agente', nivel: agente.nivel() }));
+
+// Ponto da equipe (server/ponto.js): a marcação é livre com o PIN; o resto
+// (horários, correções, diárias) é do dono.
+registrarPonto(app, { hashPin, readCookies, segredo: SESSION_SECRET, pin: travaPin, quemFez: (req) => quemFez(req) });
 
 // Fontes e o Three.js quase nunca mudam: o navegador guarda por uma semana.
 app.use('/fonts', express.static(join(PUBLIC, 'fonts'), { maxAge: '7d' }));
@@ -2443,6 +2453,12 @@ app.post('/api/team', (req, res) => {
   // PIN: 4 a 6 números. Vazio mantém o atual; remover_pin tira o acesso.
   const pin = String(b.pin || '').trim();
   if (pin && !/^\d{4,6}$/.test(pin)) return res.status(400).json({ error: 'O PIN tem de 4 a 6 números.' });
+  // Ponto: a diária (R$ por dia trabalhado) e a hora de chegar (HH:MM).
+  const temDiaria = b.diaria !== undefined && b.diaria !== null;
+  const diaria = temDiaria ? (b.diaria === '' ? 0 : Number(String(b.diaria).replace(',', '.'))) : null;
+  if (temDiaria && !(Number.isFinite(diaria) && diaria >= 0)) return res.status(400).json({ error: 'A diária é um valor em reais.' });
+  const chega = b.chega_as === undefined ? undefined : String(b.chega_as || '').trim();
+  if (chega && !/^([01]\d|2[0-3]):[0-5]\d$/.test(chega)) return res.status(400).json({ error: 'A hora de chegar é no formato 09:00.' });
   const dados = [nome, String(b.role || 'Vendedor').trim() || 'Vendedor',
     limpaInsta(b.instagram), String(b.phone || '').trim(),
     b.vende === false ? 0 : 1, b.active === false ? 0 : 1, String(b.note || '').trim()];
@@ -2451,6 +2467,8 @@ app.post('/api/team', (req, res) => {
       db.prepare('UPDATE team_members SET commission_pct = ? WHERE id = ?').run(money(comissao), id);
       db.prepare('UPDATE dreams SET comissao_pct = ? WHERE member_id = ?').run(money(comissao), id);
     }
+    if (temDiaria) db.prepare('UPDATE team_members SET diaria = ? WHERE id = ?').run(money(diaria), id);
+    if (chega !== undefined) db.prepare('UPDATE team_members SET chega_as = ? WHERE id = ?').run(chega || null, id);
     if (pin) db.prepare('UPDATE team_members SET pin_hash = ? WHERE id = ?').run(hashPin(id, pin), id);
     else if (b.remover_pin) db.prepare('UPDATE team_members SET pin_hash = NULL WHERE id = ?').run(id);
   };
@@ -5223,6 +5241,8 @@ app.get('/crm', page('clientes.html'));
 app.get('/funil', page('clientes.html'));
 app.get('/produtos', page('produtos.html'));
 app.get('/estoque', page('produtos.html'));
+app.get('/ponto', page('ponto.html'));               // a pessoa marca o ponto (com o PIN)
+app.get('/equipe/ponto', page('pontos.html'));       // o dono acompanha e paga as diárias
 app.get('/financeiro', page('financeiro.html'));
 app.get('/vendas', page('financeiro.html'));     // abre na aba Vendas
 app.get('/negocio', page('negocio.html'));
